@@ -8,6 +8,12 @@
 
 #include <GfxRenderer.h>
 
+#include "images/Library.h"
+#include "images/News.h"
+#include "images/Recent.h"
+#include "images/Setting.h"
+#include "images/Stats.h"
+#include "images/Sync.h"
 #include "state/SystemSetting.h"
 #include "system/Fonts.h"
 #include "system/MappedInputManager.h"
@@ -17,8 +23,11 @@
 
 class Menu {
  protected:
-  static constexpr int TAB_BAR_HEIGHT = UiTheme::DRAWER_LIST_ITEM_HEIGHT;
-  static constexpr int TAB_COUNT = 5;
+  static constexpr int TAB_BAR_HEIGHT = 65;
+  static constexpr int TAB_COUNT = 6;
+  static constexpr int ICON_SIZE = 40;
+  static constexpr int BATTERY_Y = 30;
+  static constexpr int SELECTED_BORDER_HEIGHT = 5;
   int tabSelectorIndex = 0;
 
   /**
@@ -53,8 +62,44 @@ class Menu {
    * @param renderer Reference to the graphics renderer (const)
    */
   void renderTabBar(const GfxRenderer& renderer) const {
-    INX_THEME.drawMainTabBar(renderer, tabSelectorIndex,
-                             SETTINGS.hideBatteryPercentage != SystemSetting::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS);
+    const int screenWidth = renderer.getScreenWidth();
+    const int tabButtonWidth = (screenWidth / TAB_COUNT) - 1;
+
+    for (int i = 0; i < TAB_COUNT; ++i) {
+      int buttonX = i * tabButtonWidth;
+      bool isSelected = (tabSelectorIndex == i);
+      int iconX = buttonX + (tabButtonWidth - ICON_SIZE) / 2;
+      int iconY = (TAB_BAR_HEIGHT - ICON_SIZE) / 2 + 5;
+
+      switch (i) {
+        case 0:
+          renderer.bitmap.icon(Recent, iconX, iconY, ICON_SIZE, ICON_SIZE);
+          break;
+        case 1:
+          renderer.bitmap.icon(News, iconX, iconY, ICON_SIZE, ICON_SIZE);
+          break;
+        case 2:
+          renderer.bitmap.icon(Library, iconX, iconY, ICON_SIZE, ICON_SIZE);
+          break;
+        case 3:
+          renderer.bitmap.icon(Setting, iconX, iconY, ICON_SIZE, ICON_SIZE);
+          break;
+        case 4:
+          renderer.bitmap.icon(Sync, iconX, iconY, ICON_SIZE, ICON_SIZE);
+          break;
+        case 5:
+          renderer.bitmap.icon(Stats, iconX, iconY, ICON_SIZE, ICON_SIZE);
+          break;
+      }
+
+      if (isSelected) {
+        renderer.rectangle.fill(iconX - 10, TAB_BAR_HEIGHT - 2, 60, SELECTED_BORDER_HEIGHT,
+                                static_cast<int>(GfxRenderer::FillTone::Ink));
+      }
+
+      renderer.line.render(buttonX, TAB_BAR_HEIGHT, buttonX + tabButtonWidth, TAB_BAR_HEIGHT);
+    }
+    drawBattery(renderer);
   }
 
   void renderButtonHints(const GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
@@ -74,8 +119,17 @@ class Menu {
    * @param renderer Reference to the graphics renderer (const)
    */
   void drawBattery(const GfxRenderer& renderer) const {
+    const int batteryX = renderer.getScreenWidth() - 80;
+    if (SETTINGS.showBottomBarClock) {
+      const std::string time = ScreenComponents::currentTimeText();
+      if (!time.empty()) {
+        const int width = renderer.text.getWidth(ATKINSON_HYPERLEGIBLE_8_FONT_ID, time.c_str());
+        renderer.text.render(ATKINSON_HYPERLEGIBLE_8_FONT_ID, batteryX - width - 12,
+                             renderer.getScreenHeight() - 30, time.c_str());
+      }
+    }
     ScreenComponents::drawBattery(
-        renderer, renderer.getScreenWidth() - 80, renderer.getScreenHeight() - 30,
+        renderer, batteryX, renderer.getScreenHeight() - 30,
         SETTINGS.hideBatteryPercentage != SystemSetting::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS);
   }
 

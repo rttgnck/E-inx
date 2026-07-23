@@ -64,6 +64,10 @@ const char* statusPlaceholder(StatusBarItem item) {
       return "Jane Author";
     case StatusBarItem::PAGE_NUMBERS_WITH_PERCENT:
       return "12/340 45%";
+    case StatusBarItem::TIME:
+      return "14:35";
+    case StatusBarItem::SESSION_TIME:
+      return "27m";
     case StatusBarItem::NONE:
     default:
       return "";
@@ -277,20 +281,18 @@ void ReaderPresetEditorActivity::renderPreviewStatusBar(int barTop, int barHeigh
 
   const int textY = barTop + (barHeight - renderer.text.getLineHeight(fontId)) / 2 + 2;
 
-  const char* left = statusPlaceholder(working_.statusBarLeft.item);
-  const char* middle = statusPlaceholder(working_.statusBarMiddle.item);
-  const char* right = statusPlaceholder(working_.statusBarRight.item);
-
-  if (left && left[0]) {
-    renderer.text.render(fontId, margin + 2, textY, left, true);
-  }
-  if (middle && middle[0]) {
-    const int w = renderer.text.getWidth(fontId, middle);
-    renderer.text.render(fontId, (screenW - w) / 2, textY, middle, true);
-  }
-  if (right && right[0]) {
-    const int w = renderer.text.getWidth(fontId, right);
-    renderer.text.render(fontId, screenW - margin - 2 - w, textY, right, true);
+  const StatusBarItem items[] = {working_.statusBarLeft.item, working_.statusBarInnerLeft.item,
+                                 working_.statusBarMiddle.item, working_.statusBarInnerRight.item,
+                                 working_.statusBarRight.item};
+  const int availableWidth = screenW - 2 * margin;
+  const int sectionWidth = availableWidth / 5;
+  for (int i = 0; i < 5; ++i) {
+    const char* placeholder = statusPlaceholder(items[i]);
+    if (!placeholder || !placeholder[0]) continue;
+    const std::string text = renderer.text.truncate(fontId, placeholder, sectionWidth - 4);
+    const int width = renderer.text.getWidth(fontId, text.c_str());
+    const int sectionStart = margin + i * sectionWidth;
+    renderer.text.render(fontId, sectionStart + (sectionWidth - width) / 2, textY, text.c_str(), true);
   }
 }
 

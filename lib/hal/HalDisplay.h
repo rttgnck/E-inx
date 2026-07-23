@@ -27,7 +27,7 @@ class HalDisplay {
   void drawImage(const uint8_t* imageData, uint16_t x, uint16_t y, uint16_t w, uint16_t h,
                  bool fromProgmem = false) const;
 
-  void displayBuffer(RefreshMode mode = RefreshMode::FAST_REFRESH);
+  void displayBuffer(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false);
   void refreshDisplay(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false);
 
   void deepSleep();
@@ -39,8 +39,8 @@ class HalDisplay {
   void copyGrayscaleMsbBuffers(const uint8_t* msbBuffer);
   void cleanupGrayscaleBuffers(const uint8_t* bwBuffer);
 
-  void displayGrayBuffer(bool quality = false, bool trackForRevert = true);
-  void displayGrayBufferFastQuality();
+  void displayGrayBuffer(bool quality = false, bool trackForRevert = true, bool turnOffScreen = false);
+  void displayGrayBufferFastQuality(bool turnOffScreen = false);
   void prepareQualityGrayscale();
 
   uint16_t getDisplayWidth() const;

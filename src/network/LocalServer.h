@@ -49,6 +49,13 @@ class LocalServer {
   uint16_t getPort() const { return port; }
 
  private:
+  enum class FirmwareUploadState {
+    IDLE,
+    RECEIVING,
+    READY_TO_REBOOT,
+    FAILED,
+  };
+
   std::unique_ptr<WebServer> server = nullptr;
   std::unique_ptr<WebSocketsServer> wsServer = nullptr;
   bool running = false;
@@ -57,6 +64,17 @@ class LocalServer {
   uint16_t wsPort = 81;
   WiFiUDP udp;
   bool udpActive = false;
+  FirmwareUploadState firmwareUploadState = FirmwareUploadState::IDLE;
+  size_t firmwareExpectedSize = 0;
+  size_t firmwareReceivedSize = 0;
+  uint32_t firmwareOtaHandle = 0;
+  const void* firmwareOtaPartition = nullptr;
+  bool firmwareOtaActive = false;
+  std::string firmwareUploadName;
+  std::string firmwareUploadError;
+  std::string firmwareUploadVersion;
+  std::string firmwareUploadToken;
+  unsigned long firmwareRestartAt = 0;
 
   void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length);
   static void wsEventCallback(uint8_t num, WStype_t type, uint8_t* payload, size_t length);
@@ -72,6 +90,7 @@ class LocalServer {
   void handleJsZipMinJs() const;
   void handleEpubPageJs() const;
   void handleFilesPageJs() const;
+  void handleUpdatePage() const;
   void handleNotFound() const;
   void handleStatus() const;
   void handleFileList() const;
@@ -92,6 +111,11 @@ class LocalServer {
   void handleSettingsPage() const;
   void handleSettingsGet() const;
   void handleSettingsUpdate() const;
+  void handleSleepWakeTraceGet() const;
+  void handleSleepWakeTraceClear() const;
+  void handleWallpapersGet() const;
+  void handleWallpaperImageGet() const;
+  void handleWallpaperShufflePost() const;
 
   void handleWifiGet() const;
   void handleWifiPost() const;
@@ -108,4 +132,11 @@ class LocalServer {
   void handleLibraryIndexStatus() const;
   void handleBookTagsGet() const;
   void handleBookTagsPost() const;
+
+  void handleFirmwareStatus() const;
+  void handleFirmwareUpload();
+  void handleFirmwareUploadPost();
+  void abortFirmwareUpload(const char* error);
+  void resetFirmwareUpload();
+  const char* firmwareUploadStateName() const;
 };

@@ -7,6 +7,11 @@
 
 #include <GfxRenderer.h>
 
+#include "images/Calibre.h"
+#include "images/Opds.h"
+#include "images/Qr.h"
+#include "images/Setting.h"
+#include "images/Wifi.h"
 #include "state/SystemSetting.h"
 #include "system/Fonts.h"
 #include "system/MappedInputManager.h"
@@ -14,8 +19,9 @@
 #include "system/UiTheme.h"
 
 namespace {
-constexpr int MENU_ITEM_COUNT = 4;
-const char* MENU_ITEMS[MENU_ITEM_COUNT] = {"Join a Network", "Connect to Calibre", "Create Hotspot", "OPDS Browser"};
+constexpr int MENU_ITEM_COUNT = 5;
+const char* MENU_ITEMS[MENU_ITEM_COUNT] = {"Join a Network", "Firmware Update", "Connect to Calibre",
+                                           "Create Hotspot", "OPDS Browser"};
 constexpr int LIST_ITEM_HEIGHT = UiTheme::DRAWER_LIST_ITEM_HEIGHT;
 }  // namespace
 
@@ -36,7 +42,7 @@ void SyncActivity::onEnter() {
  * Processes button presses for menu navigation and tab switching.
  */
 void SyncActivity::loop() {
-  if (tabSelectorIndex == 3 && updateRequired) {
+  if (tabSelectorIndex == 4 && updateRequired) {
     updateRequired = false;
     render();
   }
@@ -54,18 +60,18 @@ void SyncActivity::loop() {
   }
 
   if (mappedInput.wasPressed(MenuNav::tabPrev())) {
-    tabSelectorIndex = 2;
+    tabSelectorIndex = 3;
     navigateToSelectedMenu();
     return;
   }
 
   if (mappedInput.wasPressed(MenuNav::tabNext())) {
-    tabSelectorIndex = 4;
+    tabSelectorIndex = 5;
     navigateToSelectedMenu();
     return;
   }
 
-  if (tabSelectorIndex != 3) {
+  if (tabSelectorIndex != 4) {
     return;
   }
 
@@ -73,14 +79,18 @@ void SyncActivity::loop() {
     NetworkMode mode = NetworkMode::JOIN_NETWORK;
 
     if (selectedIndex == 1) {
-      mode = NetworkMode::CONNECT_CALIBRE;
+      mode = NetworkMode::UPDATE_SERVER;
     }
 
     if (selectedIndex == 2) {
-      mode = NetworkMode::CREATE_HOTSPOT;
+      mode = NetworkMode::CONNECT_CALIBRE;
     }
 
     if (selectedIndex == 3) {
+      mode = NetworkMode::CREATE_HOTSPOT;
+    }
+
+    if (selectedIndex == 4) {
       mode = NetworkMode::OPDS_BROWSER;
     }
 
@@ -140,8 +150,31 @@ void SyncActivity::render() const {
         renderer.rectangle.fill(0, itemY, screenWidth, LIST_ITEM_HEIGHT, static_cast<int>(GfxRenderer::FillTone::Ink));
       }
 
-      const int textX = 20;
+      constexpr int kIconSize = 30;
+      const int textX = 70;
+      const int iconX = (textX - kIconSize) / 2;
       const int titleY = itemY + (LIST_ITEM_HEIGHT - renderer.text.getLineHeight(ATKINSON_HYPERLEGIBLE_10_FONT_ID)) / 2;
+      const int iconY = itemY + (LIST_ITEM_HEIGHT - kIconSize) / 2;
+
+      switch (i) {
+        case 0:
+          renderer.bitmap.icon(Wifi, iconX, iconY, kIconSize, kIconSize, BitmapRender::Orientation::None, isSelected);
+          break;
+        case 1:
+          renderer.bitmap.icon(Setting, iconX, iconY, kIconSize, kIconSize, BitmapRender::Orientation::None,
+                               isSelected);
+          break;
+        case 2:
+          renderer.bitmap.icon(Calibre, iconX, iconY, kIconSize, kIconSize, BitmapRender::Orientation::None,
+                               isSelected);
+          break;
+        case 3:
+          renderer.bitmap.icon(Qr, iconX, iconY, kIconSize, kIconSize, BitmapRender::Orientation::None, isSelected);
+          break;
+        case 4:
+          renderer.bitmap.icon(Opds, iconX, iconY, kIconSize, kIconSize, BitmapRender::Orientation::None, isSelected);
+          break;
+      }
 
       renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, textX, titleY, MENU_ITEMS[i], !isSelected);
       renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, screenWidth - 30, titleY, "›", !isSelected);

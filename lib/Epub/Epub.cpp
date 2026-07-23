@@ -57,6 +57,8 @@ bool spineHrefLooksLikeRenderableHtml(const std::string& href) {
 
 constexpr const char* kPackagedDeviceThumbnailPath = "META-INF/thumbnail.jpg";
 constexpr const char* kBookMetadataCacheFile = "/book.bin";
+constexpr int kThumbWidth = 225;
+constexpr int kThumbHeight = 340;
 
 }  // namespace
 
@@ -122,14 +124,41 @@ std::string Epub::getCacheImgPath(const std::string& internalHref) const {
 }
 
 bool Epub::extractItemToPath(const std::string& itemHref, const std::string& outPath, const size_t chunkSize) const {
+  const std::string tempPath = outPath + ".tmp";
+  SdMan.remove(tempPath.c_str());
+
   FsFile out;
-  if (!SdMan.openFileForWrite("EBP", outPath, out)) {
+  if (!SdMan.openFileForWrite("EBP", tempPath, out)) {
     return false;
   }
   const bool ok = readItemContentsToStream(itemHref, out, chunkSize);
   out.sync();
   out.close();
-  return ok;
+
+  bool complete = ok;
+  size_t expectedSize = 0;
+  if (complete && getItemSize(itemHref, &expectedSize) && expectedSize > 0) {
+    FsFile tempRead;
+    if (SdMan.openFileForRead("EBP", tempPath, tempRead)) {
+      complete = tempRead.size() == expectedSize;
+      tempRead.close();
+    } else {
+      complete = false;
+    }
+  }
+
+  if (!complete) {
+    SdMan.remove(tempPath.c_str());
+    SdMan.remove(outPath.c_str());
+    return false;
+  }
+
+  SdMan.remove(outPath.c_str());
+  if (!SdMan.rename(tempPath.c_str(), outPath.c_str())) {
+    SdMan.remove(tempPath.c_str());
+    return false;
+  }
+  return true;
 }
 
 /**
@@ -343,6 +372,10 @@ bool Epub::extractAndConvertImageFullScreen(const std::string& itemHref, const s
   destFile.close();
   SdMan.remove(tempPath.c_str());
 
+  if (!success) {
+    SdMan.remove(outBmpPath.c_str());
+  }
+
   return success;
 }
 
@@ -367,8 +400,7 @@ bool Epub::generateCoverBmp(bool cropped) const {
 }
 
 /**
- * @brief Builds cache thumbnails: prefers packaged `META-INF/thumbnail.jpg` from the EPUB (EPUB optimizer), else
- * decodes and resizes JPEG covers to `thumb.jpg`.
+ * @brief Builds cache thumbnails: prefers packaged `META-INF/thumbnail.jpg`, else creates a real cover thumbnail.
  */
 bool Epub::generateThumbBmp() const {
   const std::string thumbJpegPath = getThumbJpegPath();
@@ -382,6 +414,13 @@ bool Epub::generateThumbBmp() const {
   }
 
   const std::string& coverHref = bookMetadataCache->coreMetadata.coverItemHref;
+
+  auto removeFailedBmp = [&](const bool ok) {
+    if (!ok) {
+      SdMan.remove(thumbBmpPath.c_str());
+    }
+    return ok;
+  };
 
   size_t packagedThumbSize = 0;
   if (getItemSize(kPackagedDeviceThumbnailPath, &packagedThumbSize) && packagedThumbSize > 0) {
@@ -416,14 +455,11 @@ bool Epub::generateThumbBmp() const {
 
   bool success = true;
 
-  if (!isJpegFile(coverHref)) {
-    Serial.printf("[EBP] Thumbnail fallback skipped for non-JPEG cover: %s\n", coverHref.c_str());
-    success = false;
-  } else {
+  if (isJpegFile(coverHref)) {
     FsFile thumbFile;
     if (SdMan.openFileForWrite("EBP", thumbJpegPath, thumbFile)) {
       JpegToBmpConverter converter;
-      success = converter.jpegFileToThumbnailJpeg(sourceFile, thumbFile, 225, 340, 82);
+      success = converter.jpegFileToThumbnailJpeg(sourceFile, thumbFile, kThumbWidth, kThumbHeight, 82);
       thumbFile.sync();
       thumbFile.close();
       if (!success) {
@@ -433,6 +469,44 @@ bool Epub::generateThumbBmp() const {
       success = false;
     }
     Serial.printf("[EBP] Thumbnail JPEG resize %s: %s\n", success ? "ok" : "failed", thumbJpegPath.c_str());
+    if (!success) {
+      sourceFile.seek(0);
+      FsFile thumbFile;
+      if (SdMan.openFileForWrite("EBP", thumbBmpPath, thumbFile)) {
+        success =
+            JpegToBmpConverter::jpegFileToBmpStreamCentered(sourceFile, thumbFile, kThumbWidth, kThumbHeight, true);
+        thumbFile.sync();
+        thumbFile.close();
+        success = removeFailedBmp(success);
+      }
+      Serial.printf("[EBP] Thumbnail JPEG BMP fallback %s: %s\n", success ? "ok" : "failed", thumbBmpPath.c_str());
+    }
+  } else if (isPngFile(coverHref)) {
+    FsFile thumbFile;
+    if (SdMan.openFileForWrite("EBP", thumbBmpPath, thumbFile)) {
+      success =
+          PngToBmpConverter::pngFileTo2BitBmpStreamWithSize(sourceFile, thumbFile, kThumbWidth, kThumbHeight, true);
+      thumbFile.sync();
+      thumbFile.close();
+      success = removeFailedBmp(success);
+    } else {
+      success = false;
+    }
+    Serial.printf("[EBP] Thumbnail PNG BMP %s: %s\n", success ? "ok" : "failed", thumbBmpPath.c_str());
+  } else if (isBmpFile(coverHref)) {
+    FsFile thumbFile;
+    if (SdMan.openFileForWrite("EBP", thumbBmpPath, thumbFile)) {
+      success = JpegToBmpConverter::resizeBitmap(sourceFile, thumbFile, kThumbWidth, kThumbHeight);
+      thumbFile.sync();
+      thumbFile.close();
+      success = removeFailedBmp(success);
+    } else {
+      success = false;
+    }
+    Serial.printf("[EBP] Thumbnail BMP resize %s: %s\n", success ? "ok" : "failed", thumbBmpPath.c_str());
+  } else {
+    Serial.printf("[EBP] Thumbnail unsupported cover type: %s\n", coverHref.c_str());
+    success = false;
   }
 
   sourceFile.close();
@@ -557,6 +631,7 @@ bool Epub::load(const bool buildIfMissing) {
   bookMetadataCache.reset(new BookMetadataCache(cachePath));
 
   if (bookMetadataCache->load()) {
+    applyMetadataOverride();
     return true;
   }
 
@@ -607,7 +682,80 @@ bool Epub::load(const bool buildIfMissing) {
   bookMetadataCache->buildBookBin(filepath, meta);
   bookMetadataCache->cleanupTmpFiles();
   bookMetadataCache.reset(new BookMetadataCache(cachePath));
-  return bookMetadataCache->load();
+  const bool ok = bookMetadataCache->load();
+  if (ok) {
+    applyMetadataOverride();
+  }
+  return ok;
+}
+
+namespace {
+constexpr char kMetaOverrideFile[] = "/meta.override";
+}
+
+void Epub::applyMetadataOverride() const {
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
+    return;
+  }
+  std::string title;
+  std::string author;
+  if (!readMetadataOverride(cachePath, title, author)) {
+    return;
+  }
+  if (!title.empty()) {
+    bookMetadataCache->coreMetadata.title = title;
+  }
+  if (!author.empty()) {
+    bookMetadataCache->coreMetadata.author = author;
+  }
+}
+
+bool Epub::readMetadataOverride(const std::string& cachePath, std::string& title, std::string& author) {
+  title.clear();
+  author.clear();
+  const std::string path = cachePath + kMetaOverrideFile;
+  FsFile f;
+  if (!SdMan.openFileForRead("MOV", path.c_str(), f)) {
+    return false;
+  }
+  std::string contents;
+  uint8_t buf[256];
+  int n = 0;
+  while ((n = f.read(buf, sizeof(buf))) > 0) {
+    contents.append(reinterpret_cast<const char*>(buf), static_cast<size_t>(n));
+  }
+  f.close();
+
+  // Format: title on the first line, author on the second (newline-delimited).
+  const size_t nl = contents.find('\n');
+  if (nl == std::string::npos) {
+    title = contents;
+  } else {
+    title = contents.substr(0, nl);
+    author = contents.substr(nl + 1);
+    const size_t nl2 = author.find('\n');
+    if (nl2 != std::string::npos) {
+      author = author.substr(0, nl2);
+    }
+  }
+  return true;
+}
+
+bool Epub::writeMetadataOverride(const std::string& cachePath, const std::string& title, const std::string& author) {
+  if (!SdMan.exists(cachePath.c_str())) {
+    SdMan.mkdir(cachePath.c_str());
+  }
+  const std::string path = cachePath + kMetaOverrideFile;
+  FsFile f;
+  if (!SdMan.openFileForWrite("MOV", path.c_str(), f)) {
+    return false;
+  }
+  std::string out = title;
+  out += '\n';
+  out += author;
+  const bool ok = f.write(reinterpret_cast<const uint8_t*>(out.data()), out.size()) == static_cast<int>(out.size());
+  f.close();
+  return ok;
 }
 
 bool Epub::hasMetadataCache() const { return SdMan.exists((cachePath + kBookMetadataCacheFile).c_str()); }

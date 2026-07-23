@@ -25,7 +25,14 @@ class ClearCacheActivity final : public ActivityWithSubactivity {
 
  private:
   enum State { WARNING, CLEARING, SUCCESS, FAILED };
-  enum CacheGroup : uint8_t { GROUP_DISPLAY = 0, GROUP_BOOK = 1, GROUP_RECENT = 2, GROUP_NETWORK = 3, GROUP_COUNT = 4 };
+  enum CacheGroup : uint8_t {
+    GROUP_DISPLAY = 0,
+    GROUP_BOOK = 1,
+    GROUP_RECENT = 2,
+    GROUP_READING_STATS = 3,
+    GROUP_NETWORK = 4,
+    GROUP_COUNT = 5
+  };
 
   State state = WARNING;
   TaskHandle_t displayTaskHandle = nullptr;
@@ -36,7 +43,7 @@ class ClearCacheActivity final : public ActivityWithSubactivity {
   int clearedCount = 0;
   int failedCount = 0;
   int selectedGroup = 0;
-  bool selectedGroups[GROUP_COUNT] = {true, true, true, false};
+  bool selectedGroups[GROUP_COUNT] = {true, true, true, false, false};
 
   static void taskTrampoline(void* param);
   [[noreturn]] void displayTaskLoop();

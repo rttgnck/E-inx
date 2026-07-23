@@ -56,6 +56,25 @@ class Epub {
   bool extractAndConvertImage(const std::string& itemHref, const std::string& outBmpPath, int targetW = 0,
                               int targetH = 0) const;
 
+  /**
+   * @brief Applies a user title/author override (`<cache>/meta.override`) onto loaded metadata, if present.
+   * @details Called automatically after load(). The override lives in the book's cache dir, which is keyed by
+   *          the file path, so editing metadata never affects the path-hashed statistics.
+   */
+  void applyMetadataOverride() const;
+
+  /**
+   * @brief Writes (or clears) a title/author override for the book cached at cachePath.
+   * @param cachePath Book cache dir (e.g. /.metadata/epub/<hash>)
+   * @param title Overridden title (empty leaves title unchanged from source)
+   * @param author Overridden author (empty leaves author unchanged from source)
+   * @return true on success
+   */
+  static bool writeMetadataOverride(const std::string& cachePath, const std::string& title, const std::string& author);
+
+  /** Reads an override if present. Returns true and fills title/author (each may be empty = "keep source"). */
+  static bool readMetadataOverride(const std::string& cachePath, std::string& title, std::string& author);
+
   const std::string& getCachePath() const;
   const std::string& getPath() const;
   const std::string& getTitle() const;

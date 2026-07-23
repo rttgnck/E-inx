@@ -68,9 +68,13 @@ class WifiSelectionActivity final : public ActivityWithSubactivity, public Menu 
    * @param onComplete Callback when connection process completes (true=connected, false=cancelled/failed)
    */
   explicit WifiSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                 const std::function<void(bool connected)>& onComplete)
-      : ActivityWithSubactivity("WifiSelection", renderer, mappedInput), Menu(), onComplete(onComplete) {
-    tabSelectorIndex = 3;
+                                 const std::function<void(bool connected)>& onComplete,
+                                 const std::function<void(int)>& onTabChange = nullptr)
+      : ActivityWithSubactivity("WifiSelection", renderer, mappedInput),
+        Menu(),
+        onComplete(onComplete),
+        onTabChange(onTabChange) {
+    tabSelectorIndex = 4;
   }
 
   /**

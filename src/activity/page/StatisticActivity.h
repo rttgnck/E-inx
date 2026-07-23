@@ -75,7 +75,7 @@ class StatisticActivity final : public Activity, public Menu {
     if (tabSelectorIndex == 0 && onGoToRecent) {
       onGoToRecent();
     }
-    if (tabSelectorIndex == 3 && onSyncOpen) {
+    if (tabSelectorIndex == 4 && onSyncOpen) {
       onSyncOpen();
     }
   }
@@ -98,7 +98,7 @@ class StatisticActivity final : public Activity, public Menu {
         onSyncOpen(onSyncOpen),
         viewIndex(0),
         updateRequired(false) {
-    tabSelectorIndex = 4;
+    tabSelectorIndex = 5;
   };
 
   void onEnter() override;

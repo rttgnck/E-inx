@@ -6,6 +6,7 @@
  */
 
 #include <memory>
+#include <cstdint>
 #include <string>
 
 #include "../Activity.h"
@@ -27,8 +28,11 @@ class SleepActivity final : public Activity {
    * @param renderer Graphics renderer for drawing the sleep screen
    * @param mappedInput Input manager for handling wake-up events
    */
-  explicit SleepActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : Activity("Sleep", renderer, mappedInput) {}
+  explicit SleepActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool sleptFromReader = false,
+                         bool forceSleepImageAdvance = false)
+      : Activity("Sleep", renderer, mappedInput),
+        sleptFromReader(sleptFromReader),
+        forceSleepImageAdvance(forceSleepImageAdvance) {}
 
   /**
    * @brief Initializes and renders the sleep screen when activity becomes active.
@@ -38,7 +42,29 @@ class SleepActivity final : public Activity {
    */
   void onEnter() override;
 
+  /** True only when a custom/transparent sleep image completed a display update. */
+  bool didRenderSleepImage() const { return sleepImageRenderSucceeded; }
+
+  /**
+   * @brief True when the current sleep mode should wake periodically to rotate custom/random sleep images.
+   */
+  static bool shouldScheduleImageRotation(bool sleptFromReader);
+
+  /**
+   * @brief True when Power double-press can advance custom/random sleep images while asleep.
+   */
+  static bool shouldEnablePowerDoublePressImageAdvance(bool sleptFromReader);
+
+  /**
+   * @brief Removes cached sleep-cover artifacts for the last-read book and regenerates the cover used for sleep.
+   */
+  static bool regenerateLastReadCoverForSleep(GfxRenderer* renderer = nullptr);
+
  private:
+  bool sleptFromReader = false;
+  bool forceSleepImageAdvance = false;
+  bool sleepImageRenderSucceeded = false;
+
   /**
    * @brief Renders the default sleep screen with Corgi logo.
    *
@@ -53,7 +79,7 @@ class SleepActivity final : public Activity {
    * Loads BMP/JPG/JPEG from /sleep/ or root sleep image (fixed choice in settings, or random).
    * Falls back to default sleep screen if no images are found.
    */
-  void renderCustomSleepScreen() const;
+  bool renderCustomSleepScreen() const;
 
   /**
    * @brief Renders the cover of the last opened book as sleep screen.
@@ -96,5 +122,5 @@ class SleepActivity final : public Activity {
    * For the last-read EPUB, draws the saved reading page (progress) as the base layer, then the
    * semi-transparent sleep BMP on top when configured. Non-EPUB books still use the cover bitmap as the base.
    */
-  void renderTransparentSleepScreen() const;
+  bool renderTransparentSleepScreen() const;
 };

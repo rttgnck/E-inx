@@ -18,6 +18,7 @@
 #include "state/NetworkCredential.h"
 #include "state/RecentBooks.h"
 #include "state/Session.h"
+#include "state/Statistics.h"
 #include "state/SystemSetting.h"
 #include "system/Fonts.h"
 #include "system/MappedInputManager.h"
@@ -28,6 +29,7 @@ namespace {
 constexpr int kBodyFont = ATKINSON_HYPERLEGIBLE_10_FONT_ID;
 constexpr int kMetaFont = ATKINSON_HYPERLEGIBLE_8_FONT_ID;
 constexpr int kListItemHeight = UiTheme::DRAWER_LIST_ITEM_HEIGHT;
+constexpr const char* kCacheClearStatsBackupRoot = "/.backups/reading_stats/cache_clear";
 }  // namespace
 
 void ClearCacheActivity::taskTrampoline(void* param) {
@@ -78,7 +80,7 @@ void ClearCacheActivity::render() {
   const int bodyTop = INX_THEME.drawPageHeader(renderer, "Clear cache");
 
   if (state == WARNING) {
-    constexpr const char* names[GROUP_COUNT] = {"Display", "Book", "Recent", "Network"};
+    constexpr const char* names[GROUP_COUNT] = {"Display", "Book", "Recent", "Reading stats", "Network"};
     constexpr int rowH = kListItemHeight;
     const int listTop = bodyTop + 1;
     const int left = 20;
@@ -219,6 +221,43 @@ void ClearCacheActivity::clearCache() {
     root.close();
   };
 
+  const auto removePerBookStats = [&](const char* rootPath) {
+    FsFile root = SdMan.open(rootPath);
+    if (!root || !root.isDirectory()) {
+      if (root) {
+        root.close();
+      }
+      return;
+    }
+    char name[128];
+    root.rewindDirectory();
+    while (true) {
+      FsFile entry = root.openNextFile();
+      if (!entry) {
+        break;
+      }
+      if (entry.isDirectory()) {
+        entry.getName(name, sizeof(name));
+        const std::string statsPath = std::string(rootPath) + "/" + name + "/statistics.bin";
+        entry.close();
+        tryRemoveFile(statsPath.c_str());
+        continue;
+      }
+      entry.close();
+    }
+    root.close();
+  };
+
+  int preservedStats = 0;
+  const bool preserveStatsDuringBookClear = selectedGroups[GROUP_BOOK] && !selectedGroups[GROUP_READING_STATS];
+  if (preserveStatsDuringBookClear) {
+    preservedStats = backupAllBookStats(kCacheClearStatsBackupRoot);
+    if (preservedStats > 0) {
+      Serial.printf("[%lu] [CLEAR_CACHE] Preserved %d reading stat entries before book cache clear\n", millis(),
+                    preservedStats);
+    }
+  }
+
   if (selectedGroups[GROUP_DISPLAY]) {
     tryRemoveTree("/.system/cache");
     tryRemoveTree("/.display-cache");
@@ -232,6 +271,16 @@ void ClearCacheActivity::clearCache() {
     tryRemoveFile("/.metadata/recent.bin");
     tryRemoveFile("/.metadata/books.bin");
     tryRemoveTree("/.metadata/library");
+  }
+  if (selectedGroups[GROUP_READING_STATS]) {
+    removePerBookStats("/.metadata/epub");
+    removePerBookStats("/.metadata/xtc");
+    tryRemoveFile("/.system/statistics.bin");
+    tryRemoveFile("/.metadata/reading_daily.bin");
+  } else if (preservedStats > 0) {
+    const int restoredStats = restoreAllBookStats(kCacheClearStatsBackupRoot);
+    Serial.printf("[%lu] [CLEAR_CACHE] Restored %d reading stat entries after book cache clear\n", millis(),
+                  restoredStats);
   }
   if (selectedGroups[GROUP_NETWORK]) {
     tryRemoveFile("/.system/wifi.bin");

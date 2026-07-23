@@ -69,7 +69,8 @@ class RecentActivity final : public Activity, public Menu {
     SimpleUi, /**< Recent cover on gray band, favorites list below */
     List,     /**< Thumbnail left; title, author, progress (5 rows, scrollable) */
     Icons,    /**< 3×3 icon grid; scroll for more books */
-    Cover     /**< Latest recent cover only, with progress below */
+    Cover,    /**< Latest recent cover only, with progress below */
+    StatsDashboard /**< Selected book cover + stats column + progress on top, book list below */
   };
 
  private:
@@ -93,13 +94,24 @@ class RecentActivity final : public Activity, public Menu {
   mutable std::vector<CachedRecentStats> recentStats_;
   mutable std::unordered_map<std::string, std::string> thumbnailPathCache_;
   mutable std::unordered_map<std::string, std::string> coverPathCache_;
+
+  // Cached reading position for the StatsDashboard "currently reading" book (loaded once per book path).
+  std::string dashPosPath_;
+  int dashCurPage_ = 0;        ///< 1-based page within the current chapter (0 = unknown)
+  int dashChapterPages_ = 0;   ///< total pages in the current chapter (0 = unknown)
+  int dashBookPage_ = 0;       ///< 1-based estimated page within the whole book (0 = unknown)
+  int dashBookPages_ = 0;      ///< estimated whole-book page count (0 = unknown)
+  int dashCurChapter_ = 0;     ///< 1-based current chapter (0 = unknown)
+  int dashTotalChapters_ = 0;  ///< total chapters/spines (0 = unknown)
   bool removeConfirmOpen_ = false;
   int removeConfirmIndex_ = -1;
   class HomeMenuDrawer;
   HomeMenuDrawer* homeMenuDrawer_ = nullptr;
 
+  const std::function<void()> onNewsOpen;
   const std::function<void()> onLibraryOpen;
   const std::function<void(const std::string& path)> onSelectBook;
+  const std::function<void(const std::string& path)> onSelectBookNavigation;
   const std::function<void()> onGoToStatistics;
   const std::function<void()> onGoToRecent;
 
@@ -115,7 +127,7 @@ class RecentActivity final : public Activity, public Menu {
    */
   void loadRecentBooks(bool resetScroll = true);
   bool openBookPath(const std::string& path, const std::string& title = "", const std::string& author = "",
-                    bool removeMissingFromRecents = false);
+                    bool removeMissingFromRecents = false, bool openNavigation = false);
   int selectedRecentIndexForRemove() const;
   void beginRemoveConfirmation();
   void cancelRemoveConfirmation();
@@ -161,6 +173,11 @@ class RecentActivity final : public Activity, public Menu {
 
   void renderSimpleUi();
   void renderCoverMode();
+
+  /** Current book cover + single-column stats + position/progress on top; other-books list below. */
+  void renderStatsDashboard();
+  /** Loads (cached by path) the current-chapter page position and chapter counts for the dashboard header. */
+  void ensureDashboardPosition(const RecentBook& book);
 
   /** Book list: five rows, vertical scroll when more than five recents. */
   void renderList(int startY);
@@ -209,6 +226,9 @@ class RecentActivity final : public Activity, public Menu {
   struct FlowViewLayout final : LayoutEngine {
     void paint(RecentActivity& self) override;
   };
+  struct StatsDashboardViewLayout final : LayoutEngine {
+    void paint(RecentActivity& self) override;
+  };
 
   friend class recent::Cover;
   friend class recent::Flow;
@@ -234,8 +254,9 @@ class RecentActivity final : public Activity, public Menu {
    * Overridden from Menu.
    */
   void navigateToSelectedMenu() override {
-    if (tabSelectorIndex == 1) onLibraryOpen();
-    if (tabSelectorIndex == 4) onGoToStatistics();
+    if (tabSelectorIndex == 1) onNewsOpen();
+    if (tabSelectorIndex == 2) onLibraryOpen();
+    if (tabSelectorIndex == 5) onGoToStatistics();
   }
 
   ViewMode currentViewMode = ViewMode::Flow;
@@ -249,16 +270,21 @@ class RecentActivity final : public Activity, public Menu {
    * @param onLibraryOpen Callback for opening library tab
    * @param onGoToStatistics Callback for opening statistics tab
    * @param onSelectBook Callback when a book is selected to open
+   * @param onSelectBookNavigation Callback when a book is long-selected for navigation/recovery
    * @param onGoToRecent Callback for returning to home screen
    */
   explicit RecentActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                          const std::function<void()>& onLibraryOpen, const std::function<void()>& onGoToStatistics,
+                          const std::function<void()>& onNewsOpen, const std::function<void()>& onLibraryOpen,
+                          const std::function<void()>& onGoToStatistics,
                           const std::function<void(const std::string& path)>& onSelectBook,
+                          const std::function<void(const std::string& path)>& onSelectBookNavigation,
                           const std::function<void()>& onGoToRecent)
       : Activity("Recent", renderer, mappedInput),
         Menu(),
+        onNewsOpen(onNewsOpen),
         onLibraryOpen(onLibraryOpen),
         onSelectBook(onSelectBook),
+        onSelectBookNavigation(onSelectBookNavigation),
         onGoToStatistics(onGoToStatistics),
         onGoToRecent(onGoToRecent),
         hasRandomFavorite(false) {}

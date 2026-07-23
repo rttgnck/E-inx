@@ -15,6 +15,9 @@ This document describes all HTTP and WebSocket endpoints available on the Inx Re
     - [POST `/upload` - Upload File](#post-upload---upload-file)
     - [POST `/mkdir` - Create Folder](#post-mkdir---create-folder)
     - [POST `/delete` - Delete File or Folder](#post-delete---delete-file-or-folder)
+    - [GET `/update` - Firmware Update Page](#get-update---firmware-update-page)
+    - [GET `/api/update/status` - Firmware Update Status](#get-apiupdatestatus---firmware-update-status)
+    - [POST `/api/update/upload` - Install Firmware](#post-apiupdateupload---install-firmware)
   - [WebSocket Endpoint](#websocket-endpoint)
     - [Port 81 - Fast Binary Upload](#port-81---fast-binary-upload)
   - [Network Modes](#network-modes)
@@ -232,6 +235,43 @@ File uploaded successfully: mybook.epub
 **Notes:**
 - Existing files with the same name will be overwritten
 - Uses a 4KB buffer for efficient SD card writes
+
+---
+
+### GET `/update` - Firmware Update Page
+
+Serves the local firmware picker and progress UI.
+
+```bash
+curl http://xteink.local/update
+```
+
+---
+
+### GET `/api/update/status` - Firmware Update Status
+
+Returns the running version, active and target OTA slots, maximum image size, upload state/progress, validation error, and random session token.
+
+```bash
+curl http://xteink.local/api/update/status
+```
+
+The token is required by the upload endpoint and is regenerated whenever the web server starts.
+
+---
+
+### POST `/api/update/upload` - Install Firmware
+
+Streams an ESP32-C3 app image directly to the inactive OTA partition.
+
+```bash
+SIZE=$(wc -c < firmware.bin | tr -d ' ')
+TOKEN=$(curl -s http://xteink.local/api/update/status | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')
+curl -F "firmware=@firmware.bin" \
+  "http://xteink.local/api/update/upload?size=${SIZE}&token=${TOKEN}"
+```
+
+The device validates the declared size, ESP image header, chip ID, slot capacity, complete byte count, and ESP-IDF image checksum before selecting the new boot slot. A successful response schedules reboot after 2.5 seconds.
 
 ---
 

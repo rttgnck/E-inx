@@ -499,7 +499,14 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
         return false;
       }
 
-      out.write(buffer, dataRead);
+      if (out.write(buffer, dataRead) != dataRead) {
+        Serial.printf("[%lu] [ZIP] Failed to write all stored bytes to stream\n", millis());
+        free(buffer);
+        if (!wasOpen) {
+          close();
+        }
+        return false;
+      }
       remaining -= dataRead;
     }
 

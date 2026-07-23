@@ -58,6 +58,7 @@ class SleepImagePickerActivity final : public ActivityWithSubactivity {
   bool storeGridBuffer(int pageStart);
   bool restoreGridBuffer(int pageStart);
   void freeGridBuffer();
-  void applySelection();
+  void toggleSelectedShuffleEnabled();
+  void applyRandomMode();
   void requestRedraw();
 };

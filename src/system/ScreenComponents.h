@@ -7,6 +7,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 class GfxRenderer;
@@ -28,6 +29,7 @@ class ScreenComponents {
   };
 
   static void drawBattery(const GfxRenderer& renderer, int left, int top, bool showPercentage = true);
+  static std::string currentTimeText();
   static void drawBookProgressBar(const GfxRenderer& renderer, size_t bookProgress);
 
   static PopupLayout drawPopup(const GfxRenderer& renderer, const char* message);

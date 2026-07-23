@@ -515,6 +515,35 @@ void SettingsDrawer::setupMenu() {
     };
     menuItems.push_back(refreshEntry);
 
+    MenuEntry refreshModeEntry;
+    refreshModeEntry.item = MenuItem::ReaderRefreshMode;
+    refreshModeEntry.group = GroupType::CONTROLS;
+    refreshModeEntry.name = "Refresh Mode";
+    refreshModeEntry.getValueText = [](const BookSettings& s) -> const char* {
+      switch (s.readerRefreshMode) {
+        case SystemSetting::READER_REFRESH_FAST:
+          return "Fast";
+        case SystemSetting::READER_REFRESH_HALF:
+          return "Half";
+        case SystemSetting::READER_REFRESH_FULL:
+          return "Full";
+        default:
+          return "Auto";
+      }
+    };
+    refreshModeEntry.change = [](BookSettings& s, int delta) {
+      int v = static_cast<int>(s.readerRefreshMode) + delta;
+      if (v < 0) {
+        v = SystemSetting::READER_REFRESH_MODE_COUNT - 1;
+      }
+      if (v >= SystemSetting::READER_REFRESH_MODE_COUNT) {
+        v = 0;
+      }
+      s.readerRefreshMode = static_cast<uint8_t>(v);
+      s.useCustomSettings = true;
+    };
+    menuItems.push_back(refreshModeEntry);
+
     MenuEntry powerEntry;
     powerEntry.item = MenuItem::ReaderPowerButton;
     powerEntry.group = GroupType::CONTROLS;
@@ -617,6 +646,22 @@ void SettingsDrawer::setupMenu() {
     };
     menuItems.push_back(statusLeftEntry);
 
+    MenuEntry statusInnerLeftEntry;
+    statusInnerLeftEntry.item = MenuItem::StatusBarInnerLeft;
+    statusInnerLeftEntry.group = GroupType::STATUS_BAR;
+    statusInnerLeftEntry.name = "Inner Left";
+    statusInnerLeftEntry.getValueText = [](const BookSettings& s) -> const char* {
+      return getStatusBarItemName(s.statusBarInnerLeft.item);
+    };
+    statusInnerLeftEntry.change = [](BookSettings& s, int delta) {
+      int newVal = static_cast<int>(s.statusBarInnerLeft.item) + delta;
+      if (newVal >= 0 && newVal < static_cast<int>(StatusBarItem::STATUS_BAR_ITEM_COUNT)) {
+        s.statusBarInnerLeft.item = static_cast<StatusBarItem>(newVal);
+        s.useCustomSettings = true;
+      }
+    };
+    menuItems.push_back(statusInnerLeftEntry);
+
     MenuEntry statusMiddleEntry;
     statusMiddleEntry.item = MenuItem::StatusBarMiddle;
     statusMiddleEntry.group = GroupType::STATUS_BAR;
@@ -632,6 +677,22 @@ void SettingsDrawer::setupMenu() {
       }
     };
     menuItems.push_back(statusMiddleEntry);
+
+    MenuEntry statusInnerRightEntry;
+    statusInnerRightEntry.item = MenuItem::StatusBarInnerRight;
+    statusInnerRightEntry.group = GroupType::STATUS_BAR;
+    statusInnerRightEntry.name = "Inner Right";
+    statusInnerRightEntry.getValueText = [](const BookSettings& s) -> const char* {
+      return getStatusBarItemName(s.statusBarInnerRight.item);
+    };
+    statusInnerRightEntry.change = [](BookSettings& s, int delta) {
+      int newVal = static_cast<int>(s.statusBarInnerRight.item) + delta;
+      if (newVal >= 0 && newVal < static_cast<int>(StatusBarItem::STATUS_BAR_ITEM_COUNT)) {
+        s.statusBarInnerRight.item = static_cast<StatusBarItem>(newVal);
+        s.useCustomSettings = true;
+      }
+    };
+    menuItems.push_back(statusInnerRightEntry);
 
     MenuEntry statusRightEntry;
     statusRightEntry.item = MenuItem::StatusBarRight;
@@ -657,9 +718,10 @@ void SettingsDrawer::setupMenu() {
  * @return String representation of the item
  */
 const char* SettingsDrawer::getStatusBarItemName(StatusBarItem item) {
-  static const char* names[] = {"None",       "Page Numbers",   "Percentage",   "Chapter Title",  "Battery Icon",
-                                "Battery %",  "Battery Icon+%", "Progress Bar", "Progress Bar+%", "Page Bars",
-                                "Book Title", "Author Name",    "Page Num+%"};
+  static const char* names[] = {"None",          "Page Numbers", "Percentage",   "Chapter Title",
+                                "Battery Icon",  "Battery %",    "Battery Icon+%", "Progress Bar",
+                                "Progress Bar+%", "Page Bars",   "Book Title",     "Author Name",
+                                "Page Num+%",    "Time",         "Session Time"};
   int index = static_cast<int>(item);
   if (index < 0 || index >= static_cast<int>(StatusBarItem::STATUS_BAR_ITEM_COUNT)) {
     index = 0;
@@ -1018,37 +1080,41 @@ void SettingsDrawer::applyChange(int delta) {
     if (selectedIndex >= static_cast<int>(menuItems.size())) {
       selectedIndex = std::max(0, static_cast<int>(menuItems.size()) - 1);
     }
-  } else {
-    switch (selectedItem) {
-      case MenuItem::FontSize:
-      case MenuItem::LineHeight:
-      case MenuItem::TextSpace:
-      case MenuItem::ScreenMargin:
-      case MenuItem::Alignment:
-      case MenuItem::ExtraParagraphSpacing:
-      case MenuItem::ParagraphCssIndent:
-      case MenuItem::BionicReading:
-      case MenuItem::FontFamily:
-        settingsUpdated = true;
-        break;
-      case MenuItem::ReadingOrientation:
-      case MenuItem::PageAutoTurn:
-      case MenuItem::ReaderImageGrayscale:
-      case MenuItem::ReaderSmartImageRefresh:
-      case MenuItem::ReaderPowerButton:
-      case MenuItem::StatusBarLeft:
-      case MenuItem::StatusBarMiddle:
-      case MenuItem::StatusBarRight:
-      case MenuItem::Hyphenation:
-      case MenuItem::RefreshRate:
-      case MenuItem::AntiAliasing:
-      case MenuItem::ChapterSkip:
-      case MenuItem::NavigationLock:
-      case MenuItem::Separator:
-      case MenuItem::StatusBarSeparator:
-      case MenuItem::PresetPicker:
-        break;
-    }
+    return;
+  }
+
+  switch (selectedItem) {
+    case MenuItem::FontSize:
+    case MenuItem::LineHeight:
+    case MenuItem::TextSpace:
+    case MenuItem::ScreenMargin:
+    case MenuItem::Alignment:
+    case MenuItem::ExtraParagraphSpacing:
+    case MenuItem::ParagraphCssIndent:
+    case MenuItem::BionicReading:
+    case MenuItem::FontFamily:
+      settingsUpdated = true;
+      break;
+    case MenuItem::ReadingOrientation:
+    case MenuItem::PageAutoTurn:
+    case MenuItem::ReaderImageGrayscale:
+    case MenuItem::ReaderSmartImageRefresh:
+    case MenuItem::ReaderPowerButton:
+    case MenuItem::StatusBarLeft:
+    case MenuItem::StatusBarInnerLeft:
+    case MenuItem::StatusBarMiddle:
+    case MenuItem::StatusBarInnerRight:
+    case MenuItem::StatusBarRight:
+    case MenuItem::Hyphenation:
+    case MenuItem::RefreshRate:
+    case MenuItem::ReaderRefreshMode:
+    case MenuItem::AntiAliasing:
+    case MenuItem::ChapterSkip:
+    case MenuItem::NavigationLock:
+    case MenuItem::Separator:
+    case MenuItem::StatusBarSeparator:
+    case MenuItem::PresetPicker:
+      break;
   }
 
   if (selectedItem != MenuItem::ReaderPowerButton && onSettingsChanged) onSettingsChanged();

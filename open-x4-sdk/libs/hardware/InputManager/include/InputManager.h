@@ -18,6 +18,11 @@ class InputManager {
    */
   void update();
 
+  /**
+   * Re-baselines the current physical button state and clears pending edge events.
+   */
+  void flush();
+
   /** Queue a one-shot press for the next update() (e.g. BLE HID → same path as physical buttons). */
   void injectOneShotPress(uint8_t buttonIndex);
 

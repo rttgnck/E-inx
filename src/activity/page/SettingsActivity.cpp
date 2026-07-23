@@ -26,28 +26,51 @@ const int LIST_ITEM_HEIGHT = 60;
 namespace {
 std::vector<SettingInfo> buildSystemPageSettings(const bool x3) {
   std::vector<SettingInfo> settings;
-  settings.reserve(x3 ? 42 : 35);
+  settings.reserve(x3 ? 55 : 48);
 
   settings.push_back(SettingInfo::Separator("Display ", GroupType::DEVICE_DISPLAY));
+  settings.push_back(SettingInfo::Toggle("Dark Mode", &SystemSetting::darkMode, GroupType::DEVICE_DISPLAY));
+  settings.push_back(SettingInfo::Toggle("Sunlight Fading Fix", &SystemSetting::sunlightFadingFix, GroupType::DEVICE_DISPLAY));
   settings.push_back(SettingInfo::Enum(
       "Sleep Screen", &SystemSetting::sleepScreen,
-      x3 ? std::vector<std::string>{"Dark", "Light", "Custom", "Recent Book", "Transparent Cover", "None", "Date Time"}
-         : std::vector<std::string>{"Dark", "Light", "Custom", "Recent Book", "Transparent Cover", "None"},
+      x3 ? std::vector<std::string>{"Dark", "Light", "Custom", "Recent Book", "Transparent Cover", "None", "Date Time", "Hybrid"}
+         : std::vector<std::string>{"Dark", "Light", "Custom", "Recent Book", "Transparent Cover", "None", "Date Time", "Hybrid"},
       GroupType::DEVICE_DISPLAY));
   settings.push_back(SettingInfo::Action("Choose sleep image", GroupType::DEVICE_DISPLAY));
+  settings.push_back(SettingInfo::Toggle("Sleep rotation (uses battery)", &SystemSetting::sleepImageRotationEnabled,
+                                         GroupType::DEVICE_DISPLAY));
+  settings.push_back(SettingInfo::Value("Sleep image mins", &SystemSetting::sleepImageRotationMinutes, {0, 120, 5},
+                                        GroupType::DEVICE_DISPLAY));
+  settings.push_back(SettingInfo::Toggle("Double press image (uses battery)", &SystemSetting::sleepImagePowerDoublePress,
+                                         GroupType::DEVICE_DISPLAY));
+  settings.push_back(SettingInfo::Enum("Double press finish window", &SystemSetting::sleepImagePowerGestureWindow,
+                                       {"Auto",    "600 ms",  "700 ms",  "800 ms",  "900 ms",  "1000 ms",
+                                        "1100 ms", "1200 ms", "1300 ms", "1400 ms", "1500 ms", "1600 ms",
+                                        "1700 ms", "1800 ms", "1900 ms", "2000 ms", "2100 ms", "2200 ms"},
+                                       GroupType::DEVICE_DISPLAY));
+  settings.push_back(SettingInfo::Enum("First press minimum", &SystemSetting::sleepImagePowerFirstPressMin,
+                                       {"Auto",   "100 ms", "200 ms", "300 ms", "400 ms", "500 ms", "600 ms", "700 ms",
+                                        "800 ms", "900 ms", "1000 ms", "1100 ms", "1200 ms", "1300 ms", "1400 ms", "1500 ms"},
+                                       GroupType::DEVICE_DISPLAY));
+  settings.push_back(SettingInfo::Enum("Second press maximum", &SystemSetting::sleepImagePowerSecondPressMax,
+                                       {"100 ms", "200 ms", "300 ms", "400 ms", "500 ms", "600 ms", "700 ms", "800 ms",
+                                        "900 ms", "1000 ms"},
+                                       GroupType::DEVICE_DISPLAY));
   settings.push_back(SettingInfo::Enum("Hide Battery %", &SystemSetting::hideBatteryPercentage,
                                        {"Never", "In Reader", "Always"}, GroupType::DEVICE_DISPLAY));
+  settings.push_back(SettingInfo::Toggle("Time beside battery", &SystemSetting::showBottomBarClock, GroupType::DEVICE_DISPLAY));
   settings.push_back(
       SettingInfo::Enum("Theme", &SystemSetting::uiTheme, {"Classic", "Bottom Tabs"}, GroupType::DEVICE_DISPLAY));
   settings.push_back(SettingInfo::Enum(
-      "Recent Library Mode", &SystemSetting::recentLibraryMode, {"Grid", "Flow", "Simple", "List", "Icons", "Cover"},
-      {SystemSetting::RECENT_GRID, SystemSetting::RECENT_FLOW, SystemSetting::RECENT_SIMPLE,
-       SystemSetting::RECENT_BOOK_LIST, SystemSetting::RECENT_ICONS, SystemSetting::RECENT_COVER},
+      "Recent Library Mode", &SystemSetting::recentLibraryMode,
+      {"Grid", "Current | Previous", "Flow", "Simple", "List", "Icons", "Cover", "Reading Stats"},
       GroupType::DEVICE_DISPLAY));
   settings.push_back(
       SettingInfo::Enum("Library Mode", &SystemSetting::libraryMode, {"List", "Grid"}, GroupType::DEVICE_DISPLAY));
   settings.push_back(SettingInfo::Toggle("Shelf mode", &SystemSetting::libraryShelfEnabled, GroupType::DEVICE_DISPLAY));
-  settings.push_back(SettingInfo::Value("Recent books shown", &SystemSetting::recentVisibleCount, {1, 9, 1},
+  settings.push_back(SettingInfo::Enum("Files default page", &SystemSetting::libraryViewMode, {"Folders", "Books", "Tags", "Shelf"},
+                                       GroupType::DEVICE_DISPLAY));
+  settings.push_back(SettingInfo::Value("Recent books shown", &SystemSetting::recentVisibleCount, {1, 8, 1},
                                         GroupType::DEVICE_DISPLAY));
 
   if (x3) {
@@ -57,6 +80,8 @@ std::vector<SettingInfo> buildSystemPageSettings(const bool x3) {
         SettingInfo::Enum("Format", &SystemSetting::sleepClockTimeFormat, {"12 hour", "24 hour"}, GroupType::CLOCK));
     settings.push_back(
         SettingInfo::Value("Timezone", &SystemSetting::timeZoneQuarterOffset, {0, 104, 1}, GroupType::CLOCK));
+    settings.push_back(SettingInfo::Enum("Daily Goal", &SystemSetting::dailyReadingGoal, {"15 min", "30 min", "45 min", "60 min"},
+                                         GroupType::CLOCK));
     settings.push_back(SettingInfo::Action("Sync", GroupType::CLOCK));
   }
 
@@ -72,13 +97,18 @@ std::vector<SettingInfo> buildSystemPageSettings(const bool x3) {
 
   settings.push_back(SettingInfo::Separator("Buttons", GroupType::DEVICE_BUTTONS));
   settings.push_back(SettingInfo::Enum("Front Button", &SystemSetting::frontButtonLayout,
-                                       {"Back, Ccnfirm, Left, Right", "Left, Right, Back, Confirm",
+                                       {"Back, Confirm, Left, Right", "Left, Right, Back, Confirm",
                                         "Left, Back, Confirm, Right", "Back, Confirm, Right, Left"},
                                        GroupType::DEVICE_BUTTONS));
   settings.push_back(SettingInfo::Enum("Short Power Button Click", &SystemSetting::shortPwrBtn,
                                        {"Ignore", "Sleep", "Page Refresh"}, GroupType::DEVICE_BUTTONS));
-  settings.push_back(SettingInfo::Enum("Main Menu Buttons", &SystemSetting::mainMenuNav,
-                                       {"Front (Left/Right)", "Side (Up/Down)"}, GroupType::DEVICE_BUTTONS));
+  settings.push_back(SettingInfo::Enum("Pocket wake guard", &SystemSetting::powerWakeGuard,
+                                       {"Off",     "400 ms",  "500 ms",  "600 ms",  "700 ms",  "800 ms",
+                                        "900 ms", "1000 ms", "1100 ms", "1200 ms", "1300 ms", "1400 ms",
+                                        "1500 ms", "1600 ms", "1700 ms", "1800 ms", "1900 ms", "2000 ms",
+                                        "2100 ms", "2200 ms", "2300 ms", "2400 ms", "2500 ms"},
+                                       GroupType::DEVICE_BUTTONS));
+  settings.push_back(SettingInfo::Toggle("Swap Side/Face Nav", &SystemSetting::mainMenuNav, GroupType::DEVICE_BUTTONS));
   if (x3) {
     settings.push_back(SettingInfo::Enum("Flick page turn", &SystemSetting::shakePageTurn,
                                          {"Off", "Normal", "Inverted"}, GroupType::DEVICE_BUTTONS));
@@ -105,8 +135,18 @@ std::vector<SettingInfo> buildSystemPageSettings(const bool x3) {
       SettingInfo::Toggle("Refresh on load (Sync)", &SystemSetting::refreshOnLoadSync, GroupType::DEVICE_ADVANCED));
   settings.push_back(SettingInfo::Toggle("Refresh on load (Stats)", &SystemSetting::refreshOnLoadStatistics,
                                          GroupType::DEVICE_ADVANCED));
+  settings.push_back(SettingInfo::Toggle("Anti-ghosting (experimental)", &SystemSetting::antiGhostingExperimental,
+                                         GroupType::DEVICE_ADVANCED));
+  settings.push_back(SettingInfo::Toggle("Persistent sleep logs", &SystemSetting::persistentSleepLogs,
+                                         GroupType::DEVICE_ADVANCED));
+
+  settings.push_back(SettingInfo::Separator("If Found", GroupType::IF_FOUND));
+  settings.push_back(SettingInfo::Action("View if_found.txt", GroupType::IF_FOUND));
 
   settings.push_back(SettingInfo::Separator("Actions", GroupType::DEVICE_ACTIONS));
+  settings.push_back(SettingInfo::Action("Backup Reading Stats", GroupType::DEVICE_ACTIONS));
+  settings.push_back(SettingInfo::Action("Restore Reading Stats", GroupType::DEVICE_ACTIONS));
+  settings.push_back(SettingInfo::Action("Regenerate sleep cover", GroupType::DEVICE_ACTIONS));
   settings.push_back(SettingInfo::Action("Delete Cache", GroupType::DEVICE_ACTIONS));
   settings.push_back(SettingInfo::Action("Index your library", GroupType::DEVICE_ACTIONS));
   settings.push_back(SettingInfo::Action("Generate thumbnails", GroupType::DEVICE_ACTIONS));
@@ -128,7 +168,7 @@ std::vector<SettingInfo> buildSystemPageSettings(const bool x3) {
 void SettingsActivity::onEnter() {
   Activity::onEnter();
 
-  tabSelectorIndex = 2;
+  tabSelectorIndex = 3;
   currentPanel = SettingsPanel::System;
   panelSwapPending = false;
 
@@ -213,7 +253,7 @@ void SettingsActivity::loop() {
     return;
   }
 
-  if (tabSelectorIndex != 2) {
+  if (tabSelectorIndex != 3) {
     return;
   }
 }

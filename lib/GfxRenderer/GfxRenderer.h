@@ -36,6 +36,11 @@ class GfxRenderer {
 
   HalDisplay& display;
   RenderMode renderMode;
+  bool darkMode = false;
+  bool fadingFix_ = false;
+  bool preservingImageTone_ = false;
+  mutable bool nextRefreshOverridePending_ = false;  ///< One-shot: force next displayBuffer() refresh mode.
+  mutable HalDisplay::RefreshMode nextRefreshOverride_ = HalDisplay::FULL_REFRESH;
   Orientation orientation;
   uint16_t panelWidth = HalDisplay::DISPLAY_WIDTH;
   uint16_t panelHeight = HalDisplay::DISPLAY_HEIGHT;
@@ -89,6 +94,18 @@ class GfxRenderer {
   void clearScreen(uint8_t color = 0xFF) const;
   void begin();
 
+  /**
+   * @brief Forces the next displayBuffer() to use FULL_REFRESH regardless of the mode it is called with.
+   * @details One-shot: consumed by the next push. Used when the whole screen's polarity flips (e.g. entering
+   *          dark mode on boot/wake), where a partial/fast refresh can't cleanly re-develop the panel.
+   */
+  void requestNextRefresh(HalDisplay::RefreshMode mode) const {
+    nextRefreshOverride_ = mode;
+    nextRefreshOverridePending_ = true;
+  }
+  void requestNextFullRefresh() const { requestNextRefresh(HalDisplay::FULL_REFRESH); }
+  void requestNextHalfRefresh() const { requestNextRefresh(HalDisplay::HALF_REFRESH); }
+
   /** Solid ink/paper, or Gray (50% checkerboard dither in BW, similar to light fills in list UIs). */
   enum class FillTone : uint8_t { Paper, Ink, Gray };
 
@@ -112,6 +129,22 @@ class GfxRenderer {
  public:
   void setRenderMode(const RenderMode mode) { this->renderMode = mode; }
   RenderMode getRenderMode() const { return renderMode; }
+
+  /**
+   * @brief Enables/disables global dark mode (system-wide BW color inversion).
+   * @details When enabled, all 1-bit (BW) drawing is inverted at the pixel level so the whole
+   *          interface renders light-on-dark. Grayscale image passes (renderMode != BW) are left
+   *          untouched, so photos and covers keep their natural tones.
+  */
+  void setDarkMode(const bool enabled) { darkMode = enabled; }
+  bool isDarkMode() const { return darkMode; }
+  void setFadingFix(const bool enabled) { fadingFix_ = enabled; }
+  bool isFadingFixEnabled() const { return fadingFix_; }
+  bool setPreserveImageTone(const bool enabled) {
+    const bool previous = preservingImageTone_;
+    preservingImageTone_ = enabled;
+    return previous;
+  }
   bool deviceIsX3() const;
   void copyGrayscaleLsbBuffers() const;
   void copyGrayscaleMsbBuffers() const;

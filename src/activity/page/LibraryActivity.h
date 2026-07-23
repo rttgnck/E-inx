@@ -91,11 +91,12 @@ class LibraryActivity final : public Activity, public Menu {
    * @param onSettingsOpen Callback for opening settings tab
    * @param initialPath Starting directory path (default: "/")
    */
-  explicit LibraryActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                           const std::function<void()>& onGoToRecent,
-                           const std::function<void(const std::string& path)>& onSelectBook,
-                           const std::function<void()>& onRecentOpen, const std::function<void()>& onSettingsOpen,
-                           const std::string& initialPath = "/");
+  explicit LibraryActivity(
+      GfxRenderer& renderer, MappedInputManager& mappedInput, const std::function<void()>& onGoToRecent,
+      const std::function<void(const std::string& path)>& onSelectBook, const std::function<void()>& onRecentOpen,
+      const std::function<void()>& onNewsOpen, const std::function<void()>& onSettingsOpen,
+      const std::function<void(const std::string& bookPath, const std::string& returnPath)>& onEditMetadata,
+      const std::string& initialPath = "/");
   /**
    * @brief Destroy the Library Activity, stopping the display task and releasing resources
    */
@@ -209,7 +210,10 @@ class LibraryActivity final : public Activity, public Menu {
   const std::function<void()> onGoToRecent;                         ///< Callback to go to recent books
   const std::function<void(const std::string& path)> onSelectBook;  ///< Callback to open a book
   const std::function<void()> onRecentOpen;                         ///< Callback to open recent tab
+  const std::function<void()> onNewsOpen;                           ///< Callback to open news tab
   const std::function<void()> onSettingsOpen;                       ///< Callback to open settings tab
+  /** Opens the metadata editor for a book; second arg is the folder to return to. */
+  const std::function<void(const std::string& bookPath, const std::string& returnPath)> onEditMetadata;
 
   ViewMode currentViewMode;  ///< Current display mode
   SortMode currentSortMode;  ///< Current sorting mode
@@ -218,8 +222,8 @@ class LibraryActivity final : public Activity, public Menu {
    * @brief Navigate to selected menu item (Recent or Settings)
    */
   void navigateToSelectedMenu() override {
-    if (tabSelectorIndex == 0) onRecentOpen();
-    if (tabSelectorIndex == 2) onSettingsOpen();
+    if (tabSelectorIndex == 1) onNewsOpen();
+    if (tabSelectorIndex == 3) onSettingsOpen();
   }
 
   /**

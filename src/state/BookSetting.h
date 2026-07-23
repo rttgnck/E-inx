@@ -30,6 +30,8 @@ enum class StatusBarItem {
   BOOK_TITLE,                 ///< Book title
   AUTHOR_NAME,                ///< Author name
   PAGE_NUMBERS_WITH_PERCENT,  ///< Page numbers and percentage combined (e.g., "12/340 45%")
+  TIME,                       ///< Current device time
+  SESSION_TIME,               ///< Elapsed time in the current reading session
   STATUS_BAR_ITEM_COUNT
 };
 
@@ -72,9 +74,11 @@ struct StatusBarSectionConfig {
  * @brief Complete status bar layout with left, middle, and right sections
  */
 struct StatusBarLayout {
-  StatusBarSectionConfig left;    ///< Left status bar section
-  StatusBarSectionConfig middle;  ///< Middle status bar section
-  StatusBarSectionConfig right;   ///< Right status bar section
+  StatusBarSectionConfig left;
+  StatusBarSectionConfig innerLeft;
+  StatusBarSectionConfig middle;
+  StatusBarSectionConfig innerRight;
+  StatusBarSectionConfig right;
 };
 
 /**
@@ -102,9 +106,12 @@ struct BookSettings {
   uint8_t longPressChapterSkip = SystemSetting::LONG_PRESS_CHAPTER_SKIP;
 
   uint8_t refreshFrequency = 15;  ///< Screen refresh frequency in pages
+  uint8_t readerRefreshMode = SystemSetting::READER_REFRESH_AUTO;
 
   StatusBarSectionConfig statusBarLeft;    ///< Left status bar section
+  StatusBarSectionConfig statusBarInnerLeft;  ///< Inner-left status bar section
   StatusBarSectionConfig statusBarMiddle;  ///< Middle status bar section
+  StatusBarSectionConfig statusBarInnerRight;  ///< Inner-right status bar section
   StatusBarSectionConfig statusBarRight;   ///< Right status bar section
 
   /**
@@ -124,16 +131,20 @@ struct BookSettings {
    * @brief Complete layout structure
    */
   struct Layout {
-    StatusBarSectionConfig left;    ///< Left section config
-    StatusBarSectionConfig middle;  ///< Middle section config
-    StatusBarSectionConfig right;   ///< Right section config
+    StatusBarSectionConfig left;
+    StatusBarSectionConfig innerLeft;
+    StatusBarSectionConfig middle;
+    StatusBarSectionConfig innerRight;
+    StatusBarSectionConfig right;
   };
 
   /**
    * @brief Gets the complete status bar layout
    * @return Layout containing all three sections
    */
-  Layout getStatusBarLayout() const { return {statusBarLeft, statusBarMiddle, statusBarRight}; }
+  Layout getStatusBarLayout() const {
+    return {statusBarLeft, statusBarInnerLeft, statusBarMiddle, statusBarInnerRight, statusBarRight};
+  }
 
   /**
    * @brief Sets the complete status bar layout
@@ -141,7 +152,9 @@ struct BookSettings {
    */
   void setStatusBarLayout(const Layout& layout) {
     statusBarLeft = layout.left;
+    statusBarInnerLeft = layout.innerLeft;
     statusBarMiddle = layout.middle;
+    statusBarInnerRight = layout.innerRight;
     statusBarRight = layout.right;
   }
 
@@ -150,7 +163,8 @@ struct BookSettings {
    */
   static constexpr size_t kLegacySerializedSize = 18;
   static constexpr size_t kSerializedSizeV2 = 20;
-  static constexpr size_t kSerializedSize = 21;
+  static constexpr size_t kSerializedSizeV3 = 21;
+  static constexpr size_t kSerializedSize = 24;
 
   void markCustomSettings() {
     useCustomSettings = true;
@@ -186,6 +200,9 @@ struct BookSettings {
         refreshFrequency != 30) {
       refreshFrequency = 15;
     }
+    if (readerRefreshMode >= SystemSetting::READER_REFRESH_MODE_COUNT) {
+      readerRefreshMode = SystemSetting::READER_REFRESH_AUTO;
+    }
     if (pageAutoTurnSeconds > 60 || pageAutoTurnSeconds % 10 != 0) {
       pageAutoTurnSeconds = 0;
     }
@@ -200,7 +217,9 @@ struct BookSettings {
       }
     };
     normalizeStatus(statusBarLeft);
+    normalizeStatus(statusBarInnerLeft);
     normalizeStatus(statusBarMiddle);
+    normalizeStatus(statusBarInnerRight);
     normalizeStatus(statusBarRight);
   }
 
@@ -233,6 +252,9 @@ struct BookSettings {
     data[offset++] = readerImageGrayscale;
     data[offset++] = readerSmartRefreshOnImages;
     data[offset++] = readerPresetIndex;
+    data[offset++] = readerRefreshMode;
+    statusBarInnerLeft.toBytes(data, offset);
+    statusBarInnerRight.toBytes(data, offset);
   }
 
   /**
@@ -331,6 +353,28 @@ struct BookSettings {
       readerPresetIndex = data[offset++];
     } else {
       readerPresetIndex = kNoReaderPreset;
+    }
+
+    if (bytesAvailable >= offset + 1) {
+      readerRefreshMode = data[offset++];
+      if (readerRefreshMode >= SystemSetting::READER_REFRESH_MODE_COUNT) {
+        readerRefreshMode = SystemSetting::READER_REFRESH_AUTO;
+      }
+    } else {
+      readerRefreshMode = SystemSetting::getInstance().readerRefreshMode;
+    }
+
+    if (bytesAvailable >= offset + 1) {
+      statusBarInnerLeft.fromBytes(data, offset);
+      if (statusBarInnerLeft.item >= StatusBarItem::STATUS_BAR_ITEM_COUNT) statusBarInnerLeft.item = StatusBarItem::NONE;
+    } else {
+      statusBarInnerLeft.item = StatusBarItem::NONE;
+    }
+    if (bytesAvailable >= offset + 1) {
+      statusBarInnerRight.fromBytes(data, offset);
+      if (statusBarInnerRight.item >= StatusBarItem::STATUS_BAR_ITEM_COUNT) statusBarInnerRight.item = StatusBarItem::NONE;
+    } else {
+      statusBarInnerRight.item = StatusBarItem::NONE;
     }
 
     return true;
@@ -435,9 +479,12 @@ struct BookSettings {
     pageAutoTurnSeconds = global.pageAutoTurnSeconds;
     readerImageGrayscale = global.readerImageGrayscale;
     readerSmartRefreshOnImages = global.readerSmartRefreshOnImages ? 1 : 0;
+    readerRefreshMode = global.readerRefreshMode;
 
     statusBarLeft.item = static_cast<StatusBarItem>(global.statusBarLeft);
+    statusBarInnerLeft.item = static_cast<StatusBarItem>(global.statusBarInnerLeft);
     statusBarMiddle.item = static_cast<StatusBarItem>(global.statusBarMiddle);
+    statusBarInnerRight.item = static_cast<StatusBarItem>(global.statusBarInnerRight);
     statusBarRight.item = static_cast<StatusBarItem>(global.statusBarRight);
     readerPresetIndex = kNoReaderPreset;
   }
@@ -484,9 +531,12 @@ struct BookSettings {
     global.pageAutoTurnSeconds = pageAutoTurnSeconds;
     global.readerImageGrayscale = readerImageGrayscale;
     global.readerSmartRefreshOnImages = readerSmartRefreshOnImages ? 1 : 0;
+    global.readerRefreshMode = readerRefreshMode;
 
     global.statusBarLeft = static_cast<uint8_t>(statusBarLeft.item);
+    global.statusBarInnerLeft = static_cast<uint8_t>(statusBarInnerLeft.item);
     global.statusBarMiddle = static_cast<uint8_t>(statusBarMiddle.item);
+    global.statusBarInnerRight = static_cast<uint8_t>(statusBarInnerRight.item);
     global.statusBarRight = static_cast<uint8_t>(statusBarRight.item);
   }
 
@@ -537,8 +587,12 @@ struct BookSettings {
            hyphenationEnabled == other.hyphenationEnabled && bionicReadingEnabled == other.bionicReadingEnabled &&
            screenMargin == other.screenMargin && orientation == other.orientation &&
            longPressChapterSkip == other.longPressChapterSkip && refreshFrequency == other.refreshFrequency &&
+           readerRefreshMode == other.readerRefreshMode &&
            pageAutoTurnSeconds == other.pageAutoTurnSeconds && statusBarLeft == other.statusBarLeft &&
-           statusBarMiddle == other.statusBarMiddle && statusBarRight == other.statusBarRight;
+           statusBarInnerLeft == other.statusBarInnerLeft && statusBarMiddle == other.statusBarMiddle &&
+           statusBarInnerRight == other.statusBarInnerRight && statusBarRight == other.statusBarRight &&
+           readerImageGrayscale == other.readerImageGrayscale &&
+           readerSmartRefreshOnImages == other.readerSmartRefreshOnImages;
   }
 
   /**

@@ -20,7 +20,9 @@
 #include <cstdio>
 #include <string>
 
+#include "activity/reader/ReaderRefresh.h"
 #include "state/RecentBooks.h"
+#include "state/ReadingDailyStats.h"
 #include "state/Session.h"
 #include "state/SystemSetting.h"
 #include "system/Fonts.h"
@@ -745,13 +747,8 @@ void XtcReaderActivity::renderPage() {
 
     if (imageQuality == SystemSetting::READER_IMAGE_LOW) {
       renderBwPreview();
-      if (pagesUntilFullRefresh <= 1) {
-        renderer.displayBuffer(HalDisplay::HALF_REFRESH);
-        pagesUntilFullRefresh = SETTINGS.xtcRefreshFrequency;
-      } else {
-        renderer.displayBuffer();
-        pagesUntilFullRefresh--;
-      }
+      ReaderRefresh::displayWithCycle(renderer, pagesUntilFullRefresh, SETTINGS.xtcRefreshFrequency,
+                                      SETTINGS.readerRefreshMode);
 
       free(pageBuffer);
       Serial.printf("[%lu] [XTR] Rendered page %lu/%lu (2-bit low/BW)\n", millis(), currentPage + 1,
@@ -785,13 +782,8 @@ void XtcReaderActivity::renderPage() {
     }
 
     renderBwPreview();
-    if (pagesUntilFullRefresh <= 1) {
-      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
-      pagesUntilFullRefresh = SETTINGS.xtcRefreshFrequency;
-    } else {
-      renderer.displayBuffer();
-      pagesUntilFullRefresh--;
-    }
+    ReaderRefresh::displayWithCycle(renderer, pagesUntilFullRefresh, SETTINGS.xtcRefreshFrequency,
+                                    SETTINGS.readerRefreshMode);
 
     renderer.clearScreen(0x00);
     for (uint16_t y = 0; y < pageHeight; y++) {
@@ -852,13 +844,8 @@ void XtcReaderActivity::renderPage() {
 
   free(pageBuffer);
 
-  if (pagesUntilFullRefresh <= 1) {
-    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
-    pagesUntilFullRefresh = SETTINGS.xtcRefreshFrequency;
-  } else {
-    renderer.displayBuffer();
-    pagesUntilFullRefresh--;
-  }
+  ReaderRefresh::displayWithCycle(renderer, pagesUntilFullRefresh, SETTINGS.xtcRefreshFrequency,
+                                  SETTINGS.readerRefreshMode);
 
   Serial.printf("[%lu] [XTR] Rendered page %lu/%lu (%u-bit)\n", millis(), currentPage + 1, xtc->getPageCount(),
                 bitDepth);
@@ -948,6 +935,7 @@ void XtcReaderActivity::endPageTimer() {
   const uint32_t pageCount = xtc->getPageCount();
   if (pageCount > 0 && currentPage < pageCount) {
     bookStats.totalReadingTimeMs += timeSpent;
+    ReadingDailyStats::recordReadingMs(timeSpent);
     bookStats.totalPagesRead++;
     bookStats.lastReadTimeMs = now;
     bookStats.lastPageNumber = static_cast<uint16_t>(std::min<uint32_t>(currentPage, UINT16_MAX));

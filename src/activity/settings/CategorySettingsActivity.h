@@ -37,6 +37,7 @@ enum class GroupType {
   DEVICE_ADVANCED,
   DEVICE_ACTIONS,
   IMAGE,
+  IF_FOUND,
 };
 
 struct ValueRange {
@@ -171,6 +172,7 @@ class CategorySettingsActivity final : public ActivityWithSubactivity, public Me
   SemaphoreHandle_t renderingMutex = nullptr;
   bool updateRequired = false;
   bool halfRefreshOnLoadApplied_ = false;
+  bool forceFullRefreshNext_ = false;  ///< One-shot: next render uses FULL_REFRESH (e.g. after a dark-mode toggle)
   bool selectorOpen = false;
   uint8_t selectorMode = 0;
   int selectedIndex = 0;
@@ -203,7 +205,7 @@ class CategorySettingsActivity final : public ActivityWithSubactivity, public Me
     std::function<void(int)> change;
   };
 
-  static constexpr size_t kGroupCount = static_cast<size_t>(GroupType::IMAGE) + 1;
+  static constexpr size_t kGroupCount = static_cast<size_t>(GroupType::IF_FOUND) + 1;
   static constexpr size_t groupIndex(const GroupType group) { return static_cast<size_t>(group); }
   bool isGroupExpanded(GroupType group) const { return groupExpanded_[groupIndex(group)]; }
 
@@ -273,7 +275,7 @@ class CategorySettingsActivity final : public ActivityWithSubactivity, public Me
         onTabLibrary(std::move(tabNavigateLibrary)),
         onTabSync(std::move(tabNavigateSync)),
         onTabStatistics(std::move(tabNavigateStatistics)) {
-    tabSelectorIndex = 2;
+    tabSelectorIndex = 3;
     const int contentTop = mainContentTop() + TAB_BAR_HEIGHT;
     const int contentBottom =
         INX_THEME.mainTabsAtBottom() ? mainContentBottom(renderer) : renderer.getScreenHeight() - 80;

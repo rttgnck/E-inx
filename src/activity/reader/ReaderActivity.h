@@ -28,6 +28,7 @@ class ReaderActivity final : public ActivityWithSubactivity {
   std::string initialBookPath;                             ///< Path to the book file to open
   std::string currentBookPath;                             ///< Path of currently loaded book for navigation
   const std::function<void(const std::string&)> onGoBack;  ///< Callback to return to previous activity
+  bool openNavigationOnLaunch = false;                     ///< EPUB: open reader navigation drawer after load
 
   /**
    * @brief Loads an EPUB file from the given path
@@ -110,10 +111,11 @@ class ReaderActivity final : public ActivityWithSubactivity {
    * @param onGoToCallback Callback function to open library at specified path
    */
   explicit ReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& initialBookPath,
-                          std::function<void(const std::string&)> onGoBack)
+                          std::function<void(const std::string&)> onGoBack, bool openNavigationOnLaunch = false)
       : ActivityWithSubactivity("Reader", renderer, mappedInput),
         initialBookPath(initialBookPath),
-        onGoBack(std::move(onGoBack)) {}
+        onGoBack(std::move(onGoBack)),
+        openNavigationOnLaunch(openNavigationOnLaunch) {}
 
   /**
    * @brief Called when entering the reader activity

@@ -13,8 +13,11 @@
 extern HalGPIO gpio;
 
 static const int STATUS_BAR_LEFT = 0;
-static const int STATUS_BAR_MIDDLE = 1;
-static const int STATUS_BAR_RIGHT = 2;
+static const int STATUS_BAR_INNER_LEFT = 1;
+static const int STATUS_BAR_MIDDLE = 2;
+static const int STATUS_BAR_INNER_RIGHT = 3;
+static const int STATUS_BAR_RIGHT = 4;
+static const int STATUS_BAR_SECTION_COUNT = 5;
 
 /**
  * @brief Constructs a new StatusBar
@@ -22,8 +25,9 @@ static const int STATUS_BAR_RIGHT = 2;
  * @param epub Reference to the EPUB document
  * @param settings Reference to the book settings
  */
-StatusBar::StatusBar(GfxRenderer& renderer, const Epub& epub, const BookSettings& settings)
-    : m_renderer(renderer), m_epub(epub), m_settings(settings), m_visible(true) {}
+StatusBar::StatusBar(GfxRenderer& renderer, const Epub& epub, const BookSettings& settings,
+                     const EpubReadingStats& readingStats)
+    : m_renderer(renderer), m_epub(epub), m_settings(settings), m_readingStats(readingStats), m_visible(true) {}
 
 /**
  * @brief Renders the complete status bar with three configurable sections
@@ -44,25 +48,12 @@ void StatusBar::render(const Section* section, int currentSpineIndex, int orient
   const int textY = screenHeight - orientedMarginBottom - 4;
 
   const int availableWidth = screenWidth - orientedMarginLeft - orientedMarginRight;
-  const int sectionWidth = availableWidth / 3;
-
-  const int leftSectionStart = orientedMarginLeft;
-  const int leftSectionCenter = leftSectionStart + (sectionWidth / 2);
-
-  const int middleThirdStart = orientedMarginLeft + sectionWidth;
-  const int middleSectionCenter = middleThirdStart + (sectionWidth / 2);
-
-  const int rightThirdStart = middleThirdStart + sectionWidth;
-  const int rightSectionCenter = rightThirdStart + (sectionWidth / 2);
-  const int rightSectionStart = rightThirdStart;
-
-  renderSection(STATUS_BAR_LEFT, leftSectionStart, leftSectionCenter, sectionWidth, textY, section, currentSpineIndex);
-
-  renderSection(STATUS_BAR_MIDDLE, middleThirdStart, middleSectionCenter, sectionWidth, textY, section,
-                currentSpineIndex);
-
-  renderSection(STATUS_BAR_RIGHT, rightSectionStart, rightSectionCenter, sectionWidth, textY, section,
-                currentSpineIndex);
+  const int sectionWidth = availableWidth / STATUS_BAR_SECTION_COUNT;
+  for (int position = 0; position < STATUS_BAR_SECTION_COUNT; ++position) {
+    const int sectionStart = orientedMarginLeft + position * sectionWidth;
+    const int width = position == STATUS_BAR_RIGHT ? availableWidth - sectionWidth * position : sectionWidth;
+    renderSection(position, sectionStart, sectionStart + width / 2, width, textY, section, currentSpineIndex);
+  }
 }
 
 /**
@@ -104,6 +95,8 @@ void StatusBar::renderSection(int position, int sectionStart, int sectionCenter,
       case STATUS_BAR_LEFT:
         return sectionStart + 5;
       case STATUS_BAR_MIDDLE:
+      case STATUS_BAR_INNER_LEFT:
+      case STATUS_BAR_INNER_RIGHT:
         return getCenteredX(text);
       case STATUS_BAR_RIGHT:
         return getRightAlignedX(text);
@@ -233,6 +226,22 @@ void StatusBar::renderSection(int position, int sectionStart, int sectionCenter,
       break;
     }
 
+    case StatusBarItem::TIME: {
+      const std::string time = ScreenComponents::currentTimeText();
+      if (!time.empty()) {
+        const int xPos = getPositionX(time.c_str());
+        m_renderer.text.render(ATKINSON_HYPERLEGIBLE_8_FONT_ID, xPos, textY, time.c_str());
+      }
+      break;
+    }
+
+    case StatusBarItem::SESSION_TIME: {
+      const std::string elapsed = getSessionTimeString();
+      const int xPos = getPositionX(elapsed.c_str());
+      m_renderer.text.render(ATKINSON_HYPERLEGIBLE_8_FONT_ID, xPos, textY, elapsed.c_str());
+      break;
+    }
+
     default:
       break;
   }
@@ -296,13 +305,29 @@ StatusBarSectionConfig StatusBar::getConfig(int position) const {
   switch (position) {
     case STATUS_BAR_LEFT:
       return m_settings.statusBarLeft;
+    case STATUS_BAR_INNER_LEFT:
+      return m_settings.statusBarInnerLeft;
     case STATUS_BAR_MIDDLE:
       return m_settings.statusBarMiddle;
+    case STATUS_BAR_INNER_RIGHT:
+      return m_settings.statusBarInnerRight;
     case STATUS_BAR_RIGHT:
       return m_settings.statusBarRight;
     default:
       return StatusBarSectionConfig();
   }
+}
+
+std::string StatusBar::getSessionTimeString() const {
+  const uint32_t totalMinutes = m_readingStats.sessionElapsedMs() / 60000UL;
+  char buffer[16];
+  if (totalMinutes >= 60) {
+    snprintf(buffer, sizeof(buffer), "%uh%02um", static_cast<unsigned>(totalMinutes / 60),
+             static_cast<unsigned>(totalMinutes % 60));
+  } else {
+    snprintf(buffer, sizeof(buffer), "%um", static_cast<unsigned>(totalMinutes));
+  }
+  return std::string(buffer);
 }
 
 /**

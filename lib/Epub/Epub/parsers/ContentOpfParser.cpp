@@ -9,11 +9,22 @@
 #include <HardwareSerial.h>
 #include <Serialization.h>
 
+#include <cstring>
+
 #include "../BookMetadataCache.h"
 
 namespace {
 constexpr char MEDIA_TYPE_NCX[] = "application/x-dtbncx+xml";
 constexpr char itemCacheFile[] = "/.items.bin";
+
+const char* localName(const XML_Char* name) {
+  const char* colon = strrchr(name, ':');
+  return colon ? colon + 1 : name;
+}
+
+bool xmlNameIs(const XML_Char* name, const char* expectedLocalName) {
+  return strcmp(localName(name), expectedLocalName) == 0;
+}
 }  // namespace
 
 bool ContentOpfParser::setup() {
@@ -104,17 +115,17 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
     return;
   }
 
-  if (self->state == IN_METADATA && strcmp(name, "dc:title") == 0) {
+  if (self->state == IN_METADATA && xmlNameIs(name, "title")) {
     self->state = IN_BOOK_TITLE;
     return;
   }
 
-  if (self->state == IN_METADATA && strcmp(name, "dc:creator") == 0) {
+  if (self->state == IN_METADATA && xmlNameIs(name, "creator")) {
     self->state = IN_BOOK_AUTHOR;
     return;
   }
 
-  if (self->state == IN_METADATA && strcmp(name, "dc:language") == 0) {
+  if (self->state == IN_METADATA && xmlNameIs(name, "language")) {
     self->state = IN_BOOK_LANGUAGE;
     return;
   }
@@ -344,17 +355,17 @@ void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) 
     return;
   }
 
-  if (self->state == IN_BOOK_TITLE && strcmp(name, "dc:title") == 0) {
+  if (self->state == IN_BOOK_TITLE && xmlNameIs(name, "title")) {
     self->state = IN_METADATA;
     return;
   }
 
-  if (self->state == IN_BOOK_AUTHOR && strcmp(name, "dc:creator") == 0) {
+  if (self->state == IN_BOOK_AUTHOR && xmlNameIs(name, "creator")) {
     self->state = IN_METADATA;
     return;
   }
 
-  if (self->state == IN_BOOK_LANGUAGE && strcmp(name, "dc:language") == 0) {
+  if (self->state == IN_BOOK_LANGUAGE && xmlNameIs(name, "language")) {
     self->state = IN_METADATA;
     return;
   }

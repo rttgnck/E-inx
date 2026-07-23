@@ -40,10 +40,11 @@ void readAndValidate(FsFile& file, uint8_t& member, const uint8_t maxValue) {
 }
 
 namespace {
-constexpr uint8_t SETTINGS_FILE_VERSION = 31;
-constexpr uint8_t SETTINGS_COUNT = 69;
+constexpr uint8_t SETTINGS_FILE_VERSION = 39;
+constexpr uint8_t SETTINGS_COUNT = 87;
 /** Last field index in v9 (1-based count of persisted pods through displayImageDither). */
 constexpr uint8_t SETTINGS_COUNT_V9 = 40;
+constexpr uint8_t LEGACY_SLEEP_IMAGE_ADVANCE_POWER = 7;
 constexpr uint8_t LEGACY_IMAGE_PRESENTATION_COUNT = 4;
 constexpr char SETTINGS_FILE[] = "/.system/settings.bin";
 constexpr char UI_THEME_FILE[] = "/.system/ui_theme.bin";
@@ -96,6 +97,10 @@ void sanitizeSleepCustomBmp(char* buf) {
   if (strcmp(buf, "/sleep.bmp") == 0 || strcmp(buf, "/sleep.jpg") == 0 || strcmp(buf, "/sleep.jpeg") == 0) {
     return;
   }
+  if ((strncmp(buf, "/sleep/", 7) == 0 || strncmp(buf, "/Wallpapers/", 12) == 0) && strstr(buf, "..") == nullptr &&
+      strchr(buf + 1, ':') == nullptr && strchr(buf + 1, '\\') == nullptr) {
+    return;
+  }
   if (strstr(buf, "..") != nullptr) {
     buf[0] = '\0';
     return;
@@ -136,6 +141,28 @@ bool loadUiThemeSetting(uint8_t& value) {
   }
   value = saved;
   return true;
+}
+
+uint8_t normalizeSleepImageRotationMinutes(uint8_t value) {
+  constexpr uint8_t kMin = 5;
+  constexpr uint8_t kMax = 120;
+  if (value == 0) {
+    return 0;
+  }
+  if (value < kMin) {
+    return kMin;
+  }
+  if (value > kMax) {
+    value = kMax;
+  }
+  value = static_cast<uint8_t>(((value + 2) / 5) * 5);
+  if (value < kMin) {
+    return kMin;
+  }
+  if (value > kMax) {
+    return kMax;
+  }
+  return value;
 }
 
 uint32_t settingsHash(const SystemSetting& settings, const uint8_t fontFamilyToSave) {
@@ -210,6 +237,25 @@ uint32_t settingsHash(const SystemSetting& settings, const uint8_t fontFamilyToS
   hashPod(hash, settings.shakePageTurnSensitivity);
   hashPod(hash, settings.uiTheme);
   hashPod(hash, settings.libraryShelfEnabled);
+  hashPod(hash, settings.darkMode);
+  hashPod(hash, settings.dailyReadingGoal);
+  hashPod(hash, settings.readerRefreshMode);
+  hashPod(hash, settings.sunlightFadingFix);
+  hashPod(hash, settings.antiGhostingExperimental);
+  hashPod(hash, settings.sleepImageRotationMinutes);
+  hashPod(hash, settings.sleepImageRotationEnabled);
+  hashPod(hash, settings.sleepImagePowerDoublePress);
+  hashPod(hash, settings.powerWakeGuard);
+  hashPod(hash, settings.sleepImagePowerGestureWindow);
+  hashPod(hash, settings.showBottomBarClock);
+  hashPod(hash, settings.statusBarInnerLeft);
+  hashPod(hash, settings.statusBarInnerRight);
+  hashPod(hash, settings.sleepImagePowerFirstPressMin);
+  hashPod(hash, settings.sleepImagePowerSecondPressMax);
+  hashPod(hash, settings.persistentSleepLogs);
+  hashString(hash, settings.newsRepoUrl);
+  hashPod(hash, settings.newsAutoDownload);
+  hashPod(hash, settings.newsDownloadHour);
   return hash;
 }
 }  // namespace
@@ -261,6 +307,23 @@ bool SystemSetting::saveToFile() const {
     if (mut->shakePageTurn > 2) mut->shakePageTurn = 0;
     if (mut->shakePageTurnSensitivity > 2) mut->shakePageTurnSensitivity = 1;
     if (mut->uiTheme >= UI_THEME_COUNT) mut->uiTheme = UI_THEME_CLASSIC;
+    if (mut->dailyReadingGoal >= DAILY_READING_GOAL_COUNT) mut->dailyReadingGoal = DAILY_GOAL_30_MIN;
+    if (mut->readerRefreshMode >= READER_REFRESH_MODE_COUNT) mut->readerRefreshMode = READER_REFRESH_AUTO;
+    if (mut->sunlightFadingFix > 1) mut->sunlightFadingFix = 0;
+    if (mut->antiGhostingExperimental > 1) mut->antiGhostingExperimental = 0;
+    mut->sleepImageRotationMinutes = normalizeSleepImageRotationMinutes(mut->sleepImageRotationMinutes);
+    if (mut->sleepImageRotationEnabled > 1) mut->sleepImageRotationEnabled = 1;
+    if (mut->sleepImagePowerDoublePress > 1) {
+      mut->sleepImagePowerDoublePress = mut->sleepImagePowerDoublePress == LEGACY_SLEEP_IMAGE_ADVANCE_POWER ? 1 : 0;
+    }
+    if (mut->powerWakeGuard >= POWER_WAKE_GUARD_COUNT) mut->powerWakeGuard = POWER_WAKE_GUARD_OFF;
+    if (mut->sleepImagePowerGestureWindow > 17) mut->sleepImagePowerGestureWindow = 0;
+    if (mut->sleepImagePowerFirstPressMin > 15) mut->sleepImagePowerFirstPressMin = 0;
+    if (mut->sleepImagePowerSecondPressMax > 9) mut->sleepImagePowerSecondPressMax = 2;
+    if (mut->persistentSleepLogs > 1) mut->persistentSleepLogs = 1;
+    if (mut->showBottomBarClock > 1) mut->showBottomBarClock = 0;
+    if (mut->statusBarInnerLeft >= STATUS_BAR_ITEM_COUNT) mut->statusBarInnerLeft = STATUS_ITEM_NONE;
+    if (mut->statusBarInnerRight >= STATUS_BAR_ITEM_COUNT) mut->statusBarInnerRight = STATUS_ITEM_NONE;
   }
 
   const uint32_t currentHash = settingsHash(*this, fontFamilyToSave);
@@ -347,11 +410,31 @@ bool SystemSetting::saveToFile() const {
   serialization::writePod(outputFile, shakePageTurnSensitivity);
   serialization::writePod(outputFile, uiTheme);
   serialization::writePod(outputFile, libraryShelfEnabled);
+  serialization::writePod(outputFile, darkMode);
+  serialization::writePod(outputFile, dailyReadingGoal);
+  serialization::writePod(outputFile, readerRefreshMode);
+  serialization::writePod(outputFile, sunlightFadingFix);
+  serialization::writePod(outputFile, antiGhostingExperimental);
+  serialization::writePod(outputFile, sleepImageRotationMinutes);
+  serialization::writePod(outputFile, sleepImageRotationEnabled);
+  serialization::writePod(outputFile, sleepImagePowerDoublePress);
+  serialization::writePod(outputFile, powerWakeGuard);
+  serialization::writePod(outputFile, sleepImagePowerGestureWindow);
+  serialization::writePod(outputFile, showBottomBarClock);
+  serialization::writePod(outputFile, statusBarInnerLeft);
+  serialization::writePod(outputFile, statusBarInnerRight);
+  serialization::writePod(outputFile, sleepImagePowerFirstPressMin);
+  serialization::writePod(outputFile, sleepImagePowerSecondPressMax);
+  serialization::writePod(outputFile, persistentSleepLogs);
+  serialization::writeString(outputFile, std::string(newsRepoUrl));
+  serialization::writePod(outputFile, newsAutoDownload);
+  serialization::writePod(outputFile, newsDownloadHour);
 
   outputFile.close();
   saveUiThemeSetting(uiTheme);
 
-  Serial.printf("[%lu] [CPS] Settings saved to file (version %u)\n", millis(), SETTINGS_FILE_VERSION);
+  Serial.printf("[%lu] [CPS] Settings saved to file (version %u, darkMode=%u)\n", millis(), SETTINGS_FILE_VERSION,
+                darkMode);
   return true;
 }
 
@@ -707,6 +790,101 @@ bool SystemSetting::loadFromFile() {
       if (libraryShelfEnabled > 1) libraryShelfEnabled = 0;
       ++settingsRead;
     }
+    if (settingsRead < fileSettingsCount) {
+      serialization::readPod(inputFile, darkMode);
+      if (darkMode > 1) darkMode = 0;
+      ++settingsRead;
+    }
+    if (settingsRead < fileSettingsCount) {
+      readAndValidate(inputFile, dailyReadingGoal, DAILY_READING_GOAL_COUNT);
+      ++settingsRead;
+    }
+    if (settingsRead < fileSettingsCount) {
+      readAndValidate(inputFile, readerRefreshMode, READER_REFRESH_MODE_COUNT);
+      ++settingsRead;
+    }
+    if (settingsRead < fileSettingsCount) {
+      serialization::readPod(inputFile, sunlightFadingFix);
+      if (sunlightFadingFix > 1) sunlightFadingFix = 0;
+      ++settingsRead;
+    }
+    if (settingsRead < fileSettingsCount) {
+      serialization::readPod(inputFile, antiGhostingExperimental);
+      if (antiGhostingExperimental > 1) antiGhostingExperimental = 0;
+      ++settingsRead;
+    }
+    if (settingsRead < fileSettingsCount) {
+      serialization::readPod(inputFile, sleepImageRotationMinutes);
+      sleepImageRotationMinutes = normalizeSleepImageRotationMinutes(sleepImageRotationMinutes);
+      ++settingsRead;
+    }
+    if (settingsRead < fileSettingsCount) {
+      serialization::readPod(inputFile, sleepImageRotationEnabled);
+      if (sleepImageRotationEnabled > 1) sleepImageRotationEnabled = 1;
+      ++settingsRead;
+    }
+    if (settingsRead < fileSettingsCount) {
+      uint8_t rawSleepImageAdvance = 0;
+      serialization::readPod(inputFile, rawSleepImageAdvance);
+      sleepImagePowerDoublePress =
+          version < 34 ? (rawSleepImageAdvance == LEGACY_SLEEP_IMAGE_ADVANCE_POWER ? 1 : 0)
+                       : (rawSleepImageAdvance ? 1 : 0);
+      ++settingsRead;
+    }
+    if (settingsRead < fileSettingsCount) {
+      readAndValidate(inputFile, powerWakeGuard, POWER_WAKE_GUARD_COUNT);
+      ++settingsRead;
+    }
+    if (settingsRead < fileSettingsCount) {
+      serialization::readPod(inputFile, sleepImagePowerGestureWindow);
+      if (sleepImagePowerGestureWindow > 17) sleepImagePowerGestureWindow = 0;
+      ++settingsRead;
+    }
+    if (settingsRead < fileSettingsCount) {
+      serialization::readPod(inputFile, showBottomBarClock);
+      if (showBottomBarClock > 1) showBottomBarClock = 0;
+      ++settingsRead;
+    }
+    if (settingsRead < fileSettingsCount) {
+      readAndValidate(inputFile, statusBarInnerLeft, STATUS_BAR_ITEM_COUNT);
+      ++settingsRead;
+    }
+    if (settingsRead < fileSettingsCount) {
+      readAndValidate(inputFile, statusBarInnerRight, STATUS_BAR_ITEM_COUNT);
+      ++settingsRead;
+    }
+    if (settingsRead < fileSettingsCount) {
+      serialization::readPod(inputFile, sleepImagePowerFirstPressMin);
+      if (sleepImagePowerFirstPressMin > 15) sleepImagePowerFirstPressMin = 0;
+      ++settingsRead;
+    }
+    if (settingsRead < fileSettingsCount) {
+      serialization::readPod(inputFile, sleepImagePowerSecondPressMax);
+      if (sleepImagePowerSecondPressMax > 9) sleepImagePowerSecondPressMax = 2;
+      ++settingsRead;
+    }
+    if (settingsRead < fileSettingsCount) {
+      serialization::readPod(inputFile, persistentSleepLogs);
+      if (persistentSleepLogs > 1) persistentSleepLogs = 1;
+      ++settingsRead;
+    }
+    if (settingsRead < fileSettingsCount) {
+      std::string newsUrl;
+      serialization::readString(inputFile, newsUrl);
+      strncpy(newsRepoUrl, newsUrl.c_str(), sizeof(newsRepoUrl) - 1);
+      newsRepoUrl[sizeof(newsRepoUrl) - 1] = '\0';
+      ++settingsRead;
+    }
+    if (settingsRead < fileSettingsCount) {
+      serialization::readPod(inputFile, newsAutoDownload);
+      if (newsAutoDownload > 1) newsAutoDownload = 0;
+      ++settingsRead;
+    }
+    if (settingsRead < fileSettingsCount) {
+      serialization::readPod(inputFile, newsDownloadHour);
+      if (newsDownloadHour > 23) newsDownloadHour = 6;
+      ++settingsRead;
+    }
 
   } while (false);
 
@@ -728,20 +906,68 @@ bool SystemSetting::loadFromFile() {
   if (settingsRead < 63) {
     xtcRefreshFrequency = getRefreshFrequency();
   }
-  if (settingsRead < 65) {
+  if (settingsRead < 64) {
     sleepClockRefreshInterval = CLOCK_REFRESH_OFF;
   }
-  if (settingsRead < 66) {
+  if (settingsRead < 65) {
     shakePageTurn = 0;
   }
-  if (settingsRead < 67) {
+  if (settingsRead < 66) {
     shakePageTurnSensitivity = 1;
   }
-  if (settingsRead < 68) {
+  if (settingsRead < 67) {
     uiTheme = UI_THEME_CLASSIC;
   }
-  if (settingsRead < 69) {
+  if (settingsRead < 68) {
     libraryShelfEnabled = 0;
+  }
+  if (settingsRead < 69) {
+    darkMode = 0;
+  }
+  if (settingsRead < 70) {
+    dailyReadingGoal = DAILY_GOAL_30_MIN;
+  }
+  if (settingsRead < 71) {
+    readerRefreshMode = READER_REFRESH_AUTO;
+  }
+  if (settingsRead < 72) {
+    sunlightFadingFix = 0;
+  }
+  if (settingsRead < 73) {
+    antiGhostingExperimental = 0;
+  }
+  if (settingsRead < 74) {
+    sleepImageRotationMinutes = 5;
+  }
+  if (settingsRead < 75) {
+    sleepImageRotationEnabled = 1;
+  }
+  if (settingsRead < 76) {
+    sleepImagePowerDoublePress = 0;
+  }
+  if (settingsRead < 77) {
+    powerWakeGuard = POWER_WAKE_GUARD_OFF;
+  }
+  if (settingsRead < 78) {
+    sleepImagePowerGestureWindow = 0;
+  }
+  if (settingsRead < 79) {
+    showBottomBarClock = 0;
+  }
+  if (settingsRead < 80) {
+    statusBarInnerLeft = STATUS_ITEM_NONE;
+  }
+  if (settingsRead < 81) {
+    statusBarInnerRight = STATUS_ITEM_NONE;
+  }
+  if (settingsRead < 82) {
+    sleepImagePowerFirstPressMin = 0;
+  }
+  if (settingsRead < 83) {
+    sleepImagePowerSecondPressMax = 2;
+  }
+  if (settingsRead < 84) {
+    persistentSleepLogs = 1;
   }
 
   if (recentVisibleCount < 1 || recentVisibleCount > 9) {
@@ -797,6 +1023,49 @@ bool SystemSetting::loadFromFile() {
     uiTheme = UI_THEME_CLASSIC;
   }
   loadUiThemeSetting(uiTheme);
+  if (dailyReadingGoal >= DAILY_READING_GOAL_COUNT) {
+    dailyReadingGoal = DAILY_GOAL_30_MIN;
+  }
+  if (readerRefreshMode >= READER_REFRESH_MODE_COUNT) {
+    readerRefreshMode = READER_REFRESH_AUTO;
+  }
+  if (sunlightFadingFix > 1) {
+    sunlightFadingFix = 0;
+  }
+  if (antiGhostingExperimental > 1) {
+    antiGhostingExperimental = 0;
+  }
+  sleepImageRotationMinutes = normalizeSleepImageRotationMinutes(sleepImageRotationMinutes);
+  if (sleepImageRotationEnabled > 1) {
+    sleepImageRotationEnabled = 1;
+  }
+  if (sleepImagePowerDoublePress > 1) {
+    sleepImagePowerDoublePress = sleepImagePowerDoublePress == LEGACY_SLEEP_IMAGE_ADVANCE_POWER ? 1 : 0;
+  }
+  if (powerWakeGuard >= POWER_WAKE_GUARD_COUNT) {
+    powerWakeGuard = POWER_WAKE_GUARD_OFF;
+  }
+  if (sleepImagePowerGestureWindow > 17) {
+    sleepImagePowerGestureWindow = 0;
+  }
+  if (sleepImagePowerFirstPressMin > 15) {
+    sleepImagePowerFirstPressMin = 0;
+  }
+  if (sleepImagePowerSecondPressMax > 9) {
+    sleepImagePowerSecondPressMax = 2;
+  }
+  if (persistentSleepLogs > 1) {
+    persistentSleepLogs = 1;
+  }
+  if (showBottomBarClock > 1) {
+    showBottomBarClock = 0;
+  }
+  if (statusBarInnerLeft >= STATUS_BAR_ITEM_COUNT) {
+    statusBarInnerLeft = STATUS_ITEM_NONE;
+  }
+  if (statusBarInnerRight >= STATUS_BAR_ITEM_COUNT) {
+    statusBarInnerRight = STATUS_ITEM_NONE;
+  }
 
   if (settingsRead < SETTINGS_COUNT) {
     if (settingsRead < SETTINGS_COUNT_V9) {
@@ -805,7 +1074,8 @@ bool SystemSetting::loadFromFile() {
     legacyDisplayImagePresentation = legacyReaderImagePresentation;
   }
 
-  Serial.printf("[%lu] [CPS] Settings loaded (version %u, %u items)\n", millis(), version, settingsRead);
+  Serial.printf("[%lu] [CPS] Settings loaded (version %u, %u items, darkMode=%u)\n", millis(), version, settingsRead,
+                darkMode);
 
   if (shouldRewriteSettings) {
     saveToFile();
@@ -850,6 +1120,33 @@ unsigned long SystemSetting::getSleepTimeoutMs() const {
     case SLEEP_30_MIN:
       return 30UL * 60 * 1000;
   }
+}
+
+uint8_t SystemSetting::getSleepImageRotationMinutes() const {
+  return normalizeSleepImageRotationMinutes(sleepImageRotationMinutes);
+}
+
+uint16_t SystemSetting::getPowerWakeGuardMs() const {
+  if (powerWakeGuard == POWER_WAKE_GUARD_OFF || powerWakeGuard >= POWER_WAKE_GUARD_COUNT) {
+    return 0;
+  }
+  return static_cast<uint16_t>(300 + static_cast<uint16_t>(powerWakeGuard) * 100);
+}
+
+uint16_t SystemSetting::getSleepImagePowerGestureWindowMs() const {
+  if (sleepImagePowerGestureWindow == 0 || sleepImagePowerGestureWindow > 17) {
+    return 0;
+  }
+  return static_cast<uint16_t>(500 + static_cast<uint16_t>(sleepImagePowerGestureWindow) * 100);
+}
+
+uint16_t SystemSetting::getSleepImagePowerFirstPressMinMs() const {
+  return sleepImagePowerFirstPressMin <= 15 ? static_cast<uint16_t>(sleepImagePowerFirstPressMin) * 100 : 0;
+}
+
+uint16_t SystemSetting::getSleepImagePowerSecondPressMaxMs() const {
+  const uint8_t index = sleepImagePowerSecondPressMax <= 9 ? sleepImagePowerSecondPressMax : 2;
+  return static_cast<uint16_t>(index + 1) * 100;
 }
 
 /**
