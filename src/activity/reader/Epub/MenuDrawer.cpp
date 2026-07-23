@@ -104,6 +104,7 @@ MenuDrawer::MenuDrawer(GfxRenderer& renderer, ActionCallback onAction, DismissCa
   syncLayoutFromRenderer();
 
   menuItems = {{"Table of Contents", MenuAction::SELECT_CHAPTER},
+               {"Go To Page", MenuAction::GO_TO_PAGE},
                {"Go To Percent", MenuAction::GO_TO_PERCENT},
                {"Show Bookmarks", MenuAction::SHOW_BOOKMARKS},
                {"Annotations", MenuAction::SHOW_ANNOTATIONS},
@@ -181,6 +182,9 @@ MenuDrawer::~MenuDrawer() {
   annotationSelectCallback = nullptr;
   percentProvider = nullptr;
   percentSelectedCallback = nullptr;
+  pageProvider = nullptr;
+  pageCountProvider = nullptr;
+  pageSelectedCallback = nullptr;
   mappedInputForHints = nullptr;
   epub = nullptr;
 }
@@ -197,6 +201,7 @@ void MenuDrawer::show() {
   showingBookmarks = false;
   showingAnnotations = false;
   showingPercent = false;
+  showingPage = false;
   selectedIndex = 0;
   scrollOffset = 0;
   tocSelectedIndex = 0;
@@ -218,6 +223,7 @@ void MenuDrawer::hide() {
   showingBookmarks = false;
   showingAnnotations = false;
   showingPercent = false;
+  showingPage = false;
 }
 
 /**
@@ -244,6 +250,8 @@ void MenuDrawer::renderWithRefresh() {
     renderToc();
   } else if (showingPercent) {
     renderPercent();
+  } else if (showingPage) {
+    renderPage();
   } else {
     drawBackground();
     drawMenuItems();
@@ -325,7 +333,7 @@ void MenuDrawer::clearScrollIndicatorArea() {
 }
 
 void MenuDrawer::refreshMainMenuSelection(int previousIndex, bool redrawScrollIndicator) {
-  if (!visible || showingToc || showingBookmarks || showingAnnotations || showingPercent) {
+  if (!visible || showingToc || showingBookmarks || showingAnnotations || showingPercent || showingPage) {
     return;
   }
 
@@ -639,6 +647,55 @@ void MenuDrawer::renderPercent() {
 }
 
 /**
+ * @brief Renders the "Go to Page" view in the same drawer panel/chrome as TOC/Bookmarks/Annotations
+ */
+void MenuDrawer::renderPage() {
+  const int panelW = tocDrawerWidth;
+
+  drawTocBackground();
+
+  const int headerH = LIST_ITEM_HEIGHT;
+  const int headerY = tocDrawerY + (headerH - renderer.text.getLineHeight(ATKINSON_HYPERLEGIBLE_12_FONT_ID)) / 2;
+  renderer.text.render(ATKINSON_HYPERLEGIBLE_12_FONT_ID, tocDrawerX + 20, headerY, "Go to Page", true,
+                       EpdFontFamily::BOLD);
+
+  const int dividerY = tocDrawerY + headerH;
+  renderer.line.render(tocDrawerX, dividerY, tocDrawerX + panelW, dividerY, true);
+
+  const int centerX = tocDrawerX + panelW / 2;
+  char pageText[32];
+  snprintf(pageText, sizeof(pageText), "%d / %d", pageValue_, std::max(1, pageCount_));
+  const int pageWidth = renderer.text.getWidth(ATKINSON_HYPERLEGIBLE_12_FONT_ID, pageText, EpdFontFamily::BOLD);
+  const int pageY = dividerY + 40;
+  renderer.text.render(ATKINSON_HYPERLEGIBLE_12_FONT_ID, centerX - pageWidth / 2, pageY, pageText, true,
+                       EpdFontFamily::BOLD);
+
+  const int barWidth = std::min(300, panelW - 80);
+  const int barHeight = 16;
+  const int barX = centerX - barWidth / 2;
+  const int barY = pageY + 60;
+
+  renderer.rectangle.render(barX, barY, barWidth, barHeight, true);
+  const int fillWidth =
+      (pageCount_ <= 1) ? (barWidth - 4) : (barWidth - 4) * std::max(0, pageValue_ - 1) / std::max(1, pageCount_ - 1);
+  if (fillWidth > 0) {
+    renderer.rectangle.fill(barX + 2, barY + 2, fillWidth, barHeight - 4, true);
+  }
+
+  const int knobX = barX + 2 + fillWidth - 2;
+  renderer.rectangle.fill(knobX, barY - 4, 4, barHeight + 8, true);
+
+  const std::string hintText =
+      renderer.text.truncate(ATKINSON_HYPERLEGIBLE_10_FONT_ID, "Left/Right: +/-1 page  Up/Down: +/-10", panelW - 40);
+  const int hintWidth = renderer.text.getWidth(ATKINSON_HYPERLEGIBLE_10_FONT_ID, hintText.c_str());
+  constexpr int kPageFooterAboveHints = 75;
+  const int footerY = std::max(tocDrawerY + 8, tocDrawerY + tocDrawerHeight - kPageFooterAboveHints);
+  renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, centerX - hintWidth / 2, footerY, hintText.c_str(), true);
+
+  drawMappedButtonHints("\xC2\xAB Back", "Select", "-", "+");
+}
+
+/**
  * @brief Handles input when the percent picker is shown
  * @param input Reference to the input manager
  */
@@ -683,11 +740,58 @@ void MenuDrawer::handlePercentInput(const MappedInputManager& input) {
   }
 }
 
+void MenuDrawer::handlePageInput(const MappedInputManager& input) {
+  if (input.wasReleased(MappedInputManager::Button::Back)) {
+    exitPage();
+    lastInputTime = xTaskGetTickCount();
+    renderWithRefresh();
+    return;
+  }
+
+  if (input.wasReleased(MappedInputManager::Button::Confirm)) {
+    showingPage = false;
+    visible = false;
+    if (pageSelectedCallback) {
+      pageSelectedCallback(pageValue_);
+    }
+    lastInputTime = xTaskGetTickCount();
+    return;
+  }
+
+  const uint32_t currentTime = xTaskGetTickCount();
+  if (currentTime - lastInputTime < pdMS_TO_TICKS(150)) {
+    return;
+  }
+
+  int delta = 0;
+  if (input.isPressed(MappedInputManager::Button::Left)) {
+    delta = -1;
+  } else if (input.isPressed(MappedInputManager::Button::Right)) {
+    delta = 1;
+  } else if (input.isPressed(MappedInputManager::Button::Up)) {
+    delta = 10;
+  } else if (input.isPressed(MappedInputManager::Button::Down)) {
+    delta = -10;
+  }
+
+  if (delta != 0) {
+    pageValue_ = std::max(1, std::min(std::max(1, pageCount_), pageValue_ + delta));
+    lastInputTime = currentTime;
+    renderWithRefresh();
+  }
+}
+
 /**
  * @brief Exits percent view and returns to main menu
  */
 void MenuDrawer::exitPercent() {
   showingPercent = false;
+  selectedIndex = 0;
+  scrollOffset = 0;
+}
+
+void MenuDrawer::exitPage() {
+  showingPage = false;
   selectedIndex = 0;
   scrollOffset = 0;
 }
@@ -967,6 +1071,11 @@ void MenuDrawer::handleInput(MappedInputManager& input) {
     return;
   }
 
+  if (showingPage) {
+    handlePageInput(input);
+    return;
+  }
+
   if (input.wasReleased(MappedInputManager::Button::Back)) {
     hide();
     if (onDismiss) {
@@ -1025,6 +1134,12 @@ void MenuDrawer::handleInput(MappedInputManager& input) {
       } else if (menuItems[selectedIndex].action == MenuAction::GO_TO_PERCENT) {
         percentValue_ = percentProvider ? percentProvider() : 0;
         showingPercent = true;
+        lastInputTime = xTaskGetTickCount();
+        renderWithRefresh();
+      } else if (menuItems[selectedIndex].action == MenuAction::GO_TO_PAGE) {
+        pageCount_ = std::max(1, pageCountProvider ? pageCountProvider() : 1);
+        pageValue_ = std::max(1, std::min(pageCount_, pageProvider ? pageProvider() : 1));
+        showingPage = true;
         lastInputTime = xTaskGetTickCount();
         renderWithRefresh();
       } else {

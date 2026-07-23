@@ -9,6 +9,10 @@
 
 #include <cstring>
 
+namespace {
+constexpr size_t LEGACY_PROGRESS_DATA_SIZE = 16;
+}
+
 BookProgress::BookProgress(const std::string& cachePath) : filePath(cachePath + "/progress.bin") {}
 
 bool BookProgress::load(Data& data) const {
@@ -18,12 +22,14 @@ bool BookProgress::load(Data& data) const {
   }
 
   size_t fileSize = f.fileSize();
-  if (fileSize != sizeof(Data)) {
+  if (fileSize < LEGACY_PROGRESS_DATA_SIZE) {
     f.close();
     return false;
   }
 
-  bool success = (f.read(&data, sizeof(Data)) == sizeof(Data));
+  data = Data{};
+  const size_t bytesToRead = (fileSize < sizeof(Data)) ? fileSize : sizeof(Data);
+  bool success = (f.read(&data, bytesToRead) == bytesToRead);
   f.close();
   return success;
 }

@@ -43,7 +43,7 @@ class CalibreConnectActivity final : public ActivityWithSubactivity, public Menu
   explicit CalibreConnectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                   const std::function<void()>& onComplete)
       : ActivityWithSubactivity("CalibreConnect", renderer, mappedInput), Menu(), onComplete(onComplete) {
-    tabSelectorIndex = 3; /**< Select Sync tab (index 3) by default */
+    tabSelectorIndex = 4;
   }
 
   /** Destructor - cleans up web server resources */

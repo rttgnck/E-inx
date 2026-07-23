@@ -24,7 +24,11 @@
 #include "images/Down.h"
 #include "images/Star.h"
 #include "images/Up.h"
+#include <Epub/BookMetadataCache.h>
+
+#include "state/BookProgress.h"
 #include "state/BookState.h"
+#include "state/ReadingDailyStats.h"
 #include "state/Statistics.h"
 #include "state/SystemSetting.h"
 #include "system/Fonts.h"
@@ -72,6 +76,32 @@ static std::string bookDisplayTitle(const RecentBook& book) {
   return formatTitle(getBaseFilename(book.path));
 }
 
+static std::string formatDailyDuration(const uint32_t ms) {
+  const uint32_t minutes = ms / 60000UL;
+  const uint32_t hours = minutes / 60UL;
+  char buf[24];
+  if (hours > 0) {
+    snprintf(buf, sizeof(buf), "%uh %02um", static_cast<unsigned>(hours), static_cast<unsigned>(minutes % 60UL));
+  } else {
+    snprintf(buf, sizeof(buf), "%um", static_cast<unsigned>(minutes));
+  }
+  return std::string(buf);
+}
+
+static std::string formatDailyDurationCompact(const uint32_t ms, const bool omitZeroMinuteSuffix = false) {
+  const uint32_t minutes = ms / 60000UL;
+  const uint32_t hours = minutes / 60UL;
+  char buf[20];
+  if (hours > 0) {
+    snprintf(buf, sizeof(buf), "%uh%02u", static_cast<unsigned>(hours), static_cast<unsigned>(minutes % 60UL));
+  } else if (minutes == 0 && omitZeroMinuteSuffix) {
+    snprintf(buf, sizeof(buf), "0");
+  } else {
+    snprintf(buf, sizeof(buf), "%um", static_cast<unsigned>(minutes));
+  }
+  return std::string(buf);
+}
+
 constexpr unsigned long GO_HOME_MS = 1000;
 
 /** O(1): bounded switch on RECENT_LIBRARY_MODE (fixed enum cardinality). */
@@ -82,6 +112,8 @@ static RecentActivity::ViewMode viewModeForLibrarySetting(uint8_t mode) {
       return RecentActivity::ViewMode::Grid;
     case SM::RECENT_LIST:
       return RecentActivity::ViewMode::Default;
+    case SM::RECENT_STATS:
+      return RecentActivity::ViewMode::StatsDashboard;
     case SM::RECENT_SIMPLE:
       return RecentActivity::ViewMode::SimpleUi;
     case SM::RECENT_BOOK_LIST:
@@ -654,7 +686,7 @@ void RecentActivity::loadRecentBooks(const bool resetScroll) {
 }
 
 bool RecentActivity::openBookPath(const std::string& path, const std::string& title, const std::string& author,
-                                  const bool removeMissingFromRecents) {
+                                  const bool removeMissingFromRecents, const bool openNavigation) {
   if (path.empty()) {
     return false;
   }
@@ -683,7 +715,11 @@ bool RecentActivity::openBookPath(const std::string& path, const std::string& ti
   }
 
   bookSelected = true;
-  onSelectBook(selectedPath);
+  if (openNavigation && onSelectBookNavigation) {
+    onSelectBookNavigation(selectedPath);
+  } else {
+    onSelectBook(selectedPath);
+  }
   return true;
 }
 
@@ -873,7 +909,8 @@ void RecentActivity::onEnter() {
   if (currentViewMode == ViewMode::SimpleUi) {
     selectorIndex = 0;
     simpleUiFavScroll_ = 0;
-  } else if (currentViewMode == ViewMode::List || currentViewMode == ViewMode::Icons) {
+  } else if (currentViewMode == ViewMode::List || currentViewMode == ViewMode::Icons ||
+             currentViewMode == ViewMode::StatsDashboard) {
     selectorIndex = 0;
     scrollOffset = 0;
   }
@@ -1227,6 +1264,8 @@ std::unique_ptr<RecentActivity::LayoutEngine> RecentActivity::makeLayoutEngine(V
       return std::unique_ptr<LayoutEngine>(new SimpleUiViewLayout());
     case ViewMode::List:
       return std::unique_ptr<LayoutEngine>(new ListViewLayout());
+    case ViewMode::StatsDashboard:
+      return std::unique_ptr<LayoutEngine>(new StatsDashboardViewLayout());
     case ViewMode::Flow:
     default:
       return std::unique_ptr<LayoutEngine>(new FlowViewLayout());
@@ -1246,6 +1285,8 @@ void RecentActivity::SimpleUiViewLayout::paint(RecentActivity& self) { self.rend
 void RecentActivity::ListViewLayout::paint(RecentActivity& self) { self.renderList(self.recentListPaintStartY()); }
 
 void RecentActivity::FlowViewLayout::paint(RecentActivity& self) { self.renderFlow(); }
+
+void RecentActivity::StatsDashboardViewLayout::paint(RecentActivity& self) { self.renderStatsDashboard(); }
 
 void RecentActivity::renderCoverMode() {
   const int screenW = renderer.getScreenWidth();
@@ -1449,6 +1490,348 @@ std::string RecentActivity::formatTime(uint32_t milliseconds) const {
 /**
  * List (default) view: two thumbnails in the top band; stats below use the same 2×2 grid as Flow.
  */
+void RecentActivity::ensureDashboardPosition(const RecentBook& book) {
+  if (dashPosPath_ == book.path) {
+    return;
+  }
+  dashPosPath_ = book.path;
+  dashCurPage_ = dashChapterPages_ = dashCurChapter_ = dashTotalChapters_ = 0;
+  dashBookPage_ = dashBookPages_ = 0;
+
+  const std::string cache = book.cachePath.empty() ? epubCachePathForBookPath(book.path) : book.cachePath;
+
+  BookProgress progress(cache);
+  BookProgress::Data d;
+  if (progress.load(d)) {
+    dashCurPage_ = d.pageNumber + 1;
+    dashChapterPages_ = d.chapterPageCount;
+    dashBookPage_ = d.bookPage;
+    dashBookPages_ = d.bookPageCount;
+    dashCurChapter_ = d.spineIndex + 1;
+  }
+
+  BookMetadataCache meta(cache);
+  if (meta.load()) {
+    dashTotalChapters_ = meta.getSpineCount();
+  }
+}
+
+void RecentActivity::renderStatsDashboard() {
+  const int n = static_cast<int>(recentBooks.size());
+  if (n == 0) {
+    renderer.text.centered(ATKINSON_HYPERLEGIBLE_12_FONT_ID, renderer.getScreenHeight() / 2, "No recent books");
+    return;
+  }
+
+  const int screenW = renderer.getScreenWidth();
+  const int screenH = renderer.getScreenHeight();
+  const int coverX = 24;
+
+  // Top is always the current (most-recent) book; the list below shows only the OTHER books.
+  const RecentBook& cur = recentBooks[0];
+  const CachedRecentStats& cs = statsForRecentIndex(0);
+  const BookReadingStats& st = cs.stats;
+  const bool hasStats = cs.loaded;
+  ensureDashboardPosition(cur);
+
+  const CachedRecentStats& cc = (n > 1) ? statsForRecentIndex(1) : cs;
+  const BookReadingStats& cmp = cc.stats;
+  const bool showCompare = hasStats && (n > 1) && cc.loaded;
+  const ReadingDailySummary dailyStats = ReadingDailyStats::loadSummary();
+
+  // ---- Top section: left cover/progress column, right title/author/stats column ----
+  const int coverY = TAB_BAR_HEIGHT + 14;
+  int coverW = screenW * 35 / 100;
+  int coverH = coverW * COVER_HEIGHT / COVER_WIDTH;
+  const int topSectionMaxH = screenH * 34 / 100;
+  if (coverH > topSectionMaxH) {
+    coverH = topSectionMaxH;
+    coverW = coverH * COVER_WIDTH / COVER_HEIGHT;
+  }
+  const bool rr = SETTINGS.bitmapRoundedCorners != 0;
+  // Draw a cover fresh (no display cache) with dark mode off, so images never render inverted. The
+  // display cache captures the post-inversion framebuffer, so a cached thumbnail would stay inverted.
+  auto drawCoverImage = [&](int ix, int iy, int iw, int ih, const std::string& cacheDir, const std::string& phTitle) {
+    renderer.rectangle.fill(ix, iy, iw, ih, false, rr);
+    const std::string img = resolveThumbnailPath(cacheDir);
+    const bool dm = renderer.isDarkMode();
+    if (dm) renderer.setDarkMode(false);
+    bool ok = false;
+    if (!img.empty()) {
+      ImageRender::Options o;
+      o.cropToFill = true;
+      o.useDisplayCache = false;
+      o.roundedOutside = rr ? BitmapRender::RoundedOutside::PaperOutside : BitmapRender::RoundedOutside::None;
+      ok = ImageRender::create(renderer, img).render(ix, iy, iw, ih, o);
+    }
+    if (dm) renderer.setDarkMode(true);
+    if (!ok) drawRecentNoCoverPlaceholder(renderer, ix, iy, iw, ih, phTitle, ATKINSON_HYPERLEGIBLE_10_FONT_ID);
+  };
+  const std::string curCache = cur.cachePath.empty() ? epubCachePathForBookPath(cur.path) : cur.cachePath;
+  drawCoverImage(coverX, coverY, coverW, coverH, curCache, bookDisplayTitle(cur));
+  if (selectorIndex == 0) {
+    renderer.rectangle.render(coverX - 3, coverY - 3, coverW + 6, coverH + 6, true, rr);
+    renderer.rectangle.render(coverX - 4, coverY - 4, coverW + 8, coverH + 8, true, rr);
+  }
+
+  // ---- Title spans the right side; book stats and daily stats sit in separate columns below. ----
+  const int TITLE_FONT = ATKINSON_HYPERLEGIBLE_12_FONT_ID;
+  const int AUTHOR_FONT = ATKINSON_HYPERLEGIBLE_10_FONT_ID;
+  const int VALUE_FONT = ATKINSON_HYPERLEGIBLE_14_FONT_ID;
+  const int DAILY_VALUE_FONT = ATKINSON_HYPERLEGIBLE_10_FONT_ID;
+  const int LABEL_FONT = ATKINSON_HYPERLEGIBLE_8_FONT_ID;
+  constexpr int kCmpIconSz = 40;
+  constexpr int kCmpIconY = -3;
+  constexpr int kCmpGapAfterIcon = 8;
+  constexpr int kCmpValY = 8;
+  const int statsX = coverX + coverW + 22;
+  const int statsRight = screenW - coverX;
+  const int statsW = std::max(80, statsRight - statsX);
+  constexpr int kStatsColumnGap = 12;
+  const int dailyColW = std::min(110, std::max(88, statsW * 32 / 100));
+  const int statColW = std::max(90, statsW - kStatsColumnGap - dailyColW);
+  const int dailyX = statsX + statColW + kStatsColumnGap;
+  const int actualDailyColW = std::max(60, statsRight - dailyX);
+  int metaY = coverY;
+  const std::string hdrTitle = renderer.text.truncate(TITLE_FONT, bookDisplayTitle(cur).c_str(), statsW);
+  renderer.text.render(TITLE_FONT, statsX, metaY, hdrTitle.c_str(), true, EpdFontFamily::BOLD);
+  metaY += renderer.text.getLineHeight(TITLE_FONT) + 3;
+  if (!cur.author.empty()) {
+    const std::string hdrAuthor = renderer.text.truncate(AUTHOR_FONT, cur.author.c_str(), statsW);
+    renderer.text.render(AUTHOR_FONT, statsX, metaY, hdrAuthor.c_str(), true);
+    metaY += renderer.text.getLineHeight(AUTHOR_FONT) + 7;
+  } else {
+    metaY += 4;
+  }
+
+  const int statStartY = metaY;
+  constexpr int kBookStatCount = 4;
+  constexpr int kDailyStatCount = 2;
+  constexpr int kStatRowGap = 6;
+  const int statBlockH = renderer.text.getLineHeight(VALUE_FONT) + renderer.text.getLineHeight(LABEL_FONT) + 2;
+  const int minStatSpacing = statBlockH + kStatRowGap;
+  const int statAvailableH = std::max(minStatSpacing * kBookStatCount, coverY + coverH - statStartY);
+  const int statSpacing = std::max(minStatSpacing, statAvailableH / kBookStatCount);
+  char buf[24];
+  char cmpBuf[24];
+
+  auto drawStatBlock = [&](int x, int colW, int valueFont, int idx, int spacing, const char* valueText, bool haveCmp,
+                           uint32_t curV, uint32_t othV, const char* othText, const char* label) {
+    const int y = statStartY + idx * spacing;
+    const std::string shownValue = renderer.text.truncate(valueFont, valueText, colW, EpdFontFamily::BOLD);
+    renderer.text.render(valueFont, x, y, shownValue.c_str(), true, EpdFontFamily::BOLD);
+    if (showCompare && haveCmp) {
+      const int iconX = x + renderer.text.getWidth(valueFont, shownValue.c_str()) + 10;
+      const int othX = iconX + kCmpIconSz + kCmpGapAfterIcon;
+      if (othX < x + colW - 4) {
+        if (curV > othV) {
+          renderer.bitmap.icon(Up, iconX, y + kCmpIconY, kCmpIconSz, kCmpIconSz);
+        } else if (curV < othV) {
+          renderer.bitmap.icon(Down, iconX, y + kCmpIconY, kCmpIconSz, kCmpIconSz);
+        }
+        const int othW = std::max(0, x + colW - othX);
+        const std::string shownOther = renderer.text.truncate(LABEL_FONT, othText, othW, EpdFontFamily::BOLD);
+        renderer.text.render(LABEL_FONT, othX, y + kCmpValY, shownOther.c_str(), true, EpdFontFamily::BOLD);
+      }
+    }
+    const std::string shownLabel = renderer.text.truncate(LABEL_FONT, label, colW);
+    renderer.text.render(LABEL_FONT, x, y + renderer.text.getLineHeight(valueFont) + 1, shownLabel.c_str(), true);
+  };
+
+  std::string todayGoalStr = "-";
+  std::string minPerDayStr = "-";
+  if (dailyStats.hasClock) {
+    const std::string todayStr = formatDailyDurationCompact(dailyStats.todayReadingMs, true);
+    const std::string goalStr = formatDailyDurationCompact(dailyStats.goalReadingMs);
+    todayGoalStr = todayStr + "/" + goalStr;
+    minPerDayStr = formatDailyDurationCompact(dailyStats.recent7ReadingMs / 7UL);
+  } else {
+    todayGoalStr = "Sync RTC";
+  }
+  const int dailySpacing = std::max(minStatSpacing, statSpacing);
+  drawStatBlock(dailyX, actualDailyColW, DAILY_VALUE_FONT, 0, dailySpacing, todayGoalStr.c_str(), false, 0, 0, "",
+                "Daily Goal");
+  drawStatBlock(dailyX, actualDailyColW, DAILY_VALUE_FONT, 1, dailySpacing, minPerDayStr.c_str(), false, 0, 0, "",
+                "Min / Day");
+
+  const std::string curTimeStr = formatTime(hasStats ? st.totalReadingTimeMs : 0);
+  const std::string othTimeStr = formatTime(cmp.totalReadingTimeMs);
+  drawStatBlock(statsX, statColW, VALUE_FONT, 0, statSpacing, curTimeStr.c_str(), true, st.totalReadingTimeMs,
+                cmp.totalReadingTimeMs, othTimeStr.c_str(), "Reading Time");
+
+  snprintf(buf, sizeof(buf), "%u", hasStats ? st.totalPagesRead : 0u);
+  snprintf(cmpBuf, sizeof(cmpBuf), "%u", cmp.totalPagesRead);
+  drawStatBlock(statsX, statColW, VALUE_FONT, 1, statSpacing, buf, true, st.totalPagesRead, cmp.totalPagesRead, cmpBuf,
+                "Pages");
+
+  snprintf(buf, sizeof(buf), "%u", hasStats ? st.totalChaptersRead : 0u);
+  snprintf(cmpBuf, sizeof(cmpBuf), "%u", cmp.totalChaptersRead);
+  drawStatBlock(statsX, statColW, VALUE_FONT, 2, statSpacing, buf, true, st.totalChaptersRead, cmp.totalChaptersRead, cmpBuf,
+                "Chapters");
+
+  snprintf(buf, sizeof(buf), "%u s", (hasStats ? st.avgPageTimeMs : 0u) / 1000);
+  snprintf(cmpBuf, sizeof(cmpBuf), "%u s", cmp.avgPageTimeMs / 1000);
+  drawStatBlock(statsX, statColW, VALUE_FONT, 3, statSpacing, buf, true, st.avgPageTimeMs, cmp.avgPageTimeMs, cmpBuf,
+                "Average / Page");
+  const int bookStatsBottom = statStartY + (kBookStatCount - 1) * statSpacing +
+                              renderer.text.getLineHeight(VALUE_FONT) + renderer.text.getLineHeight(LABEL_FONT) + 4;
+  const int dailyStatsBottom = statStartY + (kDailyStatCount - 1) * dailySpacing +
+                               renderer.text.getLineHeight(VALUE_FONT) + renderer.text.getLineHeight(LABEL_FONT) + 4;
+  const int statsBottom = std::max(bookStatsBottom, dailyStatsBottom);
+
+  // ---- Under the cover: pages (left) / chapter (middle) / percent (right), then progress bar ----
+  const int barH = 12;
+  const int infoFont = ATKINSON_HYPERLEGIBLE_8_FONT_ID;
+  const int infoLh = renderer.text.getLineHeight(infoFont);
+  const int barY = coverY + coverH + 10 + infoLh + 4;
+  const int infoY = coverY + coverH + 10;
+
+  const float progFrac = (cur.progress >= 0.0f && cur.progress <= 1.0f)
+                             ? cur.progress
+                             : (hasStats ? st.progressPercent / 100.0f : -1.0f);
+
+  char pagesTxt[24];
+  if (dashBookPage_ > 0 && dashBookPages_ > 0) {
+    snprintf(pagesTxt, sizeof(pagesTxt), "%d/%d", dashBookPage_, dashBookPages_);
+  } else if (dashCurPage_ > 0 && dashChapterPages_ > 0) {
+    snprintf(pagesTxt, sizeof(pagesTxt), "%d/%d", dashCurPage_, dashChapterPages_);
+  } else {
+    pagesTxt[0] = '\0';
+  }
+  char chapTxt[24];
+  char chapPagesTxt[24];
+  if (dashCurChapter_ > 0 && dashChapterPages_ > 0) {
+    snprintf(chapTxt, sizeof(chapTxt), "%d: %d/%d", dashCurChapter_, dashCurPage_, dashChapterPages_);
+    snprintf(chapPagesTxt, sizeof(chapPagesTxt), "%d/%d", dashCurPage_, dashChapterPages_);
+  } else if (dashCurChapter_ > 0) {
+    snprintf(chapTxt, sizeof(chapTxt), "%d", dashCurChapter_);
+    chapPagesTxt[0] = '\0';
+  } else {
+    chapTxt[0] = '\0';
+    chapPagesTxt[0] = '\0';
+  }
+  char pctTxt[8];
+  if (progFrac >= 0.0f) {
+    snprintf(pctTxt, sizeof(pctTxt), "%d%%", static_cast<int>(progFrac * 100.0f + 0.5f));
+  } else {
+    snprintf(pctTxt, sizeof(pctTxt), "-");
+  }
+
+  constexpr int kInfoGap = 6;
+  const int pctW = renderer.text.getWidth(infoFont, pctTxt);
+  const int pctX = coverX + coverW - pctW;
+  int leftW = 0;
+  if (pagesTxt[0]) {
+    renderer.text.render(infoFont, coverX, infoY, pagesTxt, true);
+    leftW = renderer.text.getWidth(infoFont, pagesTxt);
+  }
+
+  const int midMinX = coverX + leftW + (leftW > 0 ? kInfoGap : 0);
+  const int midMaxX = pctX - kInfoGap;
+  auto middleFits = [&](const char* text) {
+    return text[0] && renderer.text.getWidth(infoFont, text) <= (midMaxX - midMinX);
+  };
+  const char* middleTxt = nullptr;
+  if (middleFits(chapTxt)) {
+    middleTxt = chapTxt;
+  } else if (middleFits(chapPagesTxt)) {
+    middleTxt = chapPagesTxt;
+  }
+  if (middleTxt) {
+    const int midW = renderer.text.getWidth(infoFont, middleTxt);
+    const int midX = midMinX + (midMaxX - midMinX - midW) / 2;
+    renderer.text.render(infoFont, midX, infoY, middleTxt, true);
+  }
+  renderer.text.render(infoFont, pctX, infoY, pctTxt, true);
+
+  renderer.rectangle.fill(coverX, barY, coverW, barH, false);
+  renderer.rectangle.render(coverX, barY, coverW, barH, true);
+  if (progFrac > 0.0f) {
+    renderer.rectangle.fill(coverX, barY, static_cast<int>(coverW * progFrac + 0.5f), barH);
+  }
+
+  // ---- Other-books list (excludes the current book at index 0) ----
+  const int topContentBottom = std::max(std::max(barY + barH, coverY + coverH), statsBottom);
+  const int listTop0 = topContentBottom + 16;
+  renderer.line.render(0, listTop0 - 8, screenW, listTop0 - 8, true);
+
+  const int otherCount = n - 1;  // books 1..n-1
+  if (otherCount <= 0) {
+    return;
+  }
+
+  const int listBottom = screenH - 34;
+  const int padX = 24;
+  const int listAreaH = std::max(1, listBottom - listTop0);
+  const int rowH = std::max(104, listAreaH / 3);
+  const int thumbH = std::max(82, rowH - 22);
+  const int thumbW = thumbH * COVER_WIDTH / COVER_HEIGHT;
+  const int maxRows = std::max(1, (listBottom - listTop0) / rowH);
+
+  // Window over the other-books list (list positions 0..otherCount-1 map to book indices 1..n-1),
+  // scrolled to keep the selected list book visible.
+  const int selListPos = (selectorIndex >= 1) ? selectorIndex - 1 : -1;
+  int windowStart = 0;
+  if (selListPos >= maxRows) {
+    windowStart = selListPos - maxRows + 1;
+  }
+  const int maxWindowStart = std::max(0, otherCount - maxRows);
+  if (windowStart > maxWindowStart) windowStart = maxWindowStart;
+
+  const int fontTitle = ATKINSON_HYPERLEGIBLE_12_FONT_ID;
+  const int fontSub = ATKINSON_HYPERLEGIBLE_10_FONT_ID;
+
+  for (int row = 0; row < maxRows; ++row) {
+    const int listPos = windowStart + row;
+    if (listPos >= otherCount) break;
+    const int bi = listPos + 1;  // book index (skip current at 0)
+    const RecentBook& b = recentBooks[static_cast<size_t>(bi)];
+    const int y = listTop0 + row * rowH;
+
+    if (bi == selectorIndex) {
+      renderer.rectangle.render(padX / 2, y + 2, screenW - padX, rowH - 8, true, false);
+    }
+
+    const int ty = y + (rowH - thumbH) / 2;
+    const std::string cdir = b.cachePath.empty() ? epubCachePathForBookPath(b.path) : b.cachePath;
+    drawCoverImage(padX, ty, thumbW, thumbH, cdir, bookDisplayTitle(b));
+
+    const int tx = padX + thumbW + 16;
+    const int tw = screenW - padX - tx;
+    const int lhTitle = renderer.text.getLineHeight(fontTitle);
+    const int lhSub = renderer.text.getLineHeight(fontSub);
+    constexpr int rowBarH = 8;
+    const int rowBarY = y + rowH - 22;
+    const int titleY = y + 12;
+    const std::string title = renderer.text.truncate(fontTitle, bookDisplayTitle(b).c_str(), tw);
+    renderer.text.render(fontTitle, tx, titleY, title.c_str(), true, EpdFontFamily::BOLD);
+    if (!b.author.empty()) {
+      const std::string au = renderer.text.truncate(fontSub, b.author.c_str(), tw);
+      renderer.text.render(fontSub, tx, titleY + lhTitle + 4, au.c_str(), true);
+    }
+
+    float rowProg = b.progress;
+    if (rowProg < 0.0f || rowProg > 1.0f) {
+      const CachedRecentStats& rowStats = statsForRecentIndex(bi);
+      if (rowStats.loaded) {
+        rowProg = rowStats.stats.progressPercent / 100.0f;
+      }
+    }
+    if (rowProg >= 0.0f && rowProg <= 1.0f) {
+      char prog[8];
+      snprintf(prog, sizeof(prog), "%d%%", static_cast<int>(rowProg * 100.0f + 0.5f));
+      const int pctW = renderer.text.getWidth(fontSub, prog);
+      const int barW = std::max(24, tw - pctW - 10);
+      renderer.rectangle.fill(tx, rowBarY, barW, rowBarH, false);
+      renderer.rectangle.render(tx, rowBarY, barW, rowBarH, true);
+      if (rowProg > 0.0f) {
+        renderer.rectangle.fill(tx, rowBarY, static_cast<int>(barW * rowProg + 0.5f), rowBarH);
+      }
+      renderer.text.render(fontSub, tx + barW + 10, rowBarY - 7, prog, true);
+    }
+  }
+}
+
 void RecentActivity::renderDefault() {
   const int recentCount = static_cast<int>(recentBooks.size());
   const int favCount = static_cast<int>(listStatsFavoriteOnly_.size());
@@ -1546,7 +1929,8 @@ void RecentActivity::loop() {
   const int totalBooks = static_cast<int>(recentBooks.size());
   const bool isDefaultView = (currentViewMode == ViewMode::Default);
   const bool isSimpleUi = (currentViewMode == ViewMode::SimpleUi);
-  const bool isListView = (currentViewMode == ViewMode::List);
+  // Stats dashboard navigates like the vertical list (Up/Down over books, Confirm opens the selected one).
+  const bool isListView = (currentViewMode == ViewMode::List || currentViewMode == ViewMode::StatsDashboard);
   const bool isCoverView = (currentViewMode == ViewMode::Cover);
 
   // Tab vs item nav buttons depend on the main-menu nav setting. In front mode these map to the same physical
@@ -1555,9 +1939,9 @@ void RecentActivity::loop() {
   bool downPressed = mappedInput.wasPressed(itemNextButton());
   bool leftPressed = mappedInput.wasPressed(tabPrevButton());
   bool rightPressed = mappedInput.wasPressed(tabNextButton());
-  // Open on press instead of release so heavy cover redraws do not swallow the
-  // confirm edge, especially in Flow and other image-heavy recent views.
-  bool confirmPressed = mappedInput.wasReleased(MappedInputManager::Button::Confirm);
+  const bool confirmReleased = mappedInput.wasReleased(MappedInputManager::Button::Confirm);
+  const bool confirmNavigation = confirmReleased && mappedInput.getHeldTime() >= GO_HOME_MS;
+  const bool confirmPressed = confirmReleased && !confirmNavigation;
 
   if (ignoreBackReleaseOnEnter_) {
     if (mappedInput.isPressed(MappedInputManager::Button::Back) ||
@@ -1585,7 +1969,7 @@ void RecentActivity::loop() {
   }
 
   if (leftPressed) {
-    tabSelectorIndex = 4;
+    tabSelectorIndex = 5;
     navigateToSelectedMenu();
     return;
   }
@@ -1652,16 +2036,16 @@ void RecentActivity::loop() {
       clampSimpleUiFavoriteScroll(maxVis);
       updateRequired = true;
     }
-    if (confirmPressed) {
+    if (confirmPressed || confirmNavigation) {
       if (recentSlots == 1 && selectorIndex == 0) {
         const auto& book = recentBooks[0];
-        openBookPath(book.path, book.title, book.author, true);
+        openBookPath(book.path, book.title, book.author, true, confirmNavigation);
         return;
       }
       const int fi = selectorIndex - recentSlots;
       if (fi >= 0 && fi < favCount) {
         const auto& book = simpleUiFavorites_[static_cast<size_t>(fi)];
-        openBookPath(book.path, book.title, book.author, false);
+        openBookPath(book.path, book.title, book.author, false, confirmNavigation);
         return;
       }
     }
@@ -1690,9 +2074,9 @@ void RecentActivity::loop() {
       updateRequired = true;
       return;
     }
-    if (confirmPressed) {
+    if (confirmPressed || confirmNavigation) {
       const auto& book = recentBooks[static_cast<size_t>(selectorIndex)];
-      openBookPath(book.path, book.title, book.author, true);
+      openBookPath(book.path, book.title, book.author, true, confirmNavigation);
       return;
     }
     return;
@@ -1713,9 +2097,9 @@ void RecentActivity::loop() {
       updateRequired = true;
     }
 
-    if (confirmPressed && selectorIndex >= 0 && selectorIndex < totalBooks) {
+    if ((confirmPressed || confirmNavigation) && selectorIndex >= 0 && selectorIndex < totalBooks) {
       const auto& book = recentBooks[selectorIndex];
-      openBookPath(book.path, book.title, book.author, true);
+      openBookPath(book.path, book.title, book.author, true, confirmNavigation);
       return;
     }
   } else if (isListView) {
@@ -1740,9 +2124,9 @@ void RecentActivity::loop() {
       updateRequired = true;
     }
 
-    if (confirmPressed && selectorIndex >= 0 && selectorIndex < totalBooks) {
+    if ((confirmPressed || confirmNavigation) && selectorIndex >= 0 && selectorIndex < totalBooks) {
       const auto& book = recentBooks[selectorIndex];
-      openBookPath(book.path, book.title, book.author, true);
+      openBookPath(book.path, book.title, book.author, true, confirmNavigation);
       return;
     }
   } else {
@@ -1768,9 +2152,9 @@ void RecentActivity::loop() {
       updateRequired = true;
     }
 
-    if (confirmPressed && selectorIndex >= 0 && selectorIndex < totalBooks) {
+    if ((confirmPressed || confirmNavigation) && selectorIndex >= 0 && selectorIndex < totalBooks) {
       const auto& book = recentBooks[selectorIndex];
-      openBookPath(book.path, book.title, book.author, true);
+      openBookPath(book.path, book.title, book.author, true, confirmNavigation);
       return;
     }
   }

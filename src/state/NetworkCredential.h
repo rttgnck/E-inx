@@ -41,6 +41,7 @@ class WifiCredentialStore {
   bool addCredential(const std::string& ssid, const std::string& password);
   bool removeCredential(const std::string& ssid);
   const WifiCredential* findCredential(const std::string& ssid) const;
+  const WifiCredential* getLastCredential() const;
 
   const std::vector<WifiCredential>& getCredentials() const { return credentials; }
 

@@ -20,9 +20,12 @@
 #include "CalibreSettingsActivity.h"
 #include "ClearCacheActivity.h"
 #include "ClockStylePickerActivity.h"
+#include "IfFoundActivity.h"
 #include "KOReaderSettingsActivity.h"
 #include "OtaUpdateActivity.h"
 #include "ReaderFontSettingsDraw.h"
+#include "ReadingStatsBackupActivity.h"
+#include "SleepCoverRepairActivity.h"
 #include "SleepImagePickerActivity.h"
 #include "ThumbnailGeneratorActivity.h"
 #include "TimeSyncActivity.h"
@@ -111,15 +114,15 @@ void CategorySettingsActivity::navigateToSelectedMenu() {
     onTabRecent();
     return;
   }
-  if (tabSelectorIndex == 1 && onTabLibrary) {
+  if (tabSelectorIndex == 2 && onTabLibrary) {
     onTabLibrary();
     return;
   }
-  if (tabSelectorIndex == 3 && onTabSync) {
+  if (tabSelectorIndex == 4 && onTabSync) {
     onTabSync();
     return;
   }
-  if (tabSelectorIndex == 4 && onTabStatistics) {
+  if (tabSelectorIndex == 5 && onTabStatistics) {
     onTabStatistics();
     return;
   }
@@ -195,6 +198,14 @@ void CategorySettingsActivity::setupMenu() {
           entry.change = [this, setting](int) {
             SETTINGS.*(setting.valuePtr) = !(SETTINGS.*(setting.valuePtr));
             SETTINGS.saveToFile();
+            if (setting.valuePtr == &SystemSetting::darkMode) {
+              // Apply immediately and force a full refresh: inverting the whole screen with a
+              // partial refresh would ghost badly.
+              renderer.setDarkMode(SETTINGS.darkMode);
+              forceFullRefreshNext_ = true;
+            } else if (setting.valuePtr == &SystemSetting::sunlightFadingFix) {
+              renderer.setFadingFix(SETTINGS.sunlightFadingFix);
+            }
             updateRequired = true;
           };
         }
@@ -310,6 +321,43 @@ void CategorySettingsActivity::setupMenu() {
                 updateRequired = true;
               }));
             }
+            if (strcmp(setting.name, "View if_found.txt") == 0) {
+              exitActivity();
+              enterNewActivity(new IfFoundActivity(renderer, mappedInput, [this] {
+                exitActivity();
+                updateRequired = true;
+              }));
+            }
+            if (strcmp(setting.name, "Backup Reading Stats") == 0) {
+              exitActivity();
+              enterNewActivity(new ReadingStatsBackupActivity(
+                  renderer, mappedInput,
+                  [this] {
+                    exitActivity();
+                    updateRequired = true;
+                  },
+                  /*initialSelection=*/0));
+              return;
+            }
+            if (strcmp(setting.name, "Restore Reading Stats") == 0) {
+              exitActivity();
+              enterNewActivity(new ReadingStatsBackupActivity(
+                  renderer, mappedInput,
+                  [this] {
+                    exitActivity();
+                    updateRequired = true;
+                  },
+                  /*initialSelection=*/1));
+              return;
+            }
+            if (strcmp(setting.name, "Regenerate sleep cover") == 0) {
+              exitActivity();
+              enterNewActivity(new SleepCoverRepairActivity(renderer, mappedInput, [this] {
+                exitActivity();
+                updateRequired = true;
+              }));
+              return;
+            }
             if (strcmp(setting.name, "Choose sleep image") == 0) {
               exitActivity();
               enterNewActivity(new SleepImagePickerActivity(renderer, mappedInput, [this] {
@@ -417,6 +465,8 @@ void CategorySettingsActivity::openSelectorForSelected() {
     for (int value = entry.valueRange.min; value <= entry.valueRange.max; value += step) {
       if (entry.name && std::strcmp(entry.name, "Timezone") == 0) {
         selectorOptions.push_back(formatTimezoneOption(static_cast<uint8_t>(value)));
+      } else if (entry.valuePtr == &SystemSetting::sleepImageRotationMinutes && value == 0) {
+        selectorOptions.emplace_back("30 sec (uses battery)");
       } else {
         char buffer[16];
         std::snprintf(buffer, sizeof(buffer), "%d", value);
@@ -660,7 +710,7 @@ void CategorySettingsActivity::loop() {
     int newTabIndex = (tabSelectorIndex - 1 + TAB_COUNT) % TAB_COUNT;
     tabSelectorIndex = newTabIndex;
 
-    if (newTabIndex != 2) {
+    if (newTabIndex != 3) {
       SETTINGS.saveToFile();
       navigateToSelectedMenu();
       return;
@@ -674,7 +724,7 @@ void CategorySettingsActivity::loop() {
     int newTabIndex = (tabSelectorIndex + 1) % TAB_COUNT;
     tabSelectorIndex = newTabIndex;
 
-    if (newTabIndex != 2) {
+    if (newTabIndex != 3) {
       SETTINGS.saveToFile();
       navigateToSelectedMenu();
       return;
@@ -936,5 +986,10 @@ void CategorySettingsActivity::render() {
   const auto labels = mappedInput.mapLabels(backLbl, confirmLbl, prevLbl, nextLbl);
   renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
-  renderer.displayBuffer();
+  if (forceFullRefreshNext_) {
+    forceFullRefreshNext_ = false;
+    renderer.displayBuffer(HalDisplay::FULL_REFRESH);
+  } else {
+    renderer.displayBuffer();
+  }
 }

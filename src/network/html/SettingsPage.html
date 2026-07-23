@@ -57,6 +57,23 @@
   .wifi-form.show { display: block; }
   .wifi-form-buttons { display: flex; gap: 8px; padding: 14px 24px 20px; }
   .wifi-form-buttons button { flex: 1; padding: 10px; border-radius: 980px; border: none; cursor: pointer; font-size: 14px; font-weight: 510; font-family: inherit; }
+  .wallpaper-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 24px 16px; border-top: 0.5px solid rgba(0, 0, 0, 0.04); }
+  .wallpaper-toolbar-label { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 500; color: #1d1d1f; }
+  .wallpaper-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 14px; padding: 0 24px 18px; }
+  .wallpaper-card { position: relative; min-height: 178px; border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 8px; background: #f5f5f7; overflow: hidden; }
+  .wallpaper-card.disabled { opacity: 0.46; }
+  .wallpaper-card img { width: 100%; height: 142px; display: block; object-fit: cover; background: #e8e8ed; }
+  .wallpaper-check { position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px; background: rgba(255, 255, 255, 0.92); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12); }
+  .wallpaper-check input { width: 16px; height: 16px; accent-color: #111; cursor: pointer; }
+  .wallpaper-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 9px 9px; }
+  .wallpaper-name { min-width: 0; font-size: 12.5px; color: #1d1d1f; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wallpaper-fixed { flex-shrink: 0; padding: 2px 6px; border-radius: 6px; background: #111; color: #fff; font-size: 10px; font-weight: 700; }
+  .wallpaper-use { width: 100%; padding: 7px 8px; border: 0; border-top: 1px solid rgba(0, 0, 0, 0.06); background: #fff; color: #111; font: inherit; font-size: 12.5px; font-weight: 560; cursor: pointer; }
+  .wallpaper-use:hover { background: #ebebef; }
+  .sleep-trace { padding: 14px 24px 18px; border-bottom: 0.5px solid rgba(0, 0, 0, 0.04); }
+  .sleep-trace-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 9px; }
+  .sleep-trace-title { font-size: 15px; font-weight: 500; color: #1d1d1f; }
+  .sleep-trace pre { max-height: 260px; overflow: auto; padding: 10px 12px; border-radius: 6px; background: #1d1d1f; color: #f5f5f7; font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-word; }
   .action-buttons { display: flex; gap: 12px; justify-content: flex-end; margin-top: 32px; }
   .action-btn { padding: 10px 24px; border-radius: 980px; font-size: 15px; font-weight: 510; cursor: pointer; transition: all 0.2s ease; border: none; }
   .btn-primary { background: #111; color: #fff; }
@@ -86,6 +103,7 @@
     <a class="nav-btn" href="/tags">Tags</a>
     <a class="nav-btn" href="/font-manager">Fonts</a>
     <a class="nav-btn active" href="/settings">Settings</a>
+    <a class="nav-btn" href="/update">Update</a>
   </div>
   <div class="tabs">
     <button type="button" class="tab-btn active" onclick='switchTab("system", this)'>System</button>
@@ -109,6 +127,14 @@
         <div class="setting-control"><select id="hideBatteryPercentage"></select></div>
       </div>
       <div class="setting-item">
+        <div><div class="setting-label">Time beside battery</div></div>
+        <div class="setting-control"><label class="toggle-switch"><input id="showBottomBarClock" type="checkbox"><span class="toggle-slider"></span></label></div>
+      </div>
+      <div class="setting-item">
+        <div><div class="setting-label">Sunlight Fading Fix</div></div>
+        <div class="setting-control"><label class="toggle-switch"><input id="sunlightFadingFix" type="checkbox"><span class="toggle-slider"></span></label></div>
+      </div>
+      <div class="setting-item">
         <div><div class="setting-label">Recent Library Mode</div></div>
         <div class="setting-control"><select id="recentLibraryMode"></select></div>
       </div>
@@ -120,6 +146,64 @@
         <div><div class="setting-label">Recent books shown</div></div>
         <div class="setting-control"><select id="recentVisibleCount"></select></div>
       </div>
+    </div>
+    <div class="settings-section">
+      <div class="section-header">
+        <h3>Wallpapers</h3>
+        <button type="button" class="section-add-btn" onclick="loadWallpapers()">Refresh</button>
+      </div>
+      <div class="wallpaper-toolbar">
+        <label class="wallpaper-toolbar-label">
+          <span>Random shuffle</span>
+          <span class="toggle-switch"><input id="wallpaperRandom" type="checkbox" onchange="setWallpaperRandom(this.checked)"><span class="toggle-slider"></span></span>
+        </label>
+      </div>
+      <div class="setting-item">
+        <div><div class="setting-label">Rotate while asleep (uses battery)</div></div>
+        <div class="setting-control"><label class="toggle-switch"><input id="sleepImageRotationEnabled" type="checkbox"><span class="toggle-slider"></span></label></div>
+      </div>
+      <div class="setting-item">
+        <div><div class="setting-label">Rotation interval</div></div>
+        <div class="setting-control"><select id="sleepImageRotationMinutes"></select></div>
+      </div>
+      <div class="setting-item">
+        <div><div class="setting-label">Timer diagnostics</div></div>
+        <div class="setting-control"><span id="sleepTimerDiagnostics">Not armed</span></div>
+      </div>
+      <div class="setting-item">
+        <div><div class="setting-label">Persistent sleep logs</div></div>
+        <div class="setting-control"><label class="toggle-switch"><input id="persistentSleepLogs" type="checkbox"><span class="toggle-slider"></span></label></div>
+      </div>
+      <div class="sleep-trace">
+        <div class="sleep-trace-header">
+          <div class="sleep-trace-title">Sleep wake trace</div>
+          <div>
+            <button type="button" class="section-add-btn" onclick="copySleepWakeTrace()">Copy</button>
+            <button type="button" class="section-add-btn" onclick="clearSleepWakeTrace()">Clear</button>
+          </div>
+        </div>
+        <pre id="sleepWakeTrace">No events</pre>
+      </div>
+      <div class="setting-item">
+        <div><div class="setting-label">Double press Power to change image (uses battery)</div></div>
+        <div class="setting-control"><label class="toggle-switch"><input id="sleepImagePowerDoublePress" type="checkbox"><span class="toggle-slider"></span></label></div>
+      </div>
+      <div class="setting-item">
+        <div><div class="setting-label">Double press finish window</div></div>
+        <div class="setting-control"><select id="sleepImagePowerGestureWindow"></select></div>
+      </div>
+      <div class="setting-item">
+        <div><div class="setting-label">First press minimum</div></div>
+        <div class="setting-control"><select id="sleepImagePowerFirstPressMin"></select></div>
+      </div>
+      <div class="setting-item">
+        <div><div class="setting-label">Second press maximum</div></div>
+        <div class="setting-control"><select id="sleepImagePowerSecondPressMax"></select></div>
+      </div>
+      <div id="wallpaperGrid" class="wallpaper-grid">
+        <div class="wifi-empty">Loading wallpapers...</div>
+      </div>
+      <p class="hint">Checked images are included when the sleep screen uses random wallpaper selection.</p>
     </div>
     <div class="settings-section" id="clockSettingsSection">
       <div class="section-header"><h3>Clock</h3></div>
@@ -165,6 +249,14 @@
         <div><div class="setting-label">Short Power Button Click</div></div>
         <div class="setting-control"><select id="shortPwrBtn"></select></div>
       </div>
+      <div class="setting-item">
+        <div><div class="setting-label">Pocket wake guard</div></div>
+        <div class="setting-control"><select id="powerWakeGuard"></select></div>
+      </div>
+      <div class="setting-item">
+        <div><div class="setting-label">Swap Side/Face Nav</div></div>
+        <div class="setting-control"><label class="toggle-switch"><input id="mainMenuNav" type="checkbox"><span class="toggle-slider"></span></label></div>
+      </div>
     </div>
     <div class="settings-section">
       <div class="section-header"><h3>Device</h3></div>
@@ -204,6 +296,10 @@
         <div><div class="setting-label">Refresh on load (Stats)</div></div>
         <div class="setting-control"><label class="toggle-switch"><input id="refreshOnLoadStatistics" type="checkbox"><span class="toggle-slider"></span></label></div>
       </div>
+      <div class="setting-item">
+        <div><div class="setting-label">Anti-ghosting (experimental)</div></div>
+        <div class="setting-control"><label class="toggle-switch"><input id="antiGhostingExperimental" type="checkbox"><span class="toggle-slider"></span></label></div>
+      </div>
     </div>
     <p class="hint">Actions such as Index library, reset, updates, and About are available on the device.</p>
 
@@ -223,6 +319,25 @@
           <button class="btn-primary" onclick="saveWifiNetwork()">Save</button>
           <button class="btn-secondary" onclick="hideAddWifiForm()">Cancel</button>
         </div>
+      </div>
+    </div>
+    <div class="settings-section">
+      <div class="section-header"><h3>Daily News</h3></div>
+      <div class="setting-item">
+        <div><div class="setting-label">News Repo URL</div><div class="setting-desc">GitHub raw archive URL for daily epub downloads</div></div>
+        <div class="setting-control"><input id="newsRepoUrl" placeholder="https://raw.githubusercontent.com/user/news-reader/main/archive"></div>
+      </div>
+      <div class="setting-item">
+        <div><div class="setting-label">Auto-Download</div><div class="setting-desc">Automatically download news on timed wake</div></div>
+        <div class="setting-control"><label class="toggle"><input type="checkbox" id="newsAutoDownload"><span class="slider"></span></label></div>
+      </div>
+      <div class="setting-item">
+        <div><div class="setting-label">Download Hour</div><div class="setting-desc">Hour of day to auto-download (0-23)</div></div>
+        <div class="setting-control"><input type="number" id="newsDownloadHour" min="0" max="23" style="width:60px"></div>
+      </div>
+      <div class="setting-item">
+        <div><div class="setting-label">Edit Feeds</div><div class="setting-desc">Configure RSS feeds on GitHub</div></div>
+        <div class="setting-control"><button class="btn-secondary" onclick="openNewsFeedsEditor()">Edit on GitHub</button></div>
       </div>
     </div>
     <div class="settings-section">
@@ -366,6 +481,10 @@
         <div><div class="setting-label">Refresh Frequency</div></div>
         <div class="setting-control"><select id="refreshFrequency"></select></div>
       </div>
+      <div class="setting-item">
+        <div><div class="setting-label">Refresh Mode</div></div>
+        <div class="setting-control"><select id="readerRefreshMode"></select></div>
+      </div>
     </div>
     <div class="settings-section">
       <div class="section-header"><h3>Image</h3></div>
@@ -389,8 +508,16 @@
         <div class="setting-control"><select id="statusBarLeft"></select></div>
       </div>
       <div class="setting-item">
+        <div><div class="setting-label">Inner Left Section</div></div>
+        <div class="setting-control"><select id="statusBarInnerLeft"></select></div>
+      </div>
+      <div class="setting-item">
         <div><div class="setting-label">Middle Section</div></div>
         <div class="setting-control"><select id="statusBarMiddle"></select></div>
+      </div>
+      <div class="setting-item">
+        <div><div class="setting-label">Inner Right Section</div></div>
+        <div class="setting-control"><select id="statusBarInnerRight"></select></div>
       </div>
       <div class="setting-item">
         <div><div class="setting-label">Right Section</div></div>
@@ -406,9 +533,9 @@
   <div class="toast" id="toast"></div>
 </div>
 <script>
-let settingsData = {}, pendingChanges = {}, wifiNetworks = [];
+let settingsData = {}, pendingChanges = {}, wifiNetworks = [], wallpaperItems = [];
 const options = {
-  sleepScreen: ["Dark", "Light", "Custom", "Recent Book", "Transparent Cover", "None", "Date Time"],
+  sleepScreen: ["Dark", "Light", "Custom", "Recent Book", "Transparent Cover", "None", "Date Time", "Hybrid"],
   sleepScreenCoverMode: ["Fill", "Crop"],
   sleepScreenCoverFilter: ["None", "Contrast", "Inverted"],
   sleepImageQuality: ["Low", "Medium", "High"],
@@ -418,8 +545,9 @@ const options = {
   hideBatteryPercentage: ["Never", "In Reader", "Always"],
   recentLibraryMode: ["Grid", "Current | Previous", "Flow", "Simple", "List", "Icons", "Cover"],
   libraryMode: ["List", "Grid"],
-  frontButtonLayout: ["Back, Ccnfirm, Left, Right", "Left, Right, Back, Confirm", "Left, Back, Confirm, Right", "Back, Confirm, Right, Left"],
+  frontButtonLayout: ["Back, Confirm, Left, Right", "Left, Right, Back, Confirm", "Left, Back, Confirm, Right", "Back, Confirm, Right, Left"],
   shortPwrBtn: ["Ignore", "Sleep", "Page Refresh"],
+  powerWakeGuard: ["Off", "400 ms", "500 ms", "600 ms", "700 ms", "800 ms", "900 ms", "1000 ms", "1100 ms", "1200 ms", "1300 ms", "1400 ms", "1500 ms", "1600 ms", "1700 ms", "1800 ms", "1900 ms", "2000 ms", "2100 ms", "2200 ms", "2300 ms", "2400 ms", "2500 ms"],
   sleepTimeout: ["1 min", "5 min", "10 min", "15 min", "30 min"],
   bootSetting: ["Recent Books", "Home Page"],
   bitmapRoundedCorners: ["Square", "Rounded", "Subtle"],
@@ -434,16 +562,24 @@ const options = {
   shakePageTurn: ["Off", "Normal", "Inverted"],
   shakePageTurnSensitivity: ["Low", "Normal", "High"],
   refreshFrequency: ["1 page", "5 pages", "10 pages", "15 pages", "30 pages"],
+  readerRefreshMode: ["Auto", "Fast", "Half", "Full"],
   statusBar: ["None", "No Progress", "Full w/ Percentage", "Full w/ Progress Bar", "Progress Bar", "Battery %", "Percentage", "Page Bars"],
-  statusBarLeft: ["None", "Page Numbers", "Percentage", "Chapter Title", "Battery Icon", "Battery %", "Battery Icon+%", "Progress Bar", "Progress Bar+%", "Page Bars", "Book Title", "Author Name"],
-  statusBarMiddle: ["None", "Page Numbers", "Percentage", "Chapter Title", "Battery Icon", "Battery %", "Battery Icon+%", "Progress Bar", "Progress Bar+%", "Page Bars", "Book Title", "Author Name"],
-  statusBarRight: ["None", "Page Numbers", "Percentage", "Chapter Title", "Battery Icon", "Battery %", "Battery Icon+%", "Progress Bar", "Progress Bar+%", "Page Bars", "Book Title", "Author Name"]
+  sleepImagePowerGestureWindow: ["Auto", "600 ms", "700 ms", "800 ms", "900 ms", "1000 ms", "1100 ms", "1200 ms", "1300 ms", "1400 ms", "1500 ms", "1600 ms", "1700 ms", "1800 ms", "1900 ms", "2000 ms", "2100 ms", "2200 ms"],
+  sleepImagePowerFirstPressMin: ["Auto", "100 ms", "200 ms", "300 ms", "400 ms", "500 ms", "600 ms", "700 ms", "800 ms", "900 ms", "1000 ms", "1100 ms", "1200 ms", "1300 ms", "1400 ms", "1500 ms"],
+  sleepImagePowerSecondPressMax: ["100 ms", "200 ms", "300 ms", "400 ms", "500 ms", "600 ms", "700 ms", "800 ms", "900 ms", "1000 ms"],
+  statusBarLeft: ["None", "Page Numbers", "Percentage", "Chapter Title", "Battery Icon", "Battery %", "Battery Icon+%", "Progress Bar", "Progress Bar+%", "Page Bars", "Book Title", "Author Name", "Page Num+%", "Time", "Session Time"],
+  statusBarInnerLeft: ["None", "Page Numbers", "Percentage", "Chapter Title", "Battery Icon", "Battery %", "Battery Icon+%", "Progress Bar", "Progress Bar+%", "Page Bars", "Book Title", "Author Name", "Page Num+%", "Time", "Session Time"],
+  statusBarMiddle: ["None", "Page Numbers", "Percentage", "Chapter Title", "Battery Icon", "Battery %", "Battery Icon+%", "Progress Bar", "Progress Bar+%", "Page Bars", "Book Title", "Author Name", "Page Num+%", "Time", "Session Time"],
+  statusBarInnerRight: ["None", "Page Numbers", "Percentage", "Chapter Title", "Battery Icon", "Battery %", "Battery Icon+%", "Progress Bar", "Progress Bar+%", "Page Bars", "Book Title", "Author Name", "Page Num+%", "Time", "Session Time"],
+  statusBarRight: ["None", "Page Numbers", "Percentage", "Chapter Title", "Battery Icon", "Battery %", "Battery Icon+%", "Progress Bar", "Progress Bar+%", "Page Bars", "Book Title", "Author Name", "Page Num+%", "Time", "Session Time"]
 };
 const boolSettings = [
-  "useLibraryIndex", "librarySortEnabled",
+  "useLibraryIndex", "librarySortEnabled", "mainMenuNav",
   "refreshOnLoadRecent", "refreshOnLoadLibrary", "refreshOnLoadSettings", "refreshOnLoadSync", "refreshOnLoadStatistics",
   "extraParagraphSpacing", "paragraphCssIndentEnabled", "hyphenationEnabled", "bionicReadingEnabled",
-  "textAntiAliasing", "readerSmartRefreshOnImages"
+  "textAntiAliasing", "readerSmartRefreshOnImages", "sunlightFadingFix", "antiGhostingExperimental",
+  "sleepImageRotationEnabled", "sleepImagePowerDoublePress", "persistentSleepLogs", "showBottomBarClock",
+  "newsAutoDownload"
 ];
 const marginOptions = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80];
 const fontFamilyBuiltin = ["Literata", "Atkinson Hyperlegible"];
@@ -491,6 +627,8 @@ async function loadSettings() {
     await loadKOReaderSettings();
     await loadOpdsServers();
     populateSettings();
+    await loadSleepWakeTrace();
+    await loadWallpapers();
   } catch (e) {
     showToast("Failed to load settings", true);
   }
@@ -526,6 +664,128 @@ async function loadKOReaderSettings() {
 
 function removeIcon() {
   return '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h12M8 5.5V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5M8.5 9v5M11.5 9v5M5.5 5.5 6.2 16a1 1 0 0 0 1 .9h5.6a1 1 0 0 0 1-.9l.7-10.5"/></svg>';
+}
+
+async function loadWallpapers() {
+  const grid = document.getElementById("wallpaperGrid");
+  if (grid) grid.innerHTML = '<div class="wifi-empty">Loading wallpapers...</div>';
+  try {
+    const r = await fetch("/api/wallpapers");
+    const d = await r.json();
+    renderWallpapers(d);
+  } catch (e) {
+    wallpaperItems = [];
+    if (grid) grid.innerHTML = '<div class="wifi-empty">Could not load wallpapers</div>';
+  }
+}
+
+function renderWallpapers(data) {
+  const grid = document.getElementById("wallpaperGrid");
+  if (!grid) return;
+  wallpaperItems = data && data.items ? data.items : [];
+  const random = document.getElementById("wallpaperRandom");
+  if (random) random.checked = !!(data && data.random);
+
+  if (!wallpaperItems.length) {
+    grid.innerHTML = '<div class="wifi-empty">Add .bmp, .jpg, or .jpeg files to /sleep or /Wallpapers on the SD card.</div>';
+    return;
+  }
+
+  grid.innerHTML = "";
+  wallpaperItems.forEach(function (item) {
+    const card = document.createElement("div");
+    card.className = "wallpaper-card" + (item.shuffle ? "" : " disabled");
+
+    const img = document.createElement("img");
+    img.loading = "lazy";
+    img.alt = item.label || item.path || "Wallpaper";
+    img.src = "/wallpaper-preview?path=" + encodeURIComponent(item.path || "");
+    card.appendChild(img);
+
+    const checkWrap = document.createElement("label");
+    checkWrap.className = "wallpaper-check";
+    checkWrap.title = "Include in random shuffle";
+    const check = document.createElement("input");
+    check.type = "checkbox";
+    check.checked = !!item.shuffle;
+    check.onchange = function () { setWallpaperShuffle(item.path, check.checked); };
+    checkWrap.appendChild(check);
+    card.appendChild(checkWrap);
+
+    const meta = document.createElement("div");
+    meta.className = "wallpaper-meta";
+    const name = document.createElement("div");
+    name.className = "wallpaper-name";
+    name.textContent = item.label || item.path || "Wallpaper";
+    meta.appendChild(name);
+    if (item.selected) {
+      const fixed = document.createElement("span");
+      fixed.className = "wallpaper-fixed";
+      fixed.textContent = "Fixed";
+      meta.appendChild(fixed);
+    }
+    card.appendChild(meta);
+
+    const use = document.createElement("button");
+    use.type = "button";
+    use.className = "wallpaper-use";
+    use.textContent = item.selected ? "Fixed wallpaper" : "Use fixed";
+    use.onclick = function () { setWallpaperFixed(item.path); };
+    card.appendChild(use);
+
+    grid.appendChild(card);
+  });
+}
+
+async function postWallpaper(payload) {
+  const r = await fetch("/api/wallpapers/shuffle", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  if (!r.ok) {
+    let error = "";
+    try {
+      const d = await r.json();
+      error = d.error || "";
+    } catch (e) {}
+    throw new Error(error || "save_failed");
+  }
+}
+
+async function setWallpaperShuffle(path, enabled) {
+  try {
+    await postWallpaper({ path: path, shuffle: enabled });
+    await loadWallpapers();
+  } catch (e) {
+    showToast(e.message === "last_enabled" ? "At least one wallpaper must stay checked" : "Failed to update wallpaper", true);
+    await loadWallpapers();
+  }
+}
+
+async function setWallpaperRandom(enabled) {
+  try {
+    const selected = wallpaperItems.find(function (item) { return item.selected; }) ||
+                     wallpaperItems.find(function (item) { return item.shuffle; }) ||
+                     wallpaperItems[0];
+    const payload = { random: enabled };
+    if (!enabled && selected) payload.selected = selected.path;
+    await postWallpaper(payload);
+    await loadSettings();
+  } catch (e) {
+    showToast("Failed to update wallpaper mode", true);
+    await loadWallpapers();
+  }
+}
+
+async function setWallpaperFixed(path) {
+  try {
+    await postWallpaper({ random: false, selected: path });
+    await loadSettings();
+  } catch (e) {
+    showToast("Failed to set wallpaper", true);
+    await loadWallpapers();
+  }
 }
 
 function renderWifiList() {
@@ -758,6 +1018,192 @@ function populatePageAutoTurn() {
   };
 }
 
+function populateSleepImageRotationMinutes() {
+  const sel = document.getElementById("sleepImageRotationMinutes");
+  if (!sel || settingsData.sleepImageRotationMinutes === undefined) return;
+  sel.innerHTML = "";
+  const cur = Number(settingsData.sleepImageRotationMinutes);
+  const testOpt = document.createElement("option");
+  testOpt.value = 0;
+  testOpt.textContent = "30 sec (uses battery)";
+  if (cur === 0) testOpt.selected = true;
+  sel.appendChild(testOpt);
+  for (let min = 5; min <= 120; min += 5) {
+    const opt = document.createElement("option");
+    opt.value = min;
+    opt.textContent = min + " min";
+    if (cur === min) opt.selected = true;
+    sel.appendChild(opt);
+  }
+  sel.onchange = function () {
+    pendingChanges.sleepImageRotationMinutes = parseInt(sel.value, 10);
+    markChanged(sel);
+  };
+}
+
+function populateSleepTimerDiagnostics() {
+  const el = document.getElementById("sleepTimerDiagnostics");
+  if (!el) return;
+  const armedSeconds = Number(settingsData.lastSleepTimerArmSeconds || 0);
+  const armCount = Number(settingsData.sleepTimerArmCount || 0);
+  const wakeCount = Number(settingsData.sleepTimerWakeCount || 0);
+  const stubCount = Number(settingsData.deepSleepWakeStubCount || 0);
+  const stubTimerCount = Number(settingsData.deepSleepTimerWakeStubCount || 0);
+  const timerSetup = Number(settingsData.deepSleepTimerSetupResult || 0);
+  const stubCause = Number(settingsData.deepSleepLastWakeStubCause || 0);
+  el.textContent = (armedSeconds > 0 ? "Armed " + armedSeconds + " s" : "Not armed") +
+                   " | arms " + armCount + " | app wakes " + wakeCount +
+                   " | stub timer " + stubTimerCount + "/" + stubCount +
+                   " | setup " + timerSetup + " | cause " + stubCause;
+}
+
+function sleepWakeTraceDetail(entry) {
+  const a = Number(entry.arg0 || 0) >>> 0;
+  const b = Number(entry.arg1 || 0) >>> 0;
+  switch (entry.event) {
+    case "sleep_plan":
+      return "timer=" + a + "s flags=0x" + b.toString(16);
+    case "arm_result":
+      return "timer=" + a + "s gpioErr=" + (b >>> 16) + " timerErr=" + (b & 0xffff);
+    case "sleep_enter":
+      return "startLow=" + a + " durationTicks=" + b;
+    case "wake_stub":
+      return "rawCause=" + a + " wake#=" + b;
+    case "early_wake":
+      return "cause=" + (a & 0xffff) + " reset=" + (a >>> 16) + " raw=" + b;
+    case "deadline_check":
+      return "elapsed=" + a + " duration=" + (b & 0x7fffffff) +
+             " signature=" + ((b & 0x80000000) !== 0 ? "yes" : "no");
+    case "power_sample":
+      return "firstLow=" + a + " secondLow=" + b;
+    case "classified_timer":
+      return "source=" + (["", "esp", "stub", "deadline"][a] || a) + " raw=" + b;
+    case "power_action":
+      return "action=" + (["boot", "short", "double"][a] || a) + " flags=0x" + b.toString(16);
+    case "setup_wake":
+      return "reason=" + (["other", "power", "timer", "button", "flash", "usb"][a] || a) +
+             " action=" + (["boot", "short", "double"][b] || b);
+    case "image_result":
+      return "image#=" + a + " force=" + ((b & 1) !== 0 ? "yes" : "no") +
+             " rendered=" + ((b & 2) !== 0 ? "yes" : "no") +
+             " continue=" + ((b & 4) !== 0 ? "yes" : "no");
+    case "sleep_stage":
+      const stages = {
+        1: "enter_sleep", 2: "sleep_render_complete",
+        30: "before_button_release", 31: "buttons_released", 32: "wake_config_saved",
+        33: "sleep_state_saved", 34: "before_panel_sleep", 35: "panel_asleep",
+        36: b === 3 ? "x3_power_retained" : b === 1 ? "x3_full_power_off" : "standard_deep_sleep",
+        100: "sleep_activity_entered", 101: "before_preclear", 102: "preclear_complete",
+        110: "before_mode_render", 111: "mode_render_complete",
+        200: "custom_before_select", 201: "custom_image_selected",
+        202: "custom_before_jpeg_decode", 203: "custom_jpeg_decoded",
+        204: "custom_before_gray_pass", 205: "custom_gray_pass_complete",
+        206: "custom_before_bmp_open", 207: "custom_bmp_opened",
+        208: "custom_bmp_header", 209: "custom_bmp_rendered",
+        220: "before_image_state_save", 221: "image_state_saved",
+        230: "transparent_before_select", 231: "transparent_image_selected",
+        232: "transparent_before_jpeg_decode", 233: "transparent_jpeg_decoded",
+        234: "transparent_first_refresh", 235: "transparent_gray_pass_complete",
+        236: "transparent_before_bmp_open", 237: "transparent_bmp_opened",
+        238: "transparent_bmp_header", 239: "transparent_bmp_rendered"
+      };
+      return "stage=" + (stages[a] || a) + " value=" + b;
+    case "power_gesture":
+      if (a === 0) return "guard=" + (b & 0xffff) + "ms window=" + (b >>> 16) + "ms";
+      if (a === 1) return "first=" + b + "ms";
+      if (a === 2) return "second=" + b + "ms";
+      if (a === 3) return "timeout=" + b + "ms";
+      if (a === 4) return "held_boot=" + b + "ms";
+      return "stage=" + a + " value=" + b;
+    default:
+      return "a=" + a + " b=" + b;
+  }
+}
+
+async function loadSleepWakeTrace() {
+  const el = document.getElementById("sleepWakeTrace");
+  if (!el) return;
+  try {
+    const response = await fetch("/api/sleep-wake-trace");
+    const data = await response.json();
+    const events = Array.isArray(data.events) ? data.events : [];
+    const persistedEvents = Array.isArray(data.persistedEvents) ? data.persistedEvents : [];
+    const formatEvents = function (items) {
+      return items.map(function (entry) {
+          return "#" + entry.seq + " " + entry.event + " tick=" + entry.tick + " " +
+                 sleepWakeTraceDetail(entry);
+        }).join("\n");
+    };
+    const sections = [];
+    if (persistedEvents.length) {
+      sections.push("Persisted checkpoint (survives restart)\n" + formatEvents(persistedEvents));
+    }
+    if (events.length) {
+      sections.push("Current boot\n" + formatEvents(events));
+    }
+    el.textContent = sections.length ? sections.join("\n\n") : "No events";
+  } catch (e) {
+    el.textContent = "Trace unavailable";
+  }
+}
+
+async function clearSleepWakeTrace() {
+  try {
+    const response = await fetch("/api/sleep-wake-trace", { method: "DELETE" });
+    if (!response.ok) throw new Error("clear failed");
+    await loadSleepWakeTrace();
+    showToast("Sleep wake trace cleared");
+  } catch (e) {
+    showToast("Failed to clear sleep wake trace", true);
+  }
+}
+
+async function copySleepWakeTrace() {
+  const el = document.getElementById("sleepWakeTrace");
+  if (!el || !el.textContent || el.textContent === "No events") {
+    showToast("No sleep wake trace to copy", true);
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(el.textContent);
+    showToast("Sleep wake trace copied");
+  } catch (e) {
+    showToast("Could not copy sleep wake trace", true);
+  }
+}
+
+function populateNewsSettings() {
+  var url = document.getElementById("newsRepoUrl");
+  if (url && settingsData.newsRepoUrl !== undefined) {
+    url.value = settingsData.newsRepoUrl || "";
+    url.oninput = function () {
+      pendingChanges.newsRepoUrl = url.value;
+      markChanged(url);
+    };
+  }
+  var hr = document.getElementById("newsDownloadHour");
+  if (hr && settingsData.newsDownloadHour !== undefined) {
+    hr.value = Number(settingsData.newsDownloadHour);
+    hr.oninput = function () {
+      var v = parseInt(hr.value, 10);
+      if (isNaN(v) || v < 0) v = 0;
+      if (v > 23) v = 23;
+      pendingChanges.newsDownloadHour = v;
+      markChanged(hr);
+    };
+  }
+}
+
+function openNewsFeedsEditor() {
+  var raw = (settingsData.newsRepoUrl || "").trim();
+  var m = raw.match(/github(?:usercontent)?\.com\/([^/]+)\/([^/]+)/);
+  if (m) {
+    window.open("https://github.com/" + m[1] + "/" + m[2] + "/edit/main/feeds.json", "_blank");
+  } else {
+    showToast("Set a valid GitHub repo URL first", true);
+  }
+}
+
 function populateSleepCustomBmp() {
   const inp = document.getElementById("sleepCustomBmp");
   if (!inp || settingsData.sleepCustomBmp === undefined) return;
@@ -773,13 +1219,15 @@ function populateSettings() {
   for (const key of Object.keys(options)) {
     const el = document.getElementById(key);
     if (!el || settingsData[key] === undefined) continue;
-    const labels = key === "sleepScreen" && !clockAvailable() ? options[key].slice(0, 6) : options[key];
+    const entries = options[key]
+      .map(function (label, idx) { return { label: label, value: idx }; })
+      .filter(function (entry) { return key !== "sleepScreen" || clockAvailable() || entry.value !== 6; });
     el.innerHTML = "";
-    labels.forEach(function (label, idx) {
+    entries.forEach(function (entry) {
       const opt = document.createElement("option");
-      opt.value = idx;
-      opt.textContent = label;
-      if (Number(settingsData[key]) === idx) opt.selected = true;
+      opt.value = entry.value;
+      opt.textContent = entry.label;
+      if (Number(settingsData[key]) === entry.value) opt.selected = true;
       el.appendChild(opt);
     });
     el.onchange = function () {
@@ -833,7 +1281,10 @@ function populateSettings() {
   populateFontFamily();
   populateRecentVisibleCount();
   populatePageAutoTurn();
+  populateSleepImageRotationMinutes();
+  populateSleepTimerDiagnostics();
   populateSleepCustomBmp();
+  populateNewsSettings();
 }
 
 function markChanged(el) {

@@ -98,6 +98,19 @@ void InputManager::update() {
   }
 }
 
+void InputManager::flush() {
+  const unsigned long currentTime = millis();
+  const uint8_t state = getState();
+  currentState = state;
+  lastState = state;
+  pressedEvents = 0;
+  releasedEvents = 0;
+  pendingInjectPress = 0;
+  lastDebounceTime = currentTime;
+  buttonPressStart = currentTime;
+  buttonPressFinish = currentTime;
+}
+
 bool InputManager::isPressed(const uint8_t buttonIndex) const { return currentState & (1 << buttonIndex); }
 
 bool InputManager::wasPressed(const uint8_t buttonIndex) const { return pressedEvents & (1 << buttonIndex); }

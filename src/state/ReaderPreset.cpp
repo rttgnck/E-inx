@@ -36,7 +36,10 @@ void ReaderPresetStore::load() {
     return;
   }
 
-  const size_t recordSize = version >= 2 ? BookSettings::kSerializedSize : BookSettings::kLegacySerializedSize;
+  const size_t recordSize = version >= 4   ? BookSettings::kSerializedSize
+                            : version >= 3 ? BookSettings::kSerializedSizeV3
+                            : version >= 2 ? BookSettings::kSerializedSizeV2
+                                           : BookSettings::kLegacySerializedSize;
 
   for (uint8_t i = 0; i < presetCount; i++) {
     uint8_t nameLen = 0;

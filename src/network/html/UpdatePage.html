@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Inx — Firmware Update</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #fafafa; color: #1d1d1f; font-family: system-ui, -apple-system, sans-serif; line-height: 1.45; }
+  .container { max-width: 720px; margin: 0 auto; padding: 28px 18px 48px; }
+  .header { text-align: center; margin-bottom: 22px; }
+  .header h1 { color: #111; font-size: 26px; letter-spacing: -.03em; }
+  .nav-links { display: flex; justify-content: center; gap: 2px; flex-wrap: wrap; margin-bottom: 22px; padding-bottom: 8px; border-bottom: 1px solid #ebebeb; }
+  .nav-btn { padding: 6px 12px; color: #555; text-decoration: none; border-radius: 6px; font-size: 13px; font-weight: 500; }
+  .nav-btn:hover { background: #eee; color: #111; }
+  .nav-btn.active { background: #111; color: #fff; }
+  .card { margin-bottom: 16px; padding: 20px; background: #fff; border: 1px solid #eee; border-radius: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.04); }
+  .card h2 { margin-bottom: 5px; color: #111; font-size: 17px; }
+  .muted { color: #777; font-size: 13px; }
+  .status-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; margin-top: 16px; }
+  .status-item { padding: 12px 14px; background: #f5f5f7; border-radius: 10px; }
+  .status-label { display: block; margin-bottom: 4px; color: #8e8e93; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  .status-value { display: block; overflow: hidden; color: #222; font-size: 14px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+  .dropzone { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; margin-top: 16px; padding: 34px 20px; background: #fafafa; border: 1.5px dashed #ccc; border-radius: 12px; cursor: pointer; text-align: center; transition: .15s; }
+  .dropzone:hover, .dropzone.dragover { background: #f4f4f5; border-color: #111; }
+  .dropzone input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .file-name { color: #111; font-size: 14px; font-weight: 650; word-break: break-word; }
+  .confirm { display: flex; align-items: flex-start; gap: 9px; margin: 16px 0; color: #555; font-size: 13px; }
+  .confirm input { margin-top: 3px; accent-color: #111; }
+  button { width: 100%; padding: 12px 18px; background: #111; color: #fff; border: 0; border-radius: 999px; cursor: pointer; font: inherit; font-size: 14px; font-weight: 650; }
+  button:hover:not(:disabled) { background: #333; }
+  button:disabled { cursor: default; opacity: .35; }
+  .progress { display: none; margin-top: 18px; }
+  .progress-track { width: 100%; height: 6px; overflow: hidden; background: #e8e8ed; border-radius: 99px; }
+  .progress-fill { width: 0; height: 100%; background: #111; transition: width .15s; }
+  .progress-text { margin-top: 8px; color: #666; font-size: 12px; text-align: center; }
+  .message { display: none; margin-top: 14px; padding: 12px 14px; border-radius: 10px; font-size: 13px; }
+  .message.info { display: block; background: #eef4fb; color: #285b89; }
+  .message.success { display: block; background: #e9f9ee; color: #166b34; }
+  .message.error { display: block; background: #fdecec; color: #9c1c1c; }
+  .warning { margin-top: 14px; padding: 12px 14px; background: #fff8e6; color: #745200; border-radius: 10px; font-size: 12.5px; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  @media (max-width: 560px) {
+    .container { padding: 24px 14px 40px; }
+    .header h1 { font-size: 22px; }
+    .status-grid { grid-template-columns: 1fr; }
+  }
+</style>
+<div class="container">
+  <div class="header"><h1>Firmware Update</h1></div>
+  <nav class="nav-links">
+    <a class="nav-btn" href="/">Dashboard</a>
+    <a class="nav-btn" href="/files">Files</a>
+    <a class="nav-btn" href="/epub">Epub</a>
+    <a class="nav-btn" href="/tags">Tags</a>
+    <a class="nav-btn" href="/font-manager">Fonts</a>
+    <a class="nav-btn" href="/settings">Settings</a>
+    <a class="nav-btn active" href="/update">Update</a>
+  </nav>
+
+  <section class="card">
+    <h2>Device</h2>
+    <p class="muted">The new image is written to the inactive app slot and validated before it becomes bootable.</p>
+    <div class="status-grid">
+      <div class="status-item"><span class="status-label">Current version</span><span class="status-value" id="currentVersion">—</span></div>
+      <div class="status-item"><span class="status-label">Active slot</span><span class="status-value" id="activePartition">—</span></div>
+      <div class="status-item"><span class="status-label">Update slot</span><span class="status-value" id="targetPartition">—</span></div>
+      <div class="status-item"><span class="status-label">Maximum image</span><span class="status-value" id="maxSize">—</span></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Install a local build</h2>
+    <p class="muted">Choose the app <code>firmware.bin</code> produced by the Inx release build.</p>
+    <label class="dropzone" id="dropzone" for="firmwareFile">
+      <input id="firmwareFile" type="file" accept=".bin,application/octet-stream">
+      <span class="file-name" id="fileName">Choose firmware.bin</span>
+      <span class="muted" id="fileMeta">or drop a .bin file here</span>
+    </label>
+    <label class="confirm">
+      <input id="confirmInstall" type="checkbox">
+      <span>I understand the reader will reboot after validation. I will keep it powered and leave this page open.</span>
+    </label>
+    <button id="installButton" type="button" disabled>Upload, validate, and install</button>
+    <div class="progress" id="progress">
+      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="progress-text" id="progressText">Preparing…</div>
+    </div>
+    <div class="message" id="message"></div>
+    <div class="warning">Only flash firmware intended for the Xteink ESP32-C3 and this partition layout. If the new image cannot reach core startup, the bootloader falls back to the previous slot.</div>
+  </section>
+
+  <section class="card">
+    <h2>Online OTA</h2>
+    <p class="muted">Published v1.1.0 and later releases include a <code>firmware.bin</code> asset. On the reader, open <strong>Settings → Device Actions → Check for updates</strong> to check GitHub and install it over Wi‑Fi.</p>
+  </section>
+</div>
+<script>
+  let updateStatus = null;
+  let selectedFile = null;
+  const fileInput = document.getElementById("firmwareFile");
+  const dropzone = document.getElementById("dropzone");
+  const confirmInstall = document.getElementById("confirmInstall");
+  const installButton = document.getElementById("installButton");
+
+  function formatBytes(bytes) {
+    if (!bytes) return "—";
+    const units = ["B", "KB", "MB", "GB"];
+    const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
+    return (bytes / Math.pow(1024, i)).toFixed(i ? 1 : 0) + " " + units[i];
+  }
+
+  function showMessage(text, kind) {
+    const box = document.getElementById("message");
+    box.textContent = text;
+    box.className = "message " + kind;
+  }
+
+  function updateButton() {
+    installButton.disabled = !selectedFile || !confirmInstall.checked || !updateStatus ||
+      !updateStatus.token || (updateStatus.maxSize && selectedFile.size > updateStatus.maxSize);
+  }
+
+  async function loadStatus() {
+    const response = await fetch("/api/update/status", {cache: "no-store"});
+    if (!response.ok) throw new Error("Could not read update status");
+    updateStatus = await response.json();
+    document.getElementById("currentVersion").textContent = updateStatus.currentVersion || "—";
+    document.getElementById("activePartition").textContent = updateStatus.activePartition || "—";
+    document.getElementById("targetPartition").textContent = updateStatus.targetPartition || "—";
+    document.getElementById("maxSize").textContent = formatBytes(updateStatus.maxSize);
+    updateButton();
+  }
+
+  function selectFile(file) {
+    selectedFile = file || null;
+    document.getElementById("fileName").textContent = selectedFile ? selectedFile.name : "Choose firmware.bin";
+    document.getElementById("fileMeta").textContent = selectedFile ? formatBytes(selectedFile.size) : "or drop a .bin file here";
+    if (selectedFile && !selectedFile.name.toLowerCase().endsWith(".bin")) {
+      showMessage("Choose a .bin firmware image.", "error");
+      selectedFile = null;
+    } else if (selectedFile && updateStatus && updateStatus.maxSize && selectedFile.size > updateStatus.maxSize) {
+      showMessage("This image is larger than the inactive OTA slot.", "error");
+    } else {
+      document.getElementById("message").className = "message";
+    }
+    updateButton();
+  }
+
+  fileInput.addEventListener("change", () => selectFile(fileInput.files[0]));
+  confirmInstall.addEventListener("change", updateButton);
+  ["dragenter", "dragover"].forEach(name => dropzone.addEventListener(name, event => {
+    event.preventDefault();
+    dropzone.classList.add("dragover");
+  }));
+  ["dragleave", "drop"].forEach(name => dropzone.addEventListener(name, event => {
+    event.preventDefault();
+    dropzone.classList.remove("dragover");
+  }));
+  dropzone.addEventListener("drop", event => selectFile(event.dataTransfer.files[0]));
+
+  installButton.addEventListener("click", () => {
+    if (!selectedFile || !updateStatus || !updateStatus.token) return;
+    installButton.disabled = true;
+    fileInput.disabled = true;
+    confirmInstall.disabled = true;
+    const progress = document.getElementById("progress");
+    const fill = document.getElementById("progressFill");
+    const text = document.getElementById("progressText");
+    progress.style.display = "block";
+    showMessage("Uploading to the inactive slot. Do not power off the reader.", "info");
+
+    const form = new FormData();
+    form.append("firmware", selectedFile, selectedFile.name);
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/update/upload?size=" + selectedFile.size + "&token=" + encodeURIComponent(updateStatus.token));
+    xhr.upload.onprogress = event => {
+      if (!event.lengthComputable) return;
+      const percent = Math.min(99, Math.round(event.loaded * 100 / event.total));
+      fill.style.width = percent + "%";
+      text.textContent = percent + "% — " + formatBytes(event.loaded) + " / " + formatBytes(event.total);
+    };
+    xhr.onload = () => {
+      let result = {};
+      try { result = JSON.parse(xhr.responseText || "{}"); } catch (_) {}
+      if (xhr.status >= 200 && xhr.status < 300 && result.ok) {
+        fill.style.width = "100%";
+        text.textContent = "Validated. Rebooting…";
+        const version = result.version ? " " + result.version : "";
+        showMessage("Firmware" + version + " is valid. The reader is rebooting into the new slot.", "success");
+      } else {
+        showMessage(result.error || "Firmware installation failed.", "error");
+        installButton.disabled = false;
+        fileInput.disabled = false;
+        confirmInstall.disabled = false;
+      }
+    };
+    xhr.onerror = () => {
+      showMessage("Connection lost before the reader confirmed validation. Check the reader before retrying.", "error");
+      installButton.disabled = false;
+      fileInput.disabled = false;
+      confirmInstall.disabled = false;
+    };
+    xhr.send(form);
+  });
+
+  loadStatus().catch(error => showMessage(error.message, "error"));
+</script>
+</html>

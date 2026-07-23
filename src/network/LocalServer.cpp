@@ -14,6 +14,10 @@
 #include <SDCardManager.h>
 #include <WiFi.h>
 #include <esp_task_wdt.h>
+#ifndef SIMULATOR
+#include <esp_ota_ops.h>
+#include <esp_system.h>
+#endif
 
 #include <algorithm>
 #include <cctype>
@@ -22,6 +26,8 @@
 #include <functional>
 
 #include "../state/SystemSetting.h"
+#include "state/Session.h"
+#include "state/SleepImageSelection.h"
 #include "html/EpubPageHtml.generated.h"
 #include "html/EpubPageJs.generated.h"
 #include "html/FilesPageJs.generated.h"
@@ -32,12 +38,16 @@
 #include "html/JsZipMinJs.generated.h"
 #include "html/SettingsPageHtml.generated.h"
 #include "html/TagsPageHtml.generated.h"
+#include "html/UpdatePageHtml.generated.h"
 #ifndef INX_SIMULATOR_WEB_ONLY
 #include "activity/settings/LibraryIndexer.h"
 #include "state/BookState.h"
 #include "state/BookTags.h"
 #include "state/RecentBooks.h"
 #include "system/FontManager.h"
+#ifndef SIMULATOR
+#include "system/SleepWakeTraceStore.h"
+#endif
 #include "util/StringUtils.h"
 #endif
 #include "KOReaderCredentialStore.h"
@@ -52,6 +62,9 @@ const char* HIDDEN_ITEMS[] = {"System Volume Information", ".metadata"};
 constexpr size_t HIDDEN_ITEMS_COUNT = sizeof(HIDDEN_ITEMS) / sizeof(HIDDEN_ITEMS[0]);
 constexpr uint16_t UDP_PORTS[] = {54982, 48123, 39001, 44044, 59678};
 constexpr uint16_t LOCAL_UDP_PORT = 8134;
+constexpr size_t MIN_FIRMWARE_SIZE = 64 * 1024;
+constexpr uint8_t ESP_IMAGE_MAGIC = 0xE9;
+constexpr uint16_t ESP32_C3_CHIP_ID = 5;
 
 LocalServer* wsInstance = nullptr;
 
@@ -99,6 +112,167 @@ bool clockSettingsAvailable() {
 #else
   return false;
 #endif
+}
+
+#ifndef INX_SIMULATOR_WEB_ONLY
+const char* sleepWakeTraceEventName(const HalGPIO::SleepWakeTraceEvent event) {
+  switch (event) {
+    case HalGPIO::SleepWakeTraceEvent::SleepPlan:
+      return "sleep_plan";
+    case HalGPIO::SleepWakeTraceEvent::ArmResult:
+      return "arm_result";
+    case HalGPIO::SleepWakeTraceEvent::SleepEnter:
+      return "sleep_enter";
+    case HalGPIO::SleepWakeTraceEvent::WakeStub:
+      return "wake_stub";
+    case HalGPIO::SleepWakeTraceEvent::EarlyWake:
+      return "early_wake";
+    case HalGPIO::SleepWakeTraceEvent::DeadlineCheck:
+      return "deadline_check";
+    case HalGPIO::SleepWakeTraceEvent::PowerSample:
+      return "power_sample";
+    case HalGPIO::SleepWakeTraceEvent::ClassifiedTimer:
+      return "classified_timer";
+    case HalGPIO::SleepWakeTraceEvent::PowerAction:
+      return "power_action";
+    case HalGPIO::SleepWakeTraceEvent::SetupWake:
+      return "setup_wake";
+    case HalGPIO::SleepWakeTraceEvent::ImageResult:
+      return "image_result";
+    case HalGPIO::SleepWakeTraceEvent::TimerBranch:
+      return "timer_branch";
+    case HalGPIO::SleepWakeTraceEvent::DoublePressBranch:
+      return "double_press_branch";
+    case HalGPIO::SleepWakeTraceEvent::ShortPressBranch:
+      return "short_press_branch";
+    case HalGPIO::SleepWakeTraceEvent::UiBranch:
+      return "ui_branch";
+    case HalGPIO::SleepWakeTraceEvent::SleepStage:
+      return "sleep_stage";
+    case HalGPIO::SleepWakeTraceEvent::PowerGesture:
+      return "power_gesture";
+  }
+  return "unknown";
+}
+#endif
+
+struct WallpaperInfo {
+  String path;
+  String label;
+};
+
+bool stringEndsWith(const std::string& value, const char* suffix) {
+  const size_t suffixLength = strlen(suffix);
+  return value.size() >= suffixLength &&
+         value.compare(value.size() - suffixLength, suffixLength, suffix) == 0;
+}
+
+bool hasSupportedWallpaperExtension(const String& value) {
+  std::string lower = value.c_str();
+  std::transform(lower.begin(), lower.end(), lower.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  return stringEndsWith(lower, ".bmp") || stringEndsWith(lower, ".jpg") || stringEndsWith(lower, ".jpeg");
+}
+
+String normalizeWallpaperPath(String path) {
+  path.trim();
+  if (path.isEmpty()) {
+    return "";
+  }
+  if (!path.startsWith("/")) {
+    path = "/sleep/" + path;
+  }
+  return path;
+}
+
+bool isWallpaperPathAllowed(const String& path) {
+  if (path.isEmpty() || !path.startsWith("/") || path.indexOf("..") >= 0 || path.indexOf('\\') >= 0 ||
+      path.indexOf(':') >= 0 || !hasSupportedWallpaperExtension(path)) {
+    return false;
+  }
+  return path == "/sleep.bmp" || path == "/sleep.jpg" || path == "/sleep.jpeg" || path.startsWith("/sleep/") ||
+         path.startsWith("/Wallpapers/");
+}
+
+String wallpaperMimeType(const String& path) {
+  std::string lower = path.c_str();
+  std::transform(lower.begin(), lower.end(), lower.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  if (stringEndsWith(lower, ".jpg") || stringEndsWith(lower, ".jpeg")) {
+    return "image/jpeg";
+  }
+  if (stringEndsWith(lower, ".bmp")) {
+    return "image/bmp";
+  }
+  return "application/octet-stream";
+}
+
+bool wallpaperMatchesCurrentSelection(const String& path) {
+  const String current = SETTINGS.sleepCustomBmp;
+  if (current.isEmpty()) {
+    return false;
+  }
+  if (current == path) {
+    return true;
+  }
+  if (path.startsWith("/sleep/")) {
+    return current == path.substring(7);
+  }
+  return false;
+}
+
+void appendWallpaperFolder(std::vector<WallpaperInfo>& items, const char* folder) {
+  auto dir = SdMan.open(folder);
+  if (!dir || !dir.isDirectory()) {
+    if (dir) {
+      dir.close();
+    }
+    return;
+  }
+
+  char name[256];
+  while (auto file = dir.openNextFile()) {
+    file.getName(name, sizeof(name));
+    const String filename = name;
+    if (!file.isDirectory() && !filename.isEmpty() && !filename.startsWith(".") &&
+        hasSupportedWallpaperExtension(filename)) {
+      WallpaperInfo info;
+      info.path = String(folder) + "/" + filename;
+      info.label = strcmp(folder, "/Wallpapers") == 0 ? String("Wallpapers/") + filename : filename;
+      items.push_back(info);
+    }
+    file.close();
+  }
+  dir.close();
+}
+
+std::vector<WallpaperInfo> collectWallpapers() {
+  std::vector<WallpaperInfo> items;
+  appendWallpaperFolder(items, "/sleep");
+  appendWallpaperFolder(items, "/Wallpapers");
+  std::sort(items.begin(), items.end(),
+            [](const WallpaperInfo& a, const WallpaperInfo& b) { return a.label < b.label; });
+
+  if (SdMan.exists("/sleep.bmp")) {
+    items.push_back({"/sleep.bmp", "sleep.bmp (SD root)"});
+  }
+  if (SdMan.exists("/sleep.jpg")) {
+    items.push_back({"/sleep.jpg", "sleep.jpg (SD root)"});
+  }
+  if (SdMan.exists("/sleep.jpeg")) {
+    items.push_back({"/sleep.jpeg", "sleep.jpeg (SD root)"});
+  }
+  return items;
+}
+
+int enabledWallpaperCount(const std::vector<WallpaperInfo>& items) {
+  int count = 0;
+  for (const auto& item : items) {
+    if (isSleepImageShuffleEnabled(item.path.c_str())) {
+      count++;
+    }
+  }
+  return count;
 }
 
 #ifndef INX_SIMULATOR_WEB_ONLY
@@ -308,6 +482,17 @@ void LocalServer::begin() {
   }
 
   Serial.printf("[%lu] [WEB] Setting up routes...\n", millis());
+  char token[33] = {};
+#ifndef SIMULATOR
+  snprintf(token, sizeof(token), "%08lx%08lx%08lx%08lx", static_cast<unsigned long>(esp_random()),
+           static_cast<unsigned long>(esp_random()), static_cast<unsigned long>(esp_random()),
+           static_cast<unsigned long>(esp_random()));
+#else
+  snprintf(token, sizeof(token), "simulator-update-token");
+#endif
+  firmwareUploadToken = token;
+  resetFirmwareUpload();
+
   server->on("/", HTTP_GET, [this] { handleRoot(); });
   server->on("/files", HTTP_GET, [this] { handleFileList(); });
   server->on("/epub", HTTP_GET, [this] { handleEpubPage(); });
@@ -317,6 +502,7 @@ void LocalServer::begin() {
   server->on("/js/jszip.min.js", HTTP_GET, [this] { handleJsZipMinJs(); });
   server->on("/js/epub_page.js", HTTP_GET, [this] { handleEpubPageJs(); });
   server->on("/js/files_page.js", HTTP_GET, [this] { handleFilesPageJs(); });
+  server->on("/update", HTTP_GET, [this] { handleUpdatePage(); });
 
   server->on("/api/status", HTTP_GET, [this] { handleStatus(); });
   server->on("/api/files", HTTP_GET, [this] { handleFileListData(); });
@@ -327,6 +513,9 @@ void LocalServer::begin() {
   server->on("/download", HTTP_GET, [this] { handleDownload(); });
 
   server->on("/upload", HTTP_POST, [this] { handleUploadPost(); }, [this] { handleUpload(); });
+  server->on("/api/update/status", HTTP_GET, [this] { handleFirmwareStatus(); });
+  server->on("/api/update/upload", HTTP_POST, [this] { handleFirmwareUploadPost(); },
+             [this] { handleFirmwareUpload(); });
 
   server->on("/mkdir", HTTP_POST, [this] { handleCreateFolder(); });
 
@@ -337,6 +526,11 @@ void LocalServer::begin() {
   server->on("/settings", HTTP_GET, [this] { handleSettingsPage(); });
   server->on("/api/settings", HTTP_GET, [this] { handleSettingsGet(); });
   server->on("/api/settings", HTTP_POST, [this] { handleSettingsUpdate(); });
+  server->on("/api/sleep-wake-trace", HTTP_GET, [this] { handleSleepWakeTraceGet(); });
+  server->on("/api/sleep-wake-trace", HTTP_DELETE, [this] { handleSleepWakeTraceClear(); });
+  server->on("/api/wallpapers", HTTP_GET, [this] { handleWallpapersGet(); });
+  server->on("/api/wallpapers/shuffle", HTTP_POST, [this] { handleWallpaperShufflePost(); });
+  server->on("/wallpaper-preview", HTTP_GET, [this] { handleWallpaperImageGet(); });
 
   server->on("/api/wifi", HTTP_GET, [this] { handleWifiGet(); });
   server->on("/api/wifi", HTTP_POST, [this] { handleWifiPost(); });
@@ -400,6 +594,10 @@ void LocalServer::stop() {
     wsUploadInProgress = false;
   }
 
+  if (firmwareOtaActive) {
+    abortFirmwareUpload("Update server stopped");
+  }
+
   if (wsServer) {
     Serial.printf("[%lu] [WEB] Stopping WebSocket server...\n", millis());
     wsServer->close();
@@ -446,6 +644,15 @@ void LocalServer::handleClient() {
 
   server->handleClient();
 
+  if (firmwareRestartAt != 0 && static_cast<long>(millis() - firmwareRestartAt) >= 0) {
+    firmwareRestartAt = 0;
+    Serial.printf("[%lu] [WEB] Rebooting into uploaded firmware\n", millis());
+#ifndef SIMULATOR
+    delay(50);
+    ESP.restart();
+#endif
+  }
+
   if (wsServer) {
     wsServer->loop();
   }
@@ -489,6 +696,11 @@ void LocalServer::handleRoot() const {
   Serial.printf("[%lu] [WEB] Served root page\n", millis());
 }
 
+void LocalServer::handleUpdatePage() const {
+  server->send(200, "text/html", UpdatePageHtml);
+  Serial.printf("[%lu] [WEB] Served firmware update page\n", millis());
+}
+
 void LocalServer::handleNotFound() const {
   String message = "404 Not Found\n\n";
   message += "URI: " + server->uri() + "\n";
@@ -508,6 +720,254 @@ void LocalServer::handleStatus() const {
 
   String json;
   serializeJson(doc, json);
+  server->send(200, "application/json", json);
+}
+
+const char* LocalServer::firmwareUploadStateName() const {
+  switch (firmwareUploadState) {
+    case FirmwareUploadState::RECEIVING:
+      return "receiving";
+    case FirmwareUploadState::READY_TO_REBOOT:
+      return "ready_to_reboot";
+    case FirmwareUploadState::FAILED:
+      return "failed";
+    case FirmwareUploadState::IDLE:
+    default:
+      return "idle";
+  }
+}
+
+void LocalServer::resetFirmwareUpload() {
+#ifndef SIMULATOR
+  if (firmwareOtaActive) {
+    esp_ota_abort(static_cast<esp_ota_handle_t>(firmwareOtaHandle));
+  }
+#endif
+  firmwareUploadState = FirmwareUploadState::IDLE;
+  firmwareExpectedSize = 0;
+  firmwareReceivedSize = 0;
+  firmwareOtaHandle = 0;
+  firmwareOtaPartition = nullptr;
+  firmwareOtaActive = false;
+  firmwareUploadName.clear();
+  firmwareUploadError.clear();
+  firmwareUploadVersion.clear();
+  firmwareRestartAt = 0;
+}
+
+void LocalServer::abortFirmwareUpload(const char* error) {
+  const std::string safeError = error && error[0] ? error : "Firmware upload failed";
+#ifndef SIMULATOR
+  if (firmwareOtaActive) {
+    esp_ota_abort(static_cast<esp_ota_handle_t>(firmwareOtaHandle));
+  }
+#endif
+  firmwareOtaHandle = 0;
+  firmwareOtaPartition = nullptr;
+  firmwareOtaActive = false;
+  firmwareUploadState = FirmwareUploadState::FAILED;
+  firmwareUploadError = safeError;
+  Serial.printf("[%lu] [WEB] [UPDATE] %s\n", millis(), firmwareUploadError.c_str());
+}
+
+void LocalServer::handleFirmwareStatus() const {
+  JsonDocument doc;
+  doc["currentVersion"] = INX_VERSION;
+  doc["state"] = firmwareUploadStateName();
+  doc["filename"] = firmwareUploadName;
+  doc["received"] = firmwareReceivedSize;
+  doc["total"] = firmwareExpectedSize;
+  doc["candidateVersion"] = firmwareUploadVersion;
+  doc["error"] = firmwareUploadError;
+  doc["token"] = firmwareUploadToken;
+  doc["rebootPending"] = firmwareRestartAt != 0;
+
+#ifndef SIMULATOR
+  const esp_partition_t* runningPartition = esp_ota_get_running_partition();
+  const esp_partition_t* updatePartition = esp_ota_get_next_update_partition(nullptr);
+  doc["activePartition"] = runningPartition ? runningPartition->label : "";
+  doc["targetPartition"] = updatePartition ? updatePartition->label : "";
+  doc["maxSize"] = updatePartition ? updatePartition->size : 0;
+
+  esp_ota_img_states_t imageState = ESP_OTA_IMG_UNDEFINED;
+  if (runningPartition && esp_ota_get_state_partition(runningPartition, &imageState) == ESP_OK) {
+    doc["activeImageState"] = static_cast<int>(imageState);
+  }
+#else
+  doc["activePartition"] = "sim";
+  doc["targetPartition"] = "sim";
+  doc["maxSize"] = 0;
+#endif
+
+  String json;
+  serializeJson(doc, json);
+  server->sendHeader("Cache-Control", "no-store");
+  server->send(200, "application/json", json);
+}
+
+void LocalServer::handleFirmwareUpload() {
+  HTTPUpload& upload = server->upload();
+
+  if (upload.status == UPLOAD_FILE_START) {
+    resetFirmwareUpload();
+    firmwareUploadName = upload.filename.c_str();
+
+    if (firmwareUploadToken != server->arg("token").c_str()) {
+      abortFirmwareUpload("Invalid update session token");
+      return;
+    }
+
+    std::string lowerName = upload.filename.c_str();
+    std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (!stringEndsWith(lowerName, ".bin")) {
+      abortFirmwareUpload("Select an ESP32 firmware .bin file");
+      return;
+    }
+
+    const unsigned long declaredSize = strtoul(server->arg("size").c_str(), nullptr, 10);
+    firmwareExpectedSize = static_cast<size_t>(declaredSize);
+    if (firmwareExpectedSize < MIN_FIRMWARE_SIZE) {
+      abortFirmwareUpload("Firmware file is missing or too small");
+      return;
+    }
+
+#ifdef SIMULATOR
+    abortFirmwareUpload("Firmware installation is unavailable in the simulator");
+    return;
+#else
+    const esp_partition_t* updatePartition = esp_ota_get_next_update_partition(nullptr);
+    if (updatePartition == nullptr) {
+      abortFirmwareUpload("No inactive OTA partition is available");
+      return;
+    }
+    if (firmwareExpectedSize > updatePartition->size) {
+      abortFirmwareUpload("Firmware is larger than the inactive OTA partition");
+      return;
+    }
+
+    esp_ota_handle_t otaHandle = 0;
+    const esp_err_t err = esp_ota_begin(updatePartition, firmwareExpectedSize, &otaHandle);
+    if (err != ESP_OK) {
+      firmwareUploadError = std::string("Could not open OTA partition: ") + esp_err_to_name(err);
+      abortFirmwareUpload(firmwareUploadError.c_str());
+      return;
+    }
+
+    firmwareOtaHandle = static_cast<uint32_t>(otaHandle);
+    firmwareOtaPartition = updatePartition;
+    firmwareOtaActive = true;
+    firmwareUploadState = FirmwareUploadState::RECEIVING;
+    Serial.printf("[%lu] [WEB] [UPDATE] Receiving %s (%u bytes) into %s\n", millis(),
+                  firmwareUploadName.c_str(), static_cast<unsigned>(firmwareExpectedSize), updatePartition->label);
+#endif
+    return;
+  }
+
+  if (upload.status == UPLOAD_FILE_WRITE) {
+    if (firmwareUploadState != FirmwareUploadState::RECEIVING || !firmwareOtaActive) {
+      return;
+    }
+    if (upload.currentSize == 0) {
+      return;
+    }
+    if (firmwareReceivedSize + upload.currentSize > firmwareExpectedSize) {
+      abortFirmwareUpload("Upload exceeded the declared firmware size");
+      return;
+    }
+    if (firmwareReceivedSize == 0) {
+      if (upload.currentSize < 14 || upload.buf[0] != ESP_IMAGE_MAGIC) {
+        abortFirmwareUpload("File is not an ESP32 application image");
+        return;
+      }
+      const uint16_t chipId = static_cast<uint16_t>(upload.buf[12]) |
+                              (static_cast<uint16_t>(upload.buf[13]) << 8);
+      if (chipId != ESP32_C3_CHIP_ID) {
+        abortFirmwareUpload("Firmware target is not ESP32-C3");
+        return;
+      }
+    }
+
+#ifndef SIMULATOR
+    const esp_err_t err =
+        esp_ota_write(static_cast<esp_ota_handle_t>(firmwareOtaHandle), upload.buf, upload.currentSize);
+    if (err != ESP_OK) {
+      firmwareUploadError = std::string("Flash write failed: ") + esp_err_to_name(err);
+      abortFirmwareUpload(firmwareUploadError.c_str());
+      return;
+    }
+#endif
+    firmwareReceivedSize += upload.currentSize;
+    esp_task_wdt_reset();
+    return;
+  }
+
+  if (upload.status == UPLOAD_FILE_END) {
+    if (firmwareUploadState != FirmwareUploadState::RECEIVING || !firmwareOtaActive) {
+      return;
+    }
+    if (firmwareReceivedSize != firmwareExpectedSize) {
+      abortFirmwareUpload("Firmware upload ended before all bytes were received");
+      return;
+    }
+
+#ifndef SIMULATOR
+    const auto* updatePartition = static_cast<const esp_partition_t*>(firmwareOtaPartition);
+    esp_err_t err = esp_ota_end(static_cast<esp_ota_handle_t>(firmwareOtaHandle));
+    firmwareOtaActive = false;
+    firmwareOtaHandle = 0;
+    if (err != ESP_OK) {
+      firmwareOtaPartition = nullptr;
+      firmwareUploadError = std::string("Firmware validation failed: ") + esp_err_to_name(err);
+      abortFirmwareUpload(firmwareUploadError.c_str());
+      return;
+    }
+
+    esp_app_desc_t description = {};
+    if (esp_ota_get_partition_description(updatePartition, &description) == ESP_OK) {
+      firmwareUploadVersion = description.version;
+    }
+
+    err = esp_ota_set_boot_partition(updatePartition);
+    if (err != ESP_OK) {
+      firmwareOtaPartition = nullptr;
+      firmwareUploadError = std::string("Could not select the new boot partition: ") + esp_err_to_name(err);
+      abortFirmwareUpload(firmwareUploadError.c_str());
+      return;
+    }
+#endif
+
+    firmwareUploadState = FirmwareUploadState::READY_TO_REBOOT;
+    Serial.printf("[%lu] [WEB] [UPDATE] Firmware validated; reboot target is ready\n", millis());
+    return;
+  }
+
+  if (upload.status == UPLOAD_FILE_ABORTED) {
+    abortFirmwareUpload("Firmware upload was cancelled");
+  }
+}
+
+void LocalServer::handleFirmwareUploadPost() {
+  if (firmwareUploadState != FirmwareUploadState::READY_TO_REBOOT) {
+    JsonDocument doc;
+    doc["ok"] = false;
+    doc["error"] = firmwareUploadError.empty() ? "Firmware upload did not complete" : firmwareUploadError;
+    String json;
+    serializeJson(doc, json);
+    server->send(400, "application/json", json);
+    return;
+  }
+
+  firmwareRestartAt = millis() + 2500;
+  JsonDocument doc;
+  doc["ok"] = true;
+  doc["received"] = firmwareReceivedSize;
+  doc["version"] = firmwareUploadVersion;
+  doc["rebootInMs"] = 2500;
+  String json;
+  serializeJson(doc, json);
+  server->sendHeader("Cache-Control", "no-store");
+  server->sendHeader("Connection", "close");
   server->send(200, "application/json", json);
 }
 
@@ -1447,12 +1907,34 @@ void LocalServer::handleSettingsGet() const {
   doc["sleepScreenCoverGrayscale"] = SETTINGS.sleepImageQuality;
   doc["sleepImageTwoBit"] = SETTINGS.sleepImageQuality != SystemSetting::SLEEP_IMAGE_LOW;
   doc["sleepCustomBmp"] = SETTINGS.sleepCustomBmp;
+  doc["sleepImageRotationEnabled"] = SETTINGS.sleepImageRotationEnabled;
+  doc["sleepImageRotationMinutes"] = SETTINGS.getSleepImageRotationMinutes();
+  doc["sleepImagePowerDoublePress"] = SETTINGS.sleepImagePowerDoublePress;
+  doc["sleepImagePowerGestureWindow"] = SETTINGS.sleepImagePowerGestureWindow;
+  doc["sleepImagePowerFirstPressMin"] = SETTINGS.sleepImagePowerFirstPressMin;
+  doc["sleepImagePowerSecondPressMax"] = SETTINGS.sleepImagePowerSecondPressMax;
+  doc["persistentSleepLogs"] = SETTINGS.persistentSleepLogs;
+  doc["lastSleepTimerArmSeconds"] = APP_STATE.lastSleepTimerArmSeconds;
+  doc["sleepTimerArmCount"] = APP_STATE.sleepTimerArmCount;
+  doc["sleepTimerWakeCount"] = APP_STATE.sleepTimerWakeCount;
+  doc["lastWakeReason"] = APP_STATE.lastWakeReason;
+  doc["lastSleepImagePath"] = APP_STATE.lastSleepImagePath;
+#ifndef INX_SIMULATOR_WEB_ONLY
+  const HalGPIO::DeepSleepDiagnostics deepSleepDiagnostics = gpio.getDeepSleepDiagnostics();
+  doc["deepSleepRequestedTimerSeconds"] = deepSleepDiagnostics.requestedTimerSeconds;
+  doc["deepSleepGpioSetupResult"] = deepSleepDiagnostics.gpioSetupResult;
+  doc["deepSleepTimerSetupResult"] = deepSleepDiagnostics.timerSetupResult;
+  doc["deepSleepWakeStubCount"] = deepSleepDiagnostics.wakeStubCount;
+  doc["deepSleepTimerWakeStubCount"] = deepSleepDiagnostics.timerWakeStubCount;
+  doc["deepSleepLastWakeStubCause"] = deepSleepDiagnostics.lastWakeStubCause;
+#endif
   if (clockAvailable) {
     doc["sleepClockStyle"] = SETTINGS.sleepClockStyle;
     doc["sleepClockTimeFormat"] = SETTINGS.sleepClockTimeFormat;
     doc["timeZoneQuarterOffset"] = SETTINGS.timeZoneQuarterOffset;
   }
   doc["hideBatteryPercentage"] = SETTINGS.hideBatteryPercentage;
+  doc["showBottomBarClock"] = SETTINGS.showBottomBarClock;
   doc["recentLibraryMode"] = SETTINGS.recentLibraryMode;
   doc["libraryMode"] = SETTINGS.libraryMode;
   doc["recentVisibleCount"] = SETTINGS.recentVisibleCount;
@@ -1481,15 +1963,20 @@ void LocalServer::handleSettingsGet() const {
 
   doc["textAntiAliasing"] = SETTINGS.textAntiAliasing;
   doc["refreshFrequency"] = SETTINGS.refreshFrequency;
+  doc["readerRefreshMode"] = SETTINGS.readerRefreshMode;
   doc["readerImageGrayscale"] = SETTINGS.readerImageGrayscale;
   doc["readerSmartRefreshOnImages"] = SETTINGS.readerSmartRefreshOnImages;
   doc["statusBar"] = SETTINGS.statusBar;
   doc["statusBarLeft"] = SETTINGS.statusBarLeft;
+  doc["statusBarInnerLeft"] = SETTINGS.statusBarInnerLeft;
   doc["statusBarMiddle"] = SETTINGS.statusBarMiddle;
+  doc["statusBarInnerRight"] = SETTINGS.statusBarInnerRight;
   doc["statusBarRight"] = SETTINGS.statusBarRight;
 
   doc["frontButtonLayout"] = SETTINGS.frontButtonLayout;
   doc["shortPwrBtn"] = SETTINGS.shortPwrBtn;
+  doc["powerWakeGuard"] = SETTINGS.powerWakeGuard;
+  doc["mainMenuNav"] = SETTINGS.mainMenuNav;
 
   doc["sleepTimeout"] = SETTINGS.sleepTimeout;
   doc["useLibraryIndex"] = SETTINGS.useLibraryIndex;
@@ -1502,9 +1989,14 @@ void LocalServer::handleSettingsGet() const {
   doc["refreshOnLoadStatistics"] = SETTINGS.refreshOnLoadStatistics;
   doc["pageAutoTurnSeconds"] = SETTINGS.pageAutoTurnSeconds;
   doc["bitmapRoundedCorners"] = SETTINGS.bitmapRoundedCorners;
+  doc["sunlightFadingFix"] = SETTINGS.sunlightFadingFix;
+  doc["antiGhostingExperimental"] = SETTINGS.antiGhostingExperimental;
   doc["opdsServerUrl"] = SETTINGS.opdsServerUrl;
   doc["opdsUsername"] = SETTINGS.opdsUsername;
   doc["opdsPasswordSet"] = strlen(SETTINGS.opdsPassword) > 0;
+  doc["newsRepoUrl"] = SETTINGS.newsRepoUrl;
+  doc["newsAutoDownload"] = SETTINGS.newsAutoDownload;
+  doc["newsDownloadHour"] = SETTINGS.newsDownloadHour;
 
   String json;
   serializeJson(doc, json);
@@ -1565,6 +2057,42 @@ void LocalServer::handleSettingsUpdate() const {
       } else {
         SETTINGS.setSleepCustomBmpFromInput(kv.value().as<const char*>());
       }
+      changed = true;
+    } else if (strcmp(key, "sleepImageRotationEnabled") == 0) {
+      SETTINGS.sleepImageRotationEnabled = (uint8_t)value ? 1 : 0;
+      changed = true;
+    } else if (strcmp(key, "sleepImageRotationMinutes") == 0) {
+      int v = static_cast<int>(value);
+      if (v < 0) v = 0;
+      if (v > 120) v = 120;
+      if (v != 0) {
+        v = ((v + 2) / 5) * 5;
+        if (v < 5) v = 5;
+      }
+      SETTINGS.sleepImageRotationMinutes = static_cast<uint8_t>(v);
+      changed = true;
+    } else if (strcmp(key, "sleepImagePowerDoublePress") == 0) {
+      SETTINGS.sleepImagePowerDoublePress = (uint8_t)value ? 1 : 0;
+      changed = true;
+    } else if (strcmp(key, "sleepImagePowerGestureWindow") == 0) {
+      SETTINGS.sleepImagePowerGestureWindow = value >= 0 && value <= 17 ? static_cast<uint8_t>(value) : 0;
+      changed = true;
+    } else if (strcmp(key, "sleepImagePowerFirstPressMin") == 0) {
+      SETTINGS.sleepImagePowerFirstPressMin = value >= 0 && value <= 15 ? static_cast<uint8_t>(value) : 0;
+      changed = true;
+    } else if (strcmp(key, "sleepImagePowerSecondPressMax") == 0) {
+      SETTINGS.sleepImagePowerSecondPressMax = value >= 0 && value <= 9 ? static_cast<uint8_t>(value) : 2;
+      changed = true;
+    } else if (strcmp(key, "persistentSleepLogs") == 0) {
+      SETTINGS.persistentSleepLogs = (uint8_t)value ? 1 : 0;
+      changed = true;
+    } else if (strcmp(key, "sleepImageAdvanceButton") == 0) {
+      SETTINGS.sleepImagePowerDoublePress = value == 7 ? 1 : 0;
+      changed = true;
+    } else if (strcmp(key, "powerWakeGuard") == 0) {
+      SETTINGS.powerWakeGuard = (value >= 0 && value < SystemSetting::POWER_WAKE_GUARD_COUNT)
+                                    ? static_cast<uint8_t>(value)
+                                    : SystemSetting::POWER_WAKE_GUARD_OFF;
       changed = true;
     } else if (clockAvailable && strcmp(key, "sleepClockStyle") == 0) {
       uint8_t v = static_cast<uint8_t>(value);
@@ -1680,6 +2208,11 @@ void LocalServer::handleSettingsUpdate() const {
     } else if (strcmp(key, "refreshFrequency") == 0) {
       SETTINGS.refreshFrequency = (uint8_t)value;
       changed = true;
+    } else if (strcmp(key, "readerRefreshMode") == 0) {
+      SETTINGS.readerRefreshMode = (value >= 0 && value < SystemSetting::READER_REFRESH_MODE_COUNT)
+                                       ? (uint8_t)value
+                                       : SystemSetting::READER_REFRESH_AUTO;
+      changed = true;
     } else if (strcmp(key, "readerImageGrayscale") == 0) {
       SETTINGS.readerImageGrayscale = (value >= 0 && value < SystemSetting::READER_IMAGE_QUALITY_COUNT)
                                           ? (uint8_t)value
@@ -1692,19 +2225,31 @@ void LocalServer::handleSettingsUpdate() const {
       SETTINGS.statusBar = (uint8_t)value;
       changed = true;
     } else if (strcmp(key, "statusBarLeft") == 0) {
-      SETTINGS.statusBarLeft = (uint8_t)value;
+      SETTINGS.statusBarLeft = value >= 0 && value < SystemSetting::STATUS_BAR_ITEM_COUNT ? (uint8_t)value : 0;
+      changed = true;
+    } else if (strcmp(key, "statusBarInnerLeft") == 0) {
+      SETTINGS.statusBarInnerLeft = value >= 0 && value < SystemSetting::STATUS_BAR_ITEM_COUNT ? (uint8_t)value : 0;
       changed = true;
     } else if (strcmp(key, "statusBarMiddle") == 0) {
-      SETTINGS.statusBarMiddle = (uint8_t)value;
+      SETTINGS.statusBarMiddle = value >= 0 && value < SystemSetting::STATUS_BAR_ITEM_COUNT ? (uint8_t)value : 0;
+      changed = true;
+    } else if (strcmp(key, "statusBarInnerRight") == 0) {
+      SETTINGS.statusBarInnerRight = value >= 0 && value < SystemSetting::STATUS_BAR_ITEM_COUNT ? (uint8_t)value : 0;
       changed = true;
     } else if (strcmp(key, "statusBarRight") == 0) {
-      SETTINGS.statusBarRight = (uint8_t)value;
+      SETTINGS.statusBarRight = value >= 0 && value < SystemSetting::STATUS_BAR_ITEM_COUNT ? (uint8_t)value : 0;
+      changed = true;
+    } else if (strcmp(key, "showBottomBarClock") == 0) {
+      SETTINGS.showBottomBarClock = (uint8_t)value ? 1 : 0;
       changed = true;
     } else if (strcmp(key, "frontButtonLayout") == 0) {
       SETTINGS.frontButtonLayout = (uint8_t)value;
       changed = true;
     } else if (strcmp(key, "shortPwrBtn") == 0) {
       SETTINGS.shortPwrBtn = (uint8_t)value;
+      changed = true;
+    } else if (strcmp(key, "mainMenuNav") == 0) {
+      SETTINGS.mainMenuNav = (uint8_t)value ? SystemSetting::MAIN_MENU_NAV_SIDE : SystemSetting::MAIN_MENU_NAV_FRONT;
       changed = true;
     } else if (strcmp(key, "sleepTimeout") == 0) {
       SETTINGS.sleepTimeout = (uint8_t)value;
@@ -1743,6 +2288,12 @@ void LocalServer::handleSettingsUpdate() const {
       if (cornerStyle > 2) cornerStyle = 2;
       SETTINGS.bitmapRoundedCorners = static_cast<uint8_t>(cornerStyle);
       changed = true;
+    } else if (strcmp(key, "sunlightFadingFix") == 0) {
+      SETTINGS.sunlightFadingFix = (uint8_t)value ? 1 : 0;
+      changed = true;
+    } else if (strcmp(key, "antiGhostingExperimental") == 0) {
+      SETTINGS.antiGhostingExperimental = (uint8_t)value ? 1 : 0;
+      changed = true;
     } else if (strcmp(key, "opdsServerUrl") == 0) {
       copySettingString(SETTINGS.opdsServerUrl, sizeof(SETTINGS.opdsServerUrl), kv.value().as<const char*>());
       changed = true;
@@ -1751,6 +2302,16 @@ void LocalServer::handleSettingsUpdate() const {
       changed = true;
     } else if (strcmp(key, "opdsPassword") == 0) {
       copySettingString(SETTINGS.opdsPassword, sizeof(SETTINGS.opdsPassword), kv.value().as<const char*>());
+      changed = true;
+    } else if (strcmp(key, "newsRepoUrl") == 0) {
+      copySettingString(SETTINGS.newsRepoUrl, sizeof(SETTINGS.newsRepoUrl), kv.value().as<const char*>());
+      changed = true;
+    } else if (strcmp(key, "newsAutoDownload") == 0) {
+      SETTINGS.newsAutoDownload = (uint8_t)value ? 1 : 0;
+      changed = true;
+    } else if (strcmp(key, "newsDownloadHour") == 0) {
+      uint8_t h = (uint8_t)value;
+      if (h <= 23) SETTINGS.newsDownloadHour = h;
       changed = true;
     }
   }
@@ -1761,6 +2322,175 @@ void LocalServer::handleSettingsUpdate() const {
   }
 
   server->send(200, "application/json", "{\"status\":\"ok\"}");
+}
+
+void LocalServer::handleSleepWakeTraceGet() const {
+#ifndef INX_SIMULATOR_WEB_ONLY
+  const HalGPIO::SleepWakeTraceSnapshot snapshot = HalGPIO::getSleepWakeTrace();
+  JsonDocument doc;
+  doc["count"] = snapshot.count;
+#ifndef SIMULATOR
+  const HalGPIO::SleepWakeTraceSnapshot persistedSnapshot = loadSleepWakeTraceCheckpoint();
+  doc["persistedCount"] = persistedSnapshot.count;
+  JsonArray persistedEvents = doc["persistedEvents"].to<JsonArray>();
+  for (uint8_t i = 0; i < persistedSnapshot.count; ++i) {
+    const HalGPIO::SleepWakeTraceEntry& entry = persistedSnapshot.entries[i];
+    JsonObject item = persistedEvents.add<JsonObject>();
+    item["seq"] = entry.sequence;
+    item["tick"] = entry.rtcTickLow;
+    item["event"] = sleepWakeTraceEventName(entry.event);
+    item["arg0"] = entry.arg0;
+    item["arg1"] = entry.arg1;
+  }
+#else
+  doc["persistedCount"] = 0;
+  doc["persistedEvents"].to<JsonArray>();
+#endif
+  JsonArray events = doc["events"].to<JsonArray>();
+  for (uint8_t i = 0; i < snapshot.count; ++i) {
+    const HalGPIO::SleepWakeTraceEntry& entry = snapshot.entries[i];
+    JsonObject item = events.add<JsonObject>();
+    item["seq"] = entry.sequence;
+    item["tick"] = entry.rtcTickLow;
+    item["event"] = sleepWakeTraceEventName(entry.event);
+    item["arg0"] = entry.arg0;
+    item["arg1"] = entry.arg1;
+  }
+  String json;
+  serializeJson(doc, json);
+  server->send(200, "application/json", json);
+#else
+  server->send(200, "application/json", "{\"count\":0,\"persistedCount\":0,\"persistedEvents\":[],\"events\":[]}");
+#endif
+}
+
+void LocalServer::handleSleepWakeTraceClear() const {
+#ifndef INX_SIMULATOR_WEB_ONLY
+  HalGPIO::clearSleepWakeTrace();
+#ifndef SIMULATOR
+  clearSleepWakeTraceCheckpoint();
+#endif
+#endif
+  server->send(200, "application/json", "{\"status\":\"ok\"}");
+}
+
+void LocalServer::handleWallpapersGet() const {
+  JsonDocument doc;
+  doc["random"] = SETTINGS.sleepCustomBmp[0] == '\0';
+  doc["selected"] = SETTINGS.sleepCustomBmp;
+  JsonArray itemsJson = doc["items"].to<JsonArray>();
+
+  const std::vector<WallpaperInfo> items = collectWallpapers();
+  for (const auto& item : items) {
+    JsonObject obj = itemsJson.add<JsonObject>();
+    obj["path"] = item.path;
+    obj["label"] = item.label;
+    obj["shuffle"] = isSleepImageShuffleEnabled(item.path.c_str());
+    obj["selected"] = wallpaperMatchesCurrentSelection(item.path);
+  }
+
+  String json;
+  serializeJson(doc, json);
+  server->send(200, "application/json", json);
+}
+
+void LocalServer::handleWallpaperImageGet() const {
+  if (!server->hasArg("path")) {
+    server->send(400, "text/plain", "Missing path");
+    return;
+  }
+
+  const String path = normalizeWallpaperPath(server->arg("path"));
+  if (!isWallpaperPathAllowed(path)) {
+    server->send(403, "text/plain", "Invalid wallpaper path");
+    return;
+  }
+  if (!SdMan.exists(path.c_str())) {
+    server->send(404, "text/plain", "Wallpaper not found");
+    return;
+  }
+
+  FsFile file = SdMan.open(path.c_str(), O_READ);
+  if (!file) {
+    server->send(500, "text/plain", "Failed to open wallpaper");
+    return;
+  }
+  if (file.isDirectory()) {
+    file.close();
+    server->send(400, "text/plain", "Path is a directory");
+    return;
+  }
+
+  server->setContentLength(file.size());
+  server->send(200, wallpaperMimeType(path).c_str(), "");
+
+  WiFiClient client = server->client();
+  client.write(file);
+  file.close();
+}
+
+void LocalServer::handleWallpaperShufflePost() const {
+  if (!server->hasArg("plain")) {
+    server->send(400, "text/plain", "Missing JSON body");
+    return;
+  }
+
+  JsonDocument doc;
+  const DeserializationError error = deserializeJson(doc, server->arg("plain"));
+  if (error) {
+    server->send(400, "text/plain", "Invalid JSON");
+    return;
+  }
+
+  bool settingsChanged = false;
+
+  if (doc["path"].is<const char*>() && !doc["shuffle"].isNull()) {
+    const String path = normalizeWallpaperPath(doc["path"].as<const char*>());
+    if (!isWallpaperPathAllowed(path) || !SdMan.exists(path.c_str())) {
+      server->send(400, "application/json", "{\"ok\":false,\"error\":\"invalid_path\"}");
+      return;
+    }
+
+    const bool enabled = doc["shuffle"].as<bool>();
+    setSleepImageShuffleEnabled(path.c_str(), enabled);
+    if (!enabled) {
+      const std::vector<WallpaperInfo> items = collectWallpapers();
+      if (enabledWallpaperCount(items) == 0) {
+        setSleepImageShuffleEnabled(path.c_str(), true);
+        server->send(409, "application/json", "{\"ok\":false,\"error\":\"last_enabled\"}");
+        return;
+      }
+    }
+  }
+
+  if (!doc["random"].isNull()) {
+    if (doc["random"].as<bool>()) {
+      SETTINGS.setSleepCustomBmpFromInput("");
+      settingsChanged = true;
+    } else if (doc["selected"].is<const char*>()) {
+      const String selected = normalizeWallpaperPath(doc["selected"].as<const char*>());
+      if (!isWallpaperPathAllowed(selected) || !SdMan.exists(selected.c_str())) {
+        server->send(400, "application/json", "{\"ok\":false,\"error\":\"invalid_selected\"}");
+        return;
+      }
+      SETTINGS.setSleepCustomBmpFromInput(selected.c_str());
+      settingsChanged = true;
+    }
+  } else if (doc["selected"].is<const char*>()) {
+    const String selected = normalizeWallpaperPath(doc["selected"].as<const char*>());
+    if (!isWallpaperPathAllowed(selected) || !SdMan.exists(selected.c_str())) {
+      server->send(400, "application/json", "{\"ok\":false,\"error\":\"invalid_selected\"}");
+      return;
+    }
+    SETTINGS.setSleepCustomBmpFromInput(selected.c_str());
+    settingsChanged = true;
+  }
+
+  if (settingsChanged) {
+    SETTINGS.saveToFile();
+  }
+
+  server->send(200, "application/json", "{\"ok\":true}");
 }
 
 void LocalServer::handleWifiGet() const {

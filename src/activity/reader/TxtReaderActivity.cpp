@@ -10,6 +10,7 @@
 #include <Serialization.h>
 #include <Utf8.h>
 
+#include "activity/reader/ReaderRefresh.h"
 #include "state/RecentBooks.h"
 #include "state/Session.h"
 #include "state/SystemSetting.h"
@@ -421,13 +422,8 @@ void TxtReaderActivity::renderPage() {
   renderLines();
   renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
 
-  if (pagesUntilFullRefresh <= 1) {
-    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
-    pagesUntilFullRefresh = SETTINGS.getRefreshFrequency();
-  } else {
-    renderer.displayBuffer();
-    pagesUntilFullRefresh--;
-  }
+  ReaderRefresh::displayWithCycle(renderer, pagesUntilFullRefresh, SETTINGS.getRefreshFrequency(),
+                                  SETTINGS.readerRefreshMode);
 
   if (SETTINGS.textAntiAliasing && renderer.text.supportsAntiAliasing(cachedFontId)) {
     renderer.storeBwBuffer();

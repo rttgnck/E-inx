@@ -19,7 +19,9 @@
 #include <utility>
 #include <vector>
 
+#include "state/BookState.h"
 #include "state/RecentBooks.h"
+#include "state/ReadingDailyStats.h"
 #include "state/SystemSetting.h"
 #include "system/Fonts.h"
 #include "system/MappedInputManager.h"
@@ -33,12 +35,16 @@ constexpr int FONT_SANS = ATKINSON_HYPERLEGIBLE_10_FONT_ID;
 constexpr int FONT_SANS_SM = ATKINSON_HYPERLEGIBLE_8_FONT_ID;
 constexpr int FONT_SERIF = LITERATA_14_FONT_ID;
 constexpr int FONT_SERIF_MD = LITERATA_16_FONT_ID;
-constexpr int FONT_SERIF_LG = LITERATA_18_FONT_ID;
+constexpr int FONT_SERIF_LG = LITERATA_16_FONT_ID;
 constexpr int FONT_SERIF_SM = LITERATA_12_FONT_ID;
 constexpr float kPi = 3.14159265f;
 
 static std::string epubCachePathForBookPath(const std::string& bookPath) {
   return "/.metadata/epub/" + std::to_string(std::hash<std::string>{}(bookPath));
+}
+
+static std::string xtcCachePathForBookPath(const std::string& bookPath) {
+  return "/.metadata/xtc/" + std::to_string(std::hash<std::string>{}(bookPath));
 }
 
 static bool statsFileExistsForCachePath(const std::string& cachePath) {
@@ -49,11 +55,73 @@ static bool statsFileExistsForCachePath(const std::string& cachePath) {
   return SdMan.exists(statsPath.c_str());
 }
 
+static bool editedMetadataForCachePath(const std::string& cachePath, std::string& title, std::string& author,
+                                       float* progressPercent = nullptr) {
+  for (const auto& book : RECENT_BOOKS.getBooks()) {
+    const std::string recentCache = book.cachePath.empty() ? epubCachePathForBookPath(book.path) : book.cachePath;
+    if (recentCache == cachePath || epubCachePathForBookPath(book.path) == cachePath ||
+        xtcCachePathForBookPath(book.path) == cachePath) {
+      title = book.title;
+      author = book.author;
+      if (progressPercent != nullptr && book.progress >= 0.f) {
+        *progressPercent = book.progress * 100.f;
+      }
+      return !title.empty() || !author.empty();
+    }
+  }
+
+  for (const auto& book : BOOK_STATE.books) {
+    if (book.path.empty()) {
+      continue;
+    }
+    if (epubCachePathForBookPath(book.path) == cachePath || xtcCachePathForBookPath(book.path) == cachePath) {
+      title = book.title;
+      author = book.author;
+      return !title.empty() || !author.empty();
+    }
+  }
+  return false;
+}
+
+static bool applyEditedMetadataToStats(BookReadingStats& stats) {
+  std::string title;
+  std::string author;
+  float progressPercent = -1.f;
+  if (!editedMetadataForCachePath(stats.path, title, author, &progressPercent)) {
+    return false;
+  }
+  bool changed = false;
+  if (!title.empty() && stats.title != title) {
+    stats.title = title;
+    changed = true;
+  }
+  if (!author.empty() && stats.author != author) {
+    stats.author = author;
+    changed = true;
+  }
+  if (progressPercent >= 0.f && stats.progressPercent <= 0.f) {
+    stats.progressPercent = progressPercent;
+  }
+  return changed;
+}
+
+static std::string formatDailyDuration(const uint32_t ms) {
+  const uint32_t minutes = ms / 60000UL;
+  const uint32_t hours = minutes / 60UL;
+  char buf[24];
+  if (hours > 0) {
+    snprintf(buf, sizeof(buf), "%uh%02um", static_cast<unsigned>(hours), static_cast<unsigned>(minutes % 60UL));
+  } else {
+    snprintf(buf, sizeof(buf), "%um", static_cast<unsigned>(minutes));
+  }
+  return std::string(buf);
+}
+
 /** Global “All items” donut row (must match measureAllItemsBodyHeight). */
-constexpr int kGlobalAllItemsDonutR = 68;
+constexpr int kGlobalAllItemsDonutR = 64;
 constexpr int kGlobalAllItemsDonutThick = 10;
-constexpr int kGlobalAllItemsDonutPadT = 14;
-constexpr int kGlobalAllItemsDonutPadB = 14;
+constexpr int kGlobalAllItemsDonutPadT = 8;
+constexpr int kGlobalAllItemsDonutPadB = 8;
 constexpr int kGlobalAllItemsPadSide = 12;
 constexpr int kGlobalAllItemsDonutTextGap = 10;
 
@@ -298,8 +366,7 @@ static int drawGlobalAllItemsSecondBand(const GfxRenderer& renderer, int innerLe
   /** Prefer the caller’s Y, never above yMaxRule, never below yRuleMin when there is room (old code only did min→yMax,
    * which stole the gap under the gauge). */
   const int capPref = std::min(yRulePreferred, yMaxRule);
-  // Lift the whole finished/opened band so it clears the button hints below.
-  int yRule = std::min(yMaxRule, std::max(yRuleMin, capPref)) - 10;
+  const int yRule = yMaxRule >= yRuleMin ? std::min(yMaxRule, std::max(yRuleMin, capPref)) : yMaxRule;
   renderer.line.render(innerLeft, yRule, innerRight, yRule, true);
   const int midX = innerLeft + innerW / 2;
   drawVertRule(renderer, midX, yRule, g.kMetricsH);
@@ -336,7 +403,7 @@ static int drawGlobalAllItemsSecondBand(const GfxRenderer& renderer, int innerLe
  */
 int drawFourColumnStatsNx2(const GfxRenderer& renderer, int innerLeft, int y, int innerW, const char* const* vals,
                            const char* const* labs, int numRows, int cellH, int row0LiftPx,
-                           int gapBeforeLastRowPx = 0) {
+                           int gapBeforeLastRowPx = 0, int valueFont = FONT_SERIF_LG, int labelFont = FONT_SANS_SM) {
   if (numRows < 1) {
     return 0;
   }
@@ -361,8 +428,8 @@ int drawFourColumnStatsNx2(const GfxRenderer& renderer, int innerLeft, int y, in
                          true);
   }
 
-  const int lhVal = renderer.text.getLineHeight(FONT_SERIF_LG);
-  const int lhLab = renderer.text.getLineHeight(FONT_SANS_SM);
+  const int lhVal = renderer.text.getLineHeight(valueFont);
+  const int lhLab = renderer.text.getLineHeight(labelFont);
   constexpr int kValLabGap = 4;
   const int stackH = lhVal + kValLabGap + lhLab;
 
@@ -385,10 +452,10 @@ int drawFourColumnStatsNx2(const GfxRenderer& renderer, int innerLeft, int y, in
     } else {
       rowTop = (stackH <= innerBand) ? bandTop : std::max(bandTop, bandBottom - stackH);
     }
-    const std::string valT = renderer.text.truncate(FONT_SERIF_LG, val, cw);
-    const std::string labT = renderer.text.truncate(FONT_SANS_SM, lab, cw);
-    renderer.text.render(FONT_SERIF_LG, cellLeft, rowTop, valT.c_str());
-    renderer.text.render(FONT_SANS_SM, cellLeft, rowTop + lhVal + kValLabGap, labT.c_str());
+    const std::string valT = renderer.text.truncate(valueFont, val, cw);
+    const std::string labT = renderer.text.truncate(labelFont, lab, cw);
+    renderer.text.render(valueFont, cellLeft, rowTop, valT.c_str());
+    renderer.text.render(labelFont, cellLeft, rowTop + lhVal + kValLabGap, labT.c_str());
   };
   for (int row = 0; row < numRows; ++row) {
     cell(0, row, vals[row * 2], labs[row * 2]);
@@ -411,6 +478,13 @@ void StatisticActivity::loadStats() {
   ScreenComponents::LoadingProgressLayout layout =
       ScreenComponents::LoadingProgress::show(renderer, "Loading statistics...", 12);
   allBooksStats = getAllBooksStats();
+  RECENT_BOOKS.loadFromFile();
+  BOOK_STATE.loadFromFile();
+  for (auto& stats : allBooksStats) {
+    if (applyEditedMetadataToStats(stats)) {
+      saveBookStats(stats.path.c_str(), stats);
+    }
+  }
   loadedBookStatsFlags_.assign(allBooksStats.size(), 1);
   ScreenComponents::LoadingProgress::setProgress(renderer, layout, 40);
   std::sort(allBooksStats.begin(), allBooksStats.end(),
@@ -435,18 +509,17 @@ void StatisticActivity::hydrateFromStorage() {
 void StatisticActivity::indexBookStatsPaths() {
   std::set<std::string> seen;
   loadedBookStatsFlags_.clear();
-  auto addCachePath = [&](const std::string& cachePath, const RecentBook* recent) {
+  auto addCachePath = [&](const std::string& cachePath, const std::string& title, const std::string& author,
+                          const float progress) {
     if (cachePath.empty() || seen.count(cachePath) != 0 || !statsFileExistsForCachePath(cachePath)) {
       return;
     }
     BookReadingStats placeholder;
     placeholder.path = cachePath;
-    if (recent != nullptr) {
-      placeholder.title = recent->title;
-      placeholder.author = recent->author;
-      if (recent->progress >= 0.f) {
-        placeholder.progressPercent = recent->progress * 100.f;
-      }
+    placeholder.title = title;
+    placeholder.author = author;
+    if (progress >= 0.f) {
+      placeholder.progressPercent = progress * 100.f;
     }
     allBooksStats.push_back(placeholder);
     loadedBookStatsFlags_.push_back(0);
@@ -459,7 +532,16 @@ void StatisticActivity::indexBookStatsPaths() {
     if (cachePath.empty() && !book.path.empty()) {
       cachePath = epubCachePathForBookPath(book.path);
     }
-    addCachePath(cachePath, &book);
+    addCachePath(cachePath, book.title, book.author, book.progress);
+  }
+
+  BOOK_STATE.loadFromFile();
+  for (const auto& book : BOOK_STATE.books) {
+    if (book.path.empty()) {
+      continue;
+    }
+    addCachePath(epubCachePathForBookPath(book.path), book.title, book.author, -1.f);
+    addCachePath(xtcCachePathForBookPath(book.path), book.title, book.author, -1.f);
   }
 
   auto appendMetadataRoot = [&](const char* rootDir) {
@@ -480,7 +562,7 @@ void StatisticActivity::indexBookStatsPaths() {
       }
       if (entry.isDirectory()) {
         entry.getName(name, sizeof(name));
-        addCachePath(std::string(rootDir) + "/" + std::string(name), nullptr);
+        addCachePath(std::string(rootDir) + "/" + std::string(name), "", "", -1.f);
       }
       entry.close();
     }
@@ -501,11 +583,19 @@ bool StatisticActivity::ensureBookStatsLoaded(const int bookIdx) {
   }
   BookReadingStats& slot = allBooksStats[static_cast<size_t>(bookIdx)];
   const std::string cachePath = slot.path;
+  const float preferredProgress = slot.progressPercent;
   BookReadingStats loaded;
   if (!loadBookStats(cachePath.c_str(), loaded)) {
     return false;
   }
   loaded.path = cachePath;
+  const bool changed = applyEditedMetadataToStats(loaded);
+  if (preferredProgress >= 0.f && loaded.progressPercent <= 0.f) {
+    loaded.progressPercent = preferredProgress;
+  }
+  if (changed) {
+    saveBookStats(cachePath.c_str(), loaded);
+  }
   slot = loaded;
   if (bookIdx < static_cast<int>(loadedBookStatsFlags_.size())) {
     loadedBookStatsFlags_[static_cast<size_t>(bookIdx)] = 1;
@@ -599,8 +689,8 @@ void StatisticActivity::renderCover(const std::string& bookPath, int x, int y, i
 
 std::pair<int, int> StatisticActivity::drawGlobalRecentThumbBlock(int boxX, int yTop, const std::string& bookPath,
                                                                   const std::string& title) const {
-  constexpr int kMaxBoxW = 165;
-  constexpr int kMaxBoxH = 182;
+  constexpr int kMaxBoxW = 84;
+  constexpr int kMaxBoxH = 96;
   constexpr int kOuterPad = 2;
   const int availW = std::max(1, kMaxBoxW - 4);
   const int availH = std::max(1, kMaxBoxH - 4);
@@ -648,8 +738,8 @@ std::pair<int, int> StatisticActivity::drawGlobalRecentThumbBlock(int boxX, int 
     }
   }
 
-  constexpr int kFallbackW = 120;
-  constexpr int kFallbackH = 132;
+  constexpr int kFallbackW = 68;
+  constexpr int kFallbackH = 76;
   const int coverW = kFallbackW + 4;
   const int coverH = kFallbackH + 4;
   const int frameW = coverW + 2 * kOuterPad;
@@ -693,10 +783,10 @@ int StatisticActivity::renderHeader(int y, int innerLeft, int innerRight, int in
 }
 
 int StatisticActivity::renderRecent(int y, int innerLeft, int innerRight, int innerW, int Margin) const {
-  constexpr int kThumbTextGap = 15;
+  constexpr int kThumbTextGap = 12;
   constexpr int kGlobalThumbOuterPad = 2;
-  constexpr int g8 = 8;
-  constexpr int g10 = 10;
+  constexpr int g8 = 4;
+  constexpr int g10 = 6;
 
   const int lhSerif = renderer.text.getLineHeight(FONT_SERIF);
   const int lhSans = renderer.text.getLineHeight(FONT_SANS);
@@ -725,8 +815,8 @@ int StatisticActivity::renderRecent(int y, int innerLeft, int innerRight, int in
     snprintf(progLabel, sizeof(progLabel), "Book progress: %.0f%%", prog * 100.f);
     renderer.text.render(FONT_SANS_SM, textX, yProg, progLabel);
     const int yBar = yProg + lhSm + g8;
-    drawThinProgressBar(renderer, textX, yBar, textColW, 8, prog);
-    yThumbBottom = yBar + 8;
+    drawThinProgressBar(renderer, textX, yBar, textColW, 6, prog);
+    yThumbBottom = yBar + 6;
   } else {
     tf = drawGlobalRecentThumbBlock(innerLeft, yCoverTop, "", "");
     const int nw = renderer.text.getWidth(FONT_SANS, "No recent book");
@@ -740,25 +830,39 @@ int StatisticActivity::renderRecent(int y, int innerLeft, int innerRight, int in
 }
 
 int StatisticActivity::renderFirstGrid(int y, int innerLeft, int innerW, int Margin) const {
-  constexpr int kStatsRowH = 58;
-  const int hFirstGrid = kStatsRowH * 2;
+  constexpr int kStatsRows = 3;
+  const int valueFont = FONT_SERIF;
+  const int labelFont = FONT_SANS_SM;
+  const int stackH = renderer.text.getLineHeight(valueFont) + 3 + renderer.text.getLineHeight(labelFont);
+  const int statsRowH = std::max(42, stackH + 8);
 
-  char v0[20], v1[20], v2[20], v3[20];
+  char v0[20], v1[24], v2[20], v3[20], v4[20], v5[20];
   const float totalHrs = static_cast<float>(globalStats.totalReadingTimeMs) / 3600000.f;
   snprintf(v0, sizeof(v0), "%.1f", totalHrs);
-  const float avgMinPerSess =
-      globalStats.totalSessions > 0
-          ? static_cast<float>(globalStats.totalReadingTimeMs) / 60000.f / static_cast<float>(globalStats.totalSessions)
-          : 0.f;
-  snprintf(v1, sizeof(v1), "%.0f", avgMinPerSess);
-  snprintf(v2, sizeof(v2), "%u", globalStats.totalPagesRead);
+  const ReadingDailySummary dailyStats = ReadingDailyStats::loadSummary();
+  if (dailyStats.hasClock) {
+    const std::string today = formatDailyDuration(dailyStats.todayReadingMs);
+    const std::string goal = formatDailyDuration(dailyStats.goalReadingMs);
+    snprintf(v1, sizeof(v1), "%s/%s", today.c_str(), goal.c_str());
+    const std::string minPerDay = formatDailyDuration(dailyStats.recent7ReadingMs / 7UL);
+    snprintf(v2, sizeof(v2), "%s", minPerDay.c_str());
+    snprintf(v3, sizeof(v3), "%u/%u", static_cast<unsigned>(dailyStats.currentGoalStreakDays),
+             static_cast<unsigned>(dailyStats.maxGoalStreakDays));
+  } else {
+    snprintf(v1, sizeof(v1), "-");
+    snprintf(v2, sizeof(v2), "-");
+    snprintf(v3, sizeof(v3), "-");
+  }
+  snprintf(v4, sizeof(v4), "%u", globalStats.totalPagesRead);
   const float readMin = static_cast<float>(globalStats.totalReadingTimeMs) / 60000.f;
   const float pgPerMin = readMin > 0.01f ? static_cast<float>(globalStats.totalPagesRead) / readMin : 0.f;
-  snprintf(v3, sizeof(v3), "%.1f", pgPerMin);
+  snprintf(v5, sizeof(v5), "%.1f", pgPerMin);
 
-  drawFourColumnStats2x2(renderer, innerLeft, y, innerW, v0, "Total hours", v1, "Avg. min/session", v2, "Pages read",
-                         v3, "Pages per min", kStatsRowH, 0);
-  return y + hFirstGrid + Margin;
+  const char* vals[] = {v0, v1, v2, v3, v4, v5};
+  const char* labs[] = {"Total hours", "Daily goal", "Min/day", "Goal streak", "Pages read", "Pages per min"};
+  const int gridH = drawFourColumnStatsNx2(renderer, innerLeft, y, innerW, vals, labs, kStatsRows, statsRowH, 0, 0,
+                                           valueFont, labelFont);
+  return y + gridH + Margin;
 }
 
 int StatisticActivity::renderGuage(int y, int innerLeft, int innerRight, int Margin) const {
@@ -901,20 +1005,19 @@ void StatisticActivity::render() {
     if (!allBooksStats.empty()) {
       ensureBookStatsLoaded(0);
     }
-    constexpr int Margin = 10;
+    constexpr int Margin = 4;
+    constexpr int kSectionGap = 4;
     constexpr int kMarginX = 30;
     const int innerLeft = kMarginX;
     const int innerRight = renderer.getScreenWidth() - kMarginX;
     const int innerW = innerRight - innerLeft;
 
-    int GAP = 0;
-    GAP = TAB_BAR_HEIGHT + GAP;
-    GAP = renderHeader(GAP, innerLeft, innerRight, innerW, Margin);
-    GAP = renderRecent(GAP, innerLeft, innerRight, innerW, Margin);
-    constexpr int kMainStatsLiftPx = 10;
-    GAP = renderFirstGrid(GAP + kMarginX - kMainStatsLiftPx, innerLeft, innerW, Margin);
-    GAP = renderGuage(GAP + kMarginX - 10 - kMainStatsLiftPx, innerLeft - 130, innerRight, Margin);
-    renderSecondGrid(GAP + kMarginX - kMainStatsLiftPx, innerLeft, innerRight, contentBottom);
+    int y = TAB_BAR_HEIGHT;
+    y = renderHeader(y, innerLeft, innerRight, innerW, Margin);
+    y = renderRecent(y, innerLeft, innerRight, innerW, Margin);
+    y = renderFirstGrid(y + kSectionGap, innerLeft, innerW, Margin);
+    y = renderGuage(y + kSectionGap, innerLeft - 110, innerRight, Margin);
+    renderSecondGrid(y + kSectionGap, innerLeft, innerRight, contentBottom);
   } else {
     ensureBookStatsLoaded(v - 1);
     renderSingleBookView(v - 1, contentTopSingle, contentBottom);
@@ -927,7 +1030,7 @@ void StatisticActivity::render() {
 }
 
 void StatisticActivity::loop() {
-  if (tabSelectorIndex == 4 && updateRequired) {
+  if (tabSelectorIndex == 5 && updateRequired) {
     updateRequired = false;
     render();
   }
@@ -952,7 +1055,7 @@ void StatisticActivity::loop() {
   const bool confirmPressed = Activity::mappedInput.wasPressed(MappedInputManager::Button::Confirm);
 
   if (leftPressed) {
-    tabSelectorIndex = 3;
+    tabSelectorIndex = 4;
     navigateToSelectedMenu();
     return;
   }
@@ -963,7 +1066,7 @@ void StatisticActivity::loop() {
     return;
   }
 
-  if (tabSelectorIndex != 4) {
+  if (tabSelectorIndex != 5) {
     return;
   }
 

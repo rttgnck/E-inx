@@ -84,6 +84,7 @@ class HalGPIO {
   void begin();
 
   void update();
+  void flushInput();
   void injectOneShotPress(uint8_t buttonIndex) {
 #if CROSSPOINT_EMULATED == 0
     inputMgr.injectOneShotPress(buttonIndex);
@@ -92,6 +93,7 @@ class HalGPIO {
 #endif
   }
   bool isPressed(uint8_t buttonIndex) const;
+  bool isAnyPressed() const;
   bool wasPressed(uint8_t buttonIndex) const;
   bool wasAnyPressed() const;
   bool wasReleased(uint8_t buttonIndex) const;
@@ -99,7 +101,68 @@ class HalGPIO {
   unsigned long getHeldTime() const;
   MotionGesture readMotionGesture(uint8_t orientation, uint8_t mode, uint8_t sensitivity);
 
-  void startDeepSleep();
+  void prepareDeepSleep(uint32_t timerWakeupSeconds = 0, bool retainPowerForButtonGesture = false);
+  [[noreturn]] void enterPreparedDeepSleep();
+  void startDeepSleep(uint32_t timerWakeupSeconds = 0, bool retainPowerForButtonGesture = false);
+
+  struct DeepSleepDiagnostics {
+    uint32_t requestedTimerSeconds;
+    int32_t gpioSetupResult;
+    int32_t timerSetupResult;
+    uint32_t wakeStubCount;
+    uint32_t timerWakeStubCount;
+    uint32_t lastWakeStubCause;
+  };
+
+  enum class SleepWakeTraceEvent : uint8_t {
+    SleepPlan = 1,
+    ArmResult = 2,
+    SleepEnter = 3,
+    WakeStub = 4,
+    EarlyWake = 5,
+    DeadlineCheck = 6,
+    PowerSample = 7,
+    ClassifiedTimer = 8,
+    PowerAction = 9,
+    SetupWake = 10,
+    ImageResult = 11,
+    TimerBranch = 12,
+    DoublePressBranch = 13,
+    ShortPressBranch = 14,
+    UiBranch = 15,
+    SleepStage = 16,
+    PowerGesture = 17,
+  };
+
+  struct SleepWakeTraceEntry {
+    uint32_t sequence;
+    uint32_t rtcTickLow;
+    uint32_t arg0;
+    uint32_t arg1;
+    SleepWakeTraceEvent event;
+  };
+
+  static constexpr uint8_t SLEEP_WAKE_TRACE_CAPACITY = 64;
+
+  struct SleepWakeTraceSnapshot {
+    uint8_t count = 0;
+    SleepWakeTraceEntry entries[SLEEP_WAKE_TRACE_CAPACITY];
+  };
+
+  struct SleepTimerTickState {
+    uint64_t startTicks = 0;
+    uint64_t currentTicks = 0;
+    uint64_t durationTicks = 0;
+  };
+
+  DeepSleepDiagnostics getDeepSleepDiagnostics() const;
+  static uint32_t getLastWakeStubCause();
+  static bool lastWakeStubWasTimer();
+  static bool sleepTimerDeadlineReached();
+  static SleepTimerTickState getSleepTimerTickState();
+  static void recordSleepWakeTrace(SleepWakeTraceEvent event, uint32_t arg0 = 0, uint32_t arg1 = 0);
+  static SleepWakeTraceSnapshot getSleepWakeTrace();
+  static void clearSleepWakeTrace();
 
   int getBatteryPercentage() const;
 
@@ -109,9 +172,11 @@ class HalGPIO {
   bool writeDateTime(const DateTime& dateTime) const;
   bool syncRtcFromSystemTime() const;
 
-  enum class WakeupReason { PowerButton, AfterFlash, AfterUSBPower, Other };
+  enum class WakeupReason { PowerButton, SleepTimer, Button, AfterFlash, AfterUSBPower, Other };
 
   WakeupReason getWakeupReason() const;
+  uint64_t getWakeupGpioMask() const;
+  bool wakeupIncludedGpio(uint8_t gpioPin) const;
 
   static constexpr uint8_t BTN_BACK = 0;
   static constexpr uint8_t BTN_CONFIRM = 1;

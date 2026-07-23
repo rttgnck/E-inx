@@ -23,6 +23,7 @@ class MenuDrawer {
     SHOW_BOOKMARKS,
     SHOW_ANNOTATIONS,
     SELECT_CHAPTER,
+    GO_TO_PAGE,
     GO_TO_PERCENT,
     KOREADER_SYNC,
     GO_HOME,
@@ -51,6 +52,9 @@ class MenuDrawer {
   /** Called when the percent view is opened, to seed its initial value (current reading position). */
   using PercentProvider = std::function<int()>;
   using PercentSelectedCallback = std::function<void(int percent)>;
+  using PageProvider = std::function<int()>;
+  using PageCountProvider = std::function<int()>;
+  using PageSelectedCallback = std::function<void(int page)>;
 
   /**
    * @brief Constructs a new MenuDrawer
@@ -132,6 +136,12 @@ class MenuDrawer {
 
   void setPercentSelectedCallback(PercentSelectedCallback callback) { percentSelectedCallback = std::move(callback); }
 
+  void setPageProvider(PageProvider provider) { pageProvider = std::move(provider); }
+
+  void setPageCountProvider(PageCountProvider provider) { pageCountProvider = std::move(provider); }
+
+  void setPageSelectedCallback(PageSelectedCallback callback) { pageSelectedCallback = std::move(callback); }
+
   /** Used for layout-aware bookmark drawer button labels (Up / Del). */
   void setMappedInputForHints(MappedInputManager* input) { mappedInputForHints = input; }
 
@@ -176,6 +186,9 @@ class MenuDrawer {
   /** Renders the "Go to Percent" view in the same drawer panel/chrome as TOC/Bookmarks/Annotations. */
   void renderPercent();
 
+  /** Renders the "Go to Page" view in the same drawer panel/chrome as TOC/Bookmarks/Annotations. */
+  void renderPage();
+
   void refreshMainMenuSelection(int previousIndex, bool redrawScrollIndicator);
 
   /**
@@ -195,6 +208,8 @@ class MenuDrawer {
 
   void handlePercentInput(const MappedInputManager& input);
 
+  void handlePageInput(const MappedInputManager& input);
+
   /**
    * @brief Exits TOC view and returns to main menu
    */
@@ -205,6 +220,8 @@ class MenuDrawer {
   void exitAnnotations();
 
   void exitPercent();
+
+  void exitPage();
 
   void refreshBookmarkEntriesFromProvider();
 
@@ -225,6 +242,9 @@ class MenuDrawer {
   AnnotationSelectCallback annotationSelectCallback;
   PercentProvider percentProvider;
   PercentSelectedCallback percentSelectedCallback;
+  PageProvider pageProvider;
+  PageCountProvider pageCountProvider;
+  PageSelectedCallback pageSelectedCallback;
   MappedInputManager* mappedInputForHints = nullptr;
 
   std::string bookTitle;
@@ -257,7 +277,10 @@ class MenuDrawer {
   bool showingBookmarks = false;
   bool showingAnnotations = false;
   bool showingPercent = false;
+  bool showingPage = false;
   int percentValue_ = 0;
+  int pageValue_ = 1;
+  int pageCount_ = 1;
   bool isFromToc = false;
   int tocSelectedIndex = 0;
   int tocScrollOffset = 0;

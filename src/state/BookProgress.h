@@ -17,6 +17,8 @@ class BookProgress {
     uint16_t chapterPageCount = 0;
     uint32_t lastReadTimestamp = 0;
     float progressPercent = 0.0f;
+    uint16_t bookPage = 0;       ///< 1-based estimated page within the whole book (0 = unknown)
+    uint16_t bookPageCount = 0;  ///< Estimated whole-book page count (0 = unknown)
   };
 
   explicit BookProgress(const std::string& cachePath);

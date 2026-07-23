@@ -35,6 +35,7 @@ enum class GroupType {
   DEVICE_ADVANCED,
   DEVICE_ACTIONS,
   IMAGE,
+  IF_FOUND,
 };
 
 struct ValueRange {
@@ -138,6 +139,7 @@ class CategorySettingsActivity final : public ActivityWithSubactivity, public Me
   SemaphoreHandle_t renderingMutex = nullptr;
   bool updateRequired = false;
   bool halfRefreshOnLoadApplied_ = false;
+  bool forceFullRefreshNext_ = false;  ///< One-shot: next render uses FULL_REFRESH (e.g. after a dark-mode toggle)
   bool selectorOpen = false;
   uint8_t selectorMode = 0;
   int selectedIndex = 0;
@@ -216,7 +218,7 @@ class CategorySettingsActivity final : public ActivityWithSubactivity, public Me
         onTabLibrary(std::move(tabNavigateLibrary)),
         onTabSync(std::move(tabNavigateSync)),
         onTabStatistics(std::move(tabNavigateStatistics)) {
-    tabSelectorIndex = 2;
+    tabSelectorIndex = 3;
     itemsPerPage = (renderer.getScreenHeight() - TAB_BAR_HEIGHT * 2 - 80) / LIST_ITEM_HEIGHT;
     if (itemsPerPage < 1) itemsPerPage = 1;
 
@@ -231,6 +233,7 @@ class CategorySettingsActivity final : public ActivityWithSubactivity, public Me
     groupExpanded[GroupType::DEVICE_ADVANCED] = false;
     groupExpanded[GroupType::DEVICE_ACTIONS] = false;
     groupExpanded[GroupType::IMAGE] = false;
+    groupExpanded[GroupType::IF_FOUND] = false;
   }
   void onEnter() override;
   void onExit() override;

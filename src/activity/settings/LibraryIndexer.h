@@ -5,7 +5,10 @@
  * @brief Public interface and types for LibraryIndexer.
  */
 
+#include <Arduino.h>
+#include <Epub.h>
 #include <SDCardManager.h>
+#include <Xtc.h>
 
 #include <algorithm>
 #include <cstring>
@@ -160,7 +163,8 @@ class LibraryIndexer {
 
           currentBook++;
           entryCount++;
-          if (progressCallback) progressCallback(currentBook, totalBooks, name);
+          generateMissingThumbnail(thisItemPath);
+          if (progressCallback) progressCallback(currentBook, totalBooks, thisItemPath.c_str());
         }
       }
       file.close();
@@ -196,5 +200,34 @@ class LibraryIndexer {
     std::replace(result.begin(), result.end(), '_', ' ');
     std::replace(result.begin(), result.end(), '-', ' ');
     return result;
+  }
+
+  static void generateMissingThumbnail(const std::string& path) {
+    const char* ext = strrchr(path.c_str(), '.');
+    if (!ext) {
+      return;
+    }
+    if (strcasecmp(ext, ".epub") == 0) {
+      Epub epub(path, "/.metadata/epub");
+      const std::string thumbJpegPath = epub.getThumbJpegPath();
+      const std::string thumbBmpPath = epub.getThumbBmpPath();
+      if (SdMan.exists(thumbJpegPath.c_str()) || SdMan.exists(thumbBmpPath.c_str())) {
+        return;
+      }
+      if (!epub.load() || !epub.generateThumbBmp()) {
+        Serial.printf("[%lu] [LIBIDX] Thumbnail generation failed: %s\n", millis(), path.c_str());
+      }
+      return;
+    }
+    if (strcasecmp(ext, ".xtc") == 0) {
+      Xtc xtc(path, "/.metadata/xtc");
+      const std::string thumbBmpPath = xtc.getThumbBmpPath();
+      if (SdMan.exists(thumbBmpPath.c_str())) {
+        return;
+      }
+      if (!xtc.load() || !xtc.generateThumbBmp()) {
+        Serial.printf("[%lu] [LIBIDX] Thumbnail generation failed: %s\n", millis(), path.c_str());
+      }
+    }
   }
 };

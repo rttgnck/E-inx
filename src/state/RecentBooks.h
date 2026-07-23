@@ -55,6 +55,14 @@ class RecentBooks {
   void updateProgress(const std::string& path, float progress);
 
   /**
+   * @brief Updates the title/author of an existing entry in place (no reorder). No-op if path isn't tracked.
+   * @param path Full path to the book file
+   * @param title New title
+   * @param author New author
+   */
+  void updateMetadata(const std::string& path, const std::string& title, const std::string& author);
+
+  /**
    * @brief Remove a book from the recent list
    * @param path Full path to the EPUB file
    */

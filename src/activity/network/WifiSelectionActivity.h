@@ -75,7 +75,7 @@ class WifiSelectionActivity final : public ActivityWithSubactivity, public Menu 
         Menu(),
         onComplete(onComplete),
         onTabChange(onTabChange) {
-    tabSelectorIndex = 3;
+    tabSelectorIndex = 4;
   }
 
   /**

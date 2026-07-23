@@ -10,7 +10,7 @@
 #include "../ActivityWithSubactivity.h"
 #include "../Menu.h"
 
-enum class NetworkMode { JOIN_NETWORK, CONNECT_CALIBRE, CREATE_HOTSPOT, OPDS_BROWSER };
+enum class NetworkMode { JOIN_NETWORK, UPDATE_SERVER, CONNECT_CALIBRE, CREATE_HOTSPOT, OPDS_BROWSER };
 
 class SyncActivity final : public ActivityWithSubactivity, public Menu {
  public:
@@ -25,7 +25,7 @@ class SyncActivity final : public ActivityWithSubactivity, public Menu {
         onRecentOpen(onRecentOpen),
         onStatisticsOpen(onStatisticsOpen),
         onSettingsOpen(onSettingsOpen) {
-    tabSelectorIndex = 3;
+    tabSelectorIndex = 4;
   };
 
   void onEnter() override;
@@ -44,7 +44,7 @@ class SyncActivity final : public ActivityWithSubactivity, public Menu {
   void render() const;
 
   void navigateToSelectedMenu() override {
-    if (tabSelectorIndex == 2 && onSettingsOpen) onSettingsOpen();
-    if (tabSelectorIndex == 4 && onStatisticsOpen) onStatisticsOpen();
+    if (tabSelectorIndex == 3 && onSettingsOpen) onSettingsOpen();
+    if (tabSelectorIndex == 5 && onStatisticsOpen) onStatisticsOpen();
   }
 };

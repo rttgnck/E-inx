@@ -8,6 +8,7 @@
 
 #include <cstdio>
 
+#include "state/ReadingDailyStats.h"
 #include "system/Fonts.h"
 
 namespace {
@@ -70,6 +71,7 @@ void EpubReadingStats::endPageTimer(const Epub& epub, const Section* section, co
 
   if (section) {
     stats_.totalReadingTimeMs += timeSpent;
+    ReadingDailyStats::recordReadingMs(timeSpent);
     stats_.totalPagesRead++;
     stats_.lastReadTimeMs = currentTime;
     stats_.lastSpineIndex = currentSpineIndex;
@@ -99,6 +101,10 @@ void EpubReadingStats::addChapterRead() { stats_.totalChaptersRead++; }
 void EpubReadingStats::save(const Epub& epub) {
   stats_.lastReadTimeMs = millis();
   ::saveBookStats(epub.getCachePath().c_str(), stats_);
+}
+
+uint32_t EpubReadingStats::sessionElapsedMs() const {
+  return readerSessionStartMs_ == 0 ? 0 : millis() - readerSessionStartMs_;
 }
 
 void EpubReadingStats::display(GfxRenderer& renderer, const Epub& epub) const {

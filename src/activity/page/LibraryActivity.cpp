@@ -268,17 +268,20 @@ void drawShelfNoCoverTitle(const GfxRenderer& renderer, int x, int y, int w, int
 /**
  * @brief Construct a new Library Activity object
  */
-LibraryActivity::LibraryActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                 const std::function<void()>& onGoToRecent,
-                                 const std::function<void(const std::string& path)>& onSelectBook,
-                                 const std::function<void()>& onRecentOpen, const std::function<void()>& onSettingsOpen,
-                                 const std::string& initialPath)
+LibraryActivity::LibraryActivity(
+    GfxRenderer& renderer, MappedInputManager& mappedInput, const std::function<void()>& onGoToRecent,
+    const std::function<void(const std::string& path)>& onSelectBook, const std::function<void()>& onRecentOpen,
+    const std::function<void()>& onNewsOpen, const std::function<void()>& onSettingsOpen,
+    const std::function<void(const std::string& bookPath, const std::string& returnPath)>& onEditMetadata,
+    const std::string& initialPath)
     : Activity("Library", renderer, mappedInput),
       Menu(),
       onGoToRecent(onGoToRecent),
       onSelectBook(onSelectBook),
       onRecentOpen(onRecentOpen),
+      onNewsOpen(onNewsOpen),
       onSettingsOpen(onSettingsOpen),
+      onEditMetadata(onEditMetadata),
       savedFolderPath(""),
       basepath(initialPath),
       selectedTagKey_(""),
@@ -294,7 +297,7 @@ LibraryActivity::LibraryActivity(GfxRenderer& renderer, MappedInputManager& mapp
       currentPage(0),
       totalPages(0),
       itemsPerPage(FOLDER_ITEMS_PER_PAGE) {
-  tabSelectorIndex = 1;
+  tabSelectorIndex = 2;
 }
 
 LibraryActivity::~LibraryActivity() { freeLibraryShelfBuffer(); }
@@ -465,7 +468,7 @@ int LibraryActivity::drawHeaderButton(const std::string& text, int headerY, int 
  */
 int LibraryActivity::drawSortButton(int headerY, int headerHeight, int rightX) const {
   std::string buttonText = getSortButtonText();
-  bool isSelected = isSortButtonSelected && tabSelectorIndex == 1;
+  bool isSelected = isSortButtonSelected && tabSelectorIndex == 2;
   return drawHeaderButton(buttonText, headerY, headerHeight, rightX, isSelected);
 }
 
@@ -1318,7 +1321,7 @@ void LibraryActivity::render() const {
     containerWidth -= 64;
   }
 
-  bool headerSelected = isHeaderButtonSelected && tabSelectorIndex == 1;
+  bool headerSelected = isHeaderButtonSelected && tabSelectorIndex == 2;
   if (headerSelected)
     renderer.rectangle.fill(0, TAB_BAR_HEIGHT, containerWidth, TAB_BAR_HEIGHT,
                             static_cast<int>(GfxRenderer::FillTone::Ink));
@@ -1328,7 +1331,7 @@ void LibraryActivity::render() const {
   int headerButtonRightX = drawSortButton(TAB_BAR_HEIGHT, TAB_BAR_HEIGHT, screenWidth);
   if (showIndexButton) {
     drawIndexButton(TAB_BAR_HEIGHT, TAB_BAR_HEIGHT, headerButtonRightX + 10,
-                    isIndexButtonSelected && tabSelectorIndex == 1);
+                    isIndexButtonSelected && tabSelectorIndex == 2);
   }
 
   renderer.line.render(0, TAB_BAR_HEIGHT + TAB_BAR_HEIGHT, screenWidth, TAB_BAR_HEIGHT * 2);
@@ -1541,7 +1544,7 @@ void LibraryActivity::onEnter() {
     basepath = "/";
   }
   resetNavigation();
-  tabSelectorIndex = 1;
+  tabSelectorIndex = 2;
   currentSortMode = storageToSortMode(SETTINGS.librarySortMode);
   if (!SETTINGS.useLibraryIndex && (currentSortMode == SortMode::TAG_AZ || currentSortMode == SortMode::TAG_ZA)) {
     currentSortMode = SortMode::TITLE_AZ;
@@ -1604,11 +1607,7 @@ void LibraryActivity::onExit() {
   }
 
   SETTINGS.librarySortMode = sortModeToStorage(currentSortMode);
-  // Shelf mode is never persisted as the resumed view - it decodes real cover thumbnails on entry,
-  // which is a bad first thing to wait on when you just wanted to jump to Settings. Land back on
-  // Collection (folder view) next time instead.
-  SETTINGS.libraryViewMode =
-      viewModeToStorage(currentViewMode == ViewMode::SHELF_VIEW ? ViewMode::FOLDER_VIEW : currentViewMode);
+  SETTINGS.libraryViewMode = viewModeToStorage(currentViewMode);
   SETTINGS.saveToFile();
 
   Activity::onExit();
@@ -1719,7 +1718,7 @@ void LibraryActivity::loop() {
   // Item-list step buttons depend on the main-menu nav setting (front: Up/Down, side: Left/Right).
   const MappedInputManager::Button itemPrevBtn = itemPrevButton();
   const MappedInputManager::Button itemNextBtn = itemNextButton();
-  if (tabSelectorIndex == 1) {
+  if (tabSelectorIndex == 2) {
     if (Activity::mappedInput.wasPressed(itemNextBtn)) {
       wantDownStep = true;
       libraryListDownNextMs = millis() + LIB_LIST_REPEAT_INITIAL_MS;
@@ -1755,32 +1754,41 @@ void LibraryActivity::loop() {
   const bool confirmHeld = Activity::mappedInput.wasReleased(MappedInputManager::Button::Confirm);
   const unsigned long holdTime = Activity::mappedInput.getHeldTime();
 
-  if (tabSelectorIndex == 1 && !isHeaderButtonSelected && !isIndexButtonSelected && !isSortButtonSelected) {
+  if (tabSelectorIndex == 2 && !isHeaderButtonSelected && !isIndexButtonSelected && !isSortButtonSelected) {
     if (handlePageNavigation(wantUpStep, wantDownStep, itemCount)) {
       return;
     }
   }
 
   if (confirmHeld && holdTime >= FAVORITE_HOLD_MS) {
+    // Long-press a book opens the metadata editor (title/author + favorite toggle).
+    if (onEditMetadata && !isHeaderButtonSelected && !isIndexButtonSelected && !isSortButtonSelected &&
+        selectorIndex >= 0 && selectorIndex < itemCount) {
+      const LibraryItem& item = currentPageItems[selectorIndex];
+      if (item.type == LibraryItem::Type::BOOK) {
+        onEditMetadata(item.path, basepath);
+        return;
+      }
+    }
     handleFavoriteLongPress(itemCount);
     return;
   }
 
-  if (tabSelectorIndex != 1) return;
+  if (tabSelectorIndex != 2) return;
 
   if (leftPressed) {
-    tabSelectorIndex = 0;
+    tabSelectorIndex = 1;
     navigateToSelectedMenu();
     return;
   }
 
   if (rightPressed) {
-    tabSelectorIndex = 2;
+    tabSelectorIndex = 3;
     navigateToSelectedMenu();
     return;
   }
 
-  if (tabSelectorIndex != 1) return;
+  if (tabSelectorIndex != 2) return;
 
   handleSelectionNavigation(wantUpStep, wantDownStep, itemCount);
   handleButtonSelectionNavigation(leftPressed, rightPressed);
@@ -1993,7 +2001,7 @@ void LibraryActivity::handleButtonSelectionNavigation(bool leftPressed, bool rig
  * @param itemCount Number of items in current list
  */
 void LibraryActivity::handleConfirmAction(int itemCount) {
-  if (tabSelectorIndex != 1) return;
+  if (tabSelectorIndex != 2) return;
 
   if (isHeaderButtonSelected) {
     toggleViewMode();
@@ -2273,7 +2281,7 @@ void LibraryActivity::renderLibraryList(int startY) const {
 
   for (int i = listScrollOffset; i < static_cast<int>(items.size()) && itemsDrawn < maxVisibleItems; i++) {
     const LibraryItem& item = items[i];
-    bool isSelected = (tabSelectorIndex == 1 && selectorIndex == i && !isHeaderButtonSelected &&
+    bool isSelected = (tabSelectorIndex == 2 && selectorIndex == i && !isHeaderButtonSelected &&
                        !isIndexButtonSelected && !isSortButtonSelected);
     int itemHeight = getItemHeight(item);
 
@@ -2386,14 +2394,15 @@ void LibraryActivity::renderShelfCard(const int index, const int startY, const b
 void LibraryActivity::renderLibraryShelf(int startY) const {
   const int count = std::min(static_cast<int>(currentPageItems.size()), SHELF_ITEMS_PER_PAGE);
   for (int i = 0; i < count; ++i) {
-    const bool selected = !suppressShelfSelectionHighlight_ && tabSelectorIndex == 1 && selectorIndex == i &&
+    const bool selected = !suppressShelfSelectionHighlight_ && tabSelectorIndex == 2 && selectorIndex == i &&
                           !isHeaderButtonSelected && !isIndexButtonSelected && !isSortButtonSelected;
     renderShelfCard(i, startY, selected);
   }
 }
 
 bool LibraryActivity::canUseLibraryShelfBuffer() const {
-  return currentViewMode == ViewMode::SHELF_VIEW && !currentPageItems.empty();
+  return currentViewMode == ViewMode::SHELF_VIEW && tabSelectorIndex == 2 && !isHeaderButtonSelected &&
+         !isIndexButtonSelected && !isSortButtonSelected && selectorIndex >= 0 && !currentPageItems.empty();
 }
 
 bool LibraryActivity::storeLibraryShelfBuffer() const {
@@ -2448,7 +2457,7 @@ void LibraryActivity::drawShelfSelectionOverlay(int startY) const {
       selectorIndex >= SHELF_ITEMS_PER_PAGE) {
     return;
   }
-  if (tabSelectorIndex != 1 || isHeaderButtonSelected || isIndexButtonSelected || isSortButtonSelected) {
+  if (tabSelectorIndex != 2 || isHeaderButtonSelected || isIndexButtonSelected || isSortButtonSelected) {
     return;
   }
   renderShelfCard(selectorIndex, startY, true);
@@ -2495,7 +2504,7 @@ void LibraryActivity::renderLibraryGrid(int startY) const {
     const int col = i % LIB_GRID_COLS;
     const int boxX = row0X + col * (frameW + LIB_GRID_GAP_X);
     const int boxY = blockTop + row * (frameH + gapY);
-    const bool selected = tabSelectorIndex == 1 && selectorIndex == i && !isHeaderButtonSelected &&
+    const bool selected = tabSelectorIndex == 2 && selectorIndex == i && !isHeaderButtonSelected &&
                           !isIndexButtonSelected && !isSortButtonSelected;
 
     // renderer.rectangle.fill(boxX, boxY, frameW, frameH, false, rounded);

@@ -55,7 +55,7 @@ class OtaUpdateActivity : public ActivityWithSubactivity, public Menu {
   explicit OtaUpdateActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                              const std::function<void()>& goBack)
       : ActivityWithSubactivity("OtaUpdate", renderer, mappedInput), Menu(), goBack(goBack), updater() {
-    tabSelectorIndex = 3;
+    tabSelectorIndex = 4;
   }
   void onEnter() override;
   void onExit() override;

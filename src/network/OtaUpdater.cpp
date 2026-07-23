@@ -13,6 +13,8 @@
 #include <freertos/task.h>
 
 #include <algorithm>
+#include <cctype>
+#include <cstdlib>
 #include <new>
 
 #include "esp_heap_caps.h"
@@ -29,6 +31,50 @@ constexpr size_t kMaxReleaseJsonBytes = 12288;
 
 constexpr int kGithubCheckTaskStack = 16384;
 constexpr int kGithubCheckTaskPrio = 3;
+constexpr size_t kMinimumFirmwareSize = 64 * 1024;
+constexpr uint8_t kEspImageMagic = 0xE9;
+constexpr uint16_t kEsp32C3ChipId = 5;
+
+struct ParsedVersion {
+  int major = 0;
+  int minor = 0;
+  int patch = 0;
+  bool prerelease = false;
+};
+
+bool parseVersion(const char* text, ParsedVersion& out) {
+  if (text == nullptr) {
+    return false;
+  }
+  while (*text && std::isspace(static_cast<unsigned char>(*text))) {
+    ++text;
+  }
+  if (*text == 'v' || *text == 'V') {
+    ++text;
+  }
+
+  char* end = nullptr;
+  const long major = strtol(text, &end, 10);
+  if (end == text || *end != '.') {
+    return false;
+  }
+  text = end + 1;
+  const long minor = strtol(text, &end, 10);
+  if (end == text || *end != '.') {
+    return false;
+  }
+  text = end + 1;
+  const long patch = strtol(text, &end, 10);
+  if (end == text || major < 0 || minor < 0 || patch < 0) {
+    return false;
+  }
+
+  out.major = static_cast<int>(major);
+  out.minor = static_cast<int>(minor);
+  out.patch = static_cast<int>(patch);
+  out.prerelease = *end == '-';
+  return true;
+}
 
 char* local_buf = nullptr;
 int output_len = 0;
@@ -165,7 +211,6 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdateWorker() {
   client_config.buffer_size = 2048;
   client_config.buffer_size_tx = 1024;
   client_config.timeout_ms = 25000;
-  client_config.skip_cert_common_name_check = true;
   client_config.crt_bundle_attach = esp_crt_bundle_attach;
   client_config.keep_alive_enable = false;
 
@@ -175,6 +220,12 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdateWorker() {
   }
   output_len = 0;
   local_buf_cap = 0;
+  updateAvailable = false;
+  latestVersion.clear();
+  otaUrl.clear();
+  otaSize = 0;
+  processedSize = 0;
+  totalSize = 0;
 
   struct localBufCleaner {
     char** bufPtr;
@@ -209,6 +260,13 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdateWorker() {
   esp_task_wdt_reset();
   if (esp_err != ESP_OK) {
     Serial.printf("[%lu] [OTA] esp_http_client_perform Failed : %s\n", millis(), esp_err_to_name(esp_err));
+    esp_http_client_cleanup(client_handle);
+    return HTTP_ERROR;
+  }
+
+  const int statusCode = esp_http_client_get_status_code(client_handle);
+  if (statusCode != 200) {
+    Serial.printf("[%lu] [OTA] GitHub returned HTTP %d\n", millis(), statusCode);
     esp_http_client_cleanup(client_handle);
     return HTTP_ERROR;
   }
@@ -250,6 +308,9 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdateWorker() {
     if (doc["assets"][i]["name"] == "firmware.bin") {
       otaUrl = doc["assets"][i]["browser_download_url"].as<std::string>();
       otaSize = doc["assets"][i]["size"].as<size_t>();
+      if (otaUrl.empty() || otaSize == 0) {
+        continue;
+      }
       totalSize = otaSize;
       updateAvailable = true;
       break;
@@ -270,19 +331,19 @@ bool OtaUpdater::isUpdateNewer() const {
     return false;
   }
 
-  int currentMajor, currentMinor, currentPatch;
-  int latestMajor, latestMinor, latestPatch;
+  ParsedVersion current;
+  ParsedVersion latest;
+  if (!parseVersion(INX_VERSION, current) || !parseVersion(latestVersion.c_str(), latest)) {
+    Serial.printf("[%lu] [OTA] Could not compare versions current=%s latest=%s\n", millis(), INX_VERSION,
+                  latestVersion.c_str());
+    return false;
+  }
 
-  const auto currentVersion = INX_VERSION;
+  if (latest.major != current.major) return latest.major > current.major;
+  if (latest.minor != current.minor) return latest.minor > current.minor;
+  if (latest.patch != current.patch) return latest.patch > current.patch;
 
-  sscanf(latestVersion.c_str(), "%d.%d.%d", &latestMajor, &latestMinor, &latestPatch);
-  sscanf(currentVersion, "%d.%d.%d", &currentMajor, &currentMinor, &currentPatch);
-
-  if (latestMajor != currentMajor) return latestMajor > currentMajor;
-
-  if (latestMinor != currentMinor) return latestMinor > currentMinor;
-
-  return latestPatch > currentPatch;
+  return current.prerelease && !latest.prerelease;
 }
 
 const std::string& OtaUpdater::getLatestVersion() const { return latestVersion; }
@@ -302,7 +363,6 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate() {
   client_config.timeout_ms = 15000;
   client_config.buffer_size = 8192;
   client_config.buffer_size_tx = 8192;
-  client_config.skip_cert_common_name_check = true;
   client_config.crt_bundle_attach = esp_crt_bundle_attach;
   client_config.keep_alive_enable = true;
 
@@ -314,6 +374,7 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate() {
 
   esp_err = esp_https_ota_begin(&ota_config, &ota_handle);
   if (esp_err != ESP_OK) {
+    esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
     Serial.printf("[%lu] [OTA] HTTP OTA Begin Failed: %s\n", millis(), esp_err_to_name(esp_err));
     return INTERNAL_UPDATE_ERROR;
   }
@@ -363,8 +424,24 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdateFromSd(const char* firmware
   }
 
   const size_t firmwareSize = file.size();
-  if (firmwareSize == 0) {
-    Serial.printf("[%lu] [OTA] SD firmware is empty: %s\n", millis(), firmwarePath);
+  if (firmwareSize < kMinimumFirmwareSize) {
+    Serial.printf("[%lu] [OTA] SD firmware is too small: %s (%u bytes)\n", millis(), firmwarePath,
+                  static_cast<unsigned>(firmwareSize));
+    file.close();
+    return INTERNAL_UPDATE_ERROR;
+  }
+
+  uint8_t imageHeader[14] = {};
+  if (file.read(imageHeader, sizeof(imageHeader)) != static_cast<int>(sizeof(imageHeader)) ||
+      imageHeader[0] != kEspImageMagic) {
+    Serial.printf("[%lu] [OTA] SD file is not an ESP application image: %s\n", millis(), firmwarePath);
+    file.close();
+    return INTERNAL_UPDATE_ERROR;
+  }
+  const uint16_t chipId =
+      static_cast<uint16_t>(imageHeader[12]) | (static_cast<uint16_t>(imageHeader[13]) << 8);
+  if (chipId != kEsp32C3ChipId || !file.seek(0)) {
+    Serial.printf("[%lu] [OTA] SD firmware is not for ESP32-C3: %s\n", millis(), firmwarePath);
     file.close();
     return INTERNAL_UPDATE_ERROR;
   }
@@ -372,6 +449,12 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdateFromSd(const char* firmware
   const esp_partition_t* updatePartition = esp_ota_get_next_update_partition(nullptr);
   if (updatePartition == nullptr) {
     Serial.printf("[%lu] [OTA] No OTA update partition available\n", millis());
+    file.close();
+    return INTERNAL_UPDATE_ERROR;
+  }
+  if (firmwareSize > updatePartition->size) {
+    Serial.printf("[%lu] [OTA] SD firmware exceeds %s (%u > %u bytes)\n", millis(), updatePartition->label,
+                  static_cast<unsigned>(firmwareSize), static_cast<unsigned>(updatePartition->size));
     file.close();
     return INTERNAL_UPDATE_ERROR;
   }

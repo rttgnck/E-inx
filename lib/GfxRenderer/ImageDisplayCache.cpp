@@ -16,7 +16,7 @@
 
 namespace {
 constexpr uint32_t kMagic = 0x43445249;  // IRDC, little-endian on disk
-constexpr uint16_t kVersion = 39;        // bump: regenerate GRAY2 planes after quality gray-level swap
+constexpr uint16_t kVersion = 46;        // bump: sleep images preserve uploaded tone in dark mode
 constexpr const char* kCacheDir = "/.system/cache";
 constexpr size_t kIoBufferSize = 512;
 
@@ -62,7 +62,7 @@ uint32_t sourceSize(const std::string& path) {
 }
 
 uint32_t cacheHash(const std::string& sourcePath, const int width, const int height, const VisibleRect& visible,
-                   const ImageDisplayCacheOptions& options) {
+                   const ImageDisplayCacheOptions& options, const bool darkMode) {
   uint32_t hash = 2166136261u;
   for (const char c : sourcePath) {
     hash = fnv1aAdd(hash, static_cast<uint8_t>(c));
@@ -79,6 +79,7 @@ uint32_t cacheHash(const std::string& sourcePath, const int width, const int hei
   hash = fnv1aAdd(hash, options.renderPlane);
   hash = fnv1aAdd(hash, static_cast<uint8_t>(options.roundedOutside));
   hash = fnv1aAdd(hash, options.quality ? 1 : 0);
+  hash = fnv1aAdd(hash, darkMode ? 1 : 0);
   hash = fnv1aAdd(hash, gpio.deviceIsX3() ? 1 : 0);
   return hash;
 }
@@ -179,7 +180,7 @@ std::string ImageDisplayCache::pathFor(GfxRenderer& renderer, const std::string&
   }
   char name[32];
   snprintf(name, sizeof(name), "/%08lx.irdc",
-           static_cast<unsigned long>(cacheHash(sourcePath, width, height, visible, options)));
+           static_cast<unsigned long>(cacheHash(sourcePath, width, height, visible, options, renderer.isDarkMode())));
   return std::string(kCacheDir) + name;
 }
 
@@ -207,6 +208,15 @@ bool ImageDisplayCache::exists(GfxRenderer& renderer, const std::string& sourceP
                         header.rowBytes == static_cast<uint16_t>((visible.width + 7) / 8);
   file.close();
   return headerOk;
+}
+
+bool ImageDisplayCache::remove(GfxRenderer& renderer, const std::string& sourcePath, const int x, const int y,
+                               const int width, const int height, const ImageDisplayCacheOptions& options) {
+  const std::string cachePath = pathFor(renderer, sourcePath, x, y, width, height, options);
+  if (cachePath.empty() || !SdMan.exists(cachePath.c_str())) {
+    return false;
+  }
+  return SdMan.remove(cachePath.c_str());
 }
 
 bool ImageDisplayCache::renderIfAvailable(GfxRenderer& renderer, const std::string& sourcePath, const int x,
@@ -248,6 +258,7 @@ bool ImageDisplayCache::renderIfAvailable(GfxRenderer& renderer, const std::stri
           (visible.width + 7) / 8);
     }
     file.close();
+    SdMan.remove(cachePath.c_str());
     return false;
   }
 
@@ -268,6 +279,7 @@ bool ImageDisplayCache::renderIfAvailable(GfxRenderer& renderer, const std::stri
                       cachePath.c_str(), rowBase, visible.height);
       }
       file.close();
+      SdMan.remove(cachePath.c_str());
       return false;
     }
     for (int row = 0; row < rowsThisRead; row++) {
@@ -352,11 +364,13 @@ bool ImageDisplayCache::store(GfxRenderer& renderer, const std::string& sourcePa
     return false;
   }
 
+  const std::string tempPath = cachePath + ".tmp";
+  SdMan.remove(tempPath.c_str());
+
   FsFile file;
-  if (!SdMan.openFileForWrite("IDC", cachePath, file)) {
+  if (!SdMan.openFileForWrite("IDC", tempPath, file)) {
     if (options.quality) {
-      Serial.printf("[%lu] [IDC-Q] store open failed plane=%s path=%s\n", millis(), planeName(options),
-                    cachePath.c_str());
+      Serial.printf("[%lu] [IDC-Q] store open failed plane=%s path=%s\n", millis(), planeName(options), tempPath.c_str());
     }
     return false;
   }
@@ -365,7 +379,7 @@ bool ImageDisplayCache::store(GfxRenderer& renderer, const std::string& sourcePa
   uint8_t rows[kIoBufferSize];
   if (rowBytes > static_cast<int>(sizeof(rows))) {
     file.close();
-    SdMan.remove(cachePath.c_str());
+    SdMan.remove(tempPath.c_str());
     return false;
   }
 
@@ -378,7 +392,7 @@ bool ImageDisplayCache::store(GfxRenderer& renderer, const std::string& sourcePa
                               .reserved = 0};
   if (file.write(&header, sizeof(header)) != sizeof(header)) {
     file.close();
-    SdMan.remove(cachePath.c_str());
+    SdMan.remove(tempPath.c_str());
     return false;
   }
 
@@ -395,12 +409,19 @@ bool ImageDisplayCache::store(GfxRenderer& renderer, const std::string& sourcePa
                       cachePath.c_str(), rowBase, visible.height);
       }
       file.close();
-      SdMan.remove(cachePath.c_str());
+      SdMan.remove(tempPath.c_str());
       return false;
     }
   }
 
+  file.sync();
   file.close();
+
+  SdMan.remove(cachePath.c_str());
+  if (!SdMan.rename(tempPath.c_str(), cachePath.c_str())) {
+    SdMan.remove(tempPath.c_str());
+    return false;
+  }
 
   return true;
 }

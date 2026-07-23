@@ -8,6 +8,7 @@
 #include <Epub.h>
 #include <GfxRenderer.h>
 #include <HardwareSerial.h>
+#include <ImageDisplayCache.h>
 #include <ImageRender.h>
 #include <SDCardManager.h>
 #include <Xtc.h>
@@ -28,7 +29,7 @@ constexpr uint32_t kWorkerTaskStack = 12288;
 // Pre-populate the on-disk display cache for a freshly-generated thumbnail at the exact size
 // LibraryActivity's shelf grid draws covers at, so the shelf's first render after "Generate
 // Thumbnails" hits the cache (raw read) instead of paying for a fresh decode+dither per book.
-void precacheShelfThumbnail(GfxRenderer& renderer, const std::string& thumbPath) {
+void precacheShelfThumbnail(GfxRenderer& renderer, const std::string& thumbPath, const bool force) {
   int coverW = 0;
   int coverH = 0;
   LibraryActivity::getShelfCoverSize(renderer, coverW, coverH);
@@ -40,6 +41,15 @@ void precacheShelfThumbnail(GfxRenderer& renderer, const std::string& thumbPath)
   // cache is keyed on these, so a mismatch here means the shelf render misses this cache entry.
   options.cropToFill = true;
   options.useDisplayCache = true;
+  if (force) {
+    ImageDisplayCacheOptions cacheOptions;
+    cacheOptions.cropToFill = options.cropToFill;
+    cacheOptions.mode = options.mode;
+    cacheOptions.renderPlane = static_cast<uint8_t>(renderer.getRenderMode());
+    cacheOptions.roundedOutside = options.roundedOutside;
+    cacheOptions.quality = options.quality;
+    ImageDisplayCache::remove(renderer, thumbPath, 0, 0, coverW - 2, coverH - 2, cacheOptions);
+  }
   ImageRender::create(renderer, thumbPath).render(0, 0, coverW - 2, coverH - 2, options);
 }
 
@@ -117,6 +127,7 @@ void ThumbnailGeneratorActivity::onEnter() {
   renderingMutex = xSemaphoreCreateMutex();
   updateRequired = true;
   cancelRequested = false;
+  forceRegeneration = false;
   state = READY;
   processedCount = 0;
   generatedCount = 0;
@@ -165,12 +176,16 @@ void ThumbnailGeneratorActivity::displayTaskLoop() {
   }
 }
 
-void ThumbnailGeneratorActivity::startGeneration() {
+void ThumbnailGeneratorActivity::startGeneration(const bool force) {
   if (state == RUNNING || workerTaskHandle != nullptr) {
     return;
   }
 
   cancelRequested = false;
+  forceRegeneration = force;
+  if (forceRegeneration) {
+    SdMan.removeDir("/.system/cache");
+  }
   state = RUNNING;
   processedCount = 0;
   generatedCount = 0;
@@ -200,12 +215,17 @@ bool ThumbnailGeneratorActivity::processBook(const std::string& path) {
     Epub epub(path, "/.metadata/epub");
     const std::string thumbJpegPath = epub.getThumbJpegPath();
     const std::string thumbBmpPath = epub.getThumbBmpPath();
-    if (SdMan.exists(thumbJpegPath.c_str()) || SdMan.exists(thumbBmpPath.c_str())) {
+    if (!forceRegeneration && (SdMan.exists(thumbJpegPath.c_str()) || SdMan.exists(thumbBmpPath.c_str()))) {
       skippedCount++;
       processedCount++;
       return true;
     }
-    const bool ok = epub.load() && epub.generateThumbBmp();
+    const bool loaded = epub.load();
+    if (loaded && forceRegeneration) {
+      SdMan.remove(thumbJpegPath.c_str());
+      SdMan.remove(thumbBmpPath.c_str());
+    }
+    const bool ok = loaded && epub.generateThumbBmp();
     processedCount++;
     if (ok) {
       generatedCount++;
@@ -214,9 +234,9 @@ bool ThumbnailGeneratorActivity::processBook(const std::string& path) {
       // the two don't interleave writes to the same buffer or race a displayBuffer() refresh.
       if (renderingMutex && xSemaphoreTake(renderingMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
         if (SdMan.exists(thumbJpegPath.c_str())) {
-          precacheShelfThumbnail(renderer, thumbJpegPath);
+          precacheShelfThumbnail(renderer, thumbJpegPath, forceRegeneration);
         } else if (SdMan.exists(thumbBmpPath.c_str())) {
-          precacheShelfThumbnail(renderer, thumbBmpPath);
+          precacheShelfThumbnail(renderer, thumbBmpPath, forceRegeneration);
         }
         xSemaphoreGive(renderingMutex);
       }
@@ -229,17 +249,21 @@ bool ThumbnailGeneratorActivity::processBook(const std::string& path) {
   if (StringUtils::checkFileExtension(path, ".xtc")) {
     Xtc xtc(path, "/.metadata/xtc");
     const std::string thumbBmpPath = xtc.getThumbBmpPath();
-    if (SdMan.exists(thumbBmpPath.c_str())) {
+    if (!forceRegeneration && SdMan.exists(thumbBmpPath.c_str())) {
       skippedCount++;
       processedCount++;
       return true;
     }
-    const bool ok = xtc.load() && xtc.generateThumbBmp();
+    const bool loaded = xtc.load();
+    if (loaded && forceRegeneration) {
+      SdMan.remove(thumbBmpPath.c_str());
+    }
+    const bool ok = loaded && xtc.generateThumbBmp();
     processedCount++;
     if (ok) {
       generatedCount++;
       if (renderingMutex && xSemaphoreTake(renderingMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
-        precacheShelfThumbnail(renderer, thumbBmpPath);
+        precacheShelfThumbnail(renderer, thumbBmpPath, forceRegeneration);
         xSemaphoreGive(renderingMutex);
       }
     } else {
@@ -338,9 +362,9 @@ void ThumbnailGeneratorActivity::render() {
   if (state == READY) {
     renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, centerY - 92, "GENERATE THUMBNAILS", true,
                            EpdFontFamily::BOLD);
-    renderer.text.centered(ATKINSON_HYPERLEGIBLE_14_FONT_ID, centerY - 54, "Build missing covers", true,
+    renderer.text.centered(ATKINSON_HYPERLEGIBLE_14_FONT_ID, centerY - 54, "Build book covers", true,
                            EpdFontFamily::BOLD);
-    renderer.text.centered(ATKINSON_HYPERLEGIBLE_10_FONT_ID, centerY - 10, "Existing thumbnails are skipped.", true,
+    renderer.text.centered(ATKINSON_HYPERLEGIBLE_10_FONT_ID, centerY - 10, "Start skips existing; Force rebuilds all.",
                            EpdFontFamily::REGULAR);
 
     const int barW = std::min(300, pageWidth - 72);
@@ -351,7 +375,7 @@ void ThumbnailGeneratorActivity::render() {
     renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, barY + 26, "Ready to scan EPUB and XTC books", true,
                            EpdFontFamily::REGULAR);
 
-    const auto labels = mappedInput.mapLabels("\xC2\xAB Back", "Start", "", "");
+    const auto labels = mappedInput.mapLabels("\xC2\xAB Back", "Start", "", "Force");
     renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
@@ -377,7 +401,11 @@ void ThumbnailGeneratorActivity::render() {
 void ThumbnailGeneratorActivity::loop() {
   if (state == READY) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      startGeneration();
+      startGeneration(false);
+      return;
+    }
+    if (mappedInput.wasPressed(MappedInputManager::Button::Right)) {
+      startGeneration(true);
       return;
     }
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {

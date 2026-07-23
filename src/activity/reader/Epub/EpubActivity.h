@@ -71,7 +71,8 @@ class EpubActivity final : public ActivityWithSubactivity {
    * @param onGoToRecent Callback for navigating to recent books
    */
   explicit EpubActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub,
-                        const std::function<void()>& onGoBack, const std::function<void()>& onGoToRecent);
+                        const std::function<void()>& onGoBack, const std::function<void()>& onGoToRecent,
+                        bool openNavigationOnLaunch = false);
 
   void onEnter() override;
   void onExit() override;
@@ -98,6 +99,7 @@ class EpubActivity final : public ActivityWithSubactivity {
   int cachedSpineIndex = 0;
   int cachedChapterTotalPageCount = 0;
   bool updateRequired = false;
+  bool openNavigationOnLaunch_ = false;
   bool bookmarkLongPressProcessed = false;
   bool leftLongPressProcessed = false;
   int loadingProgress = 0;
@@ -235,6 +237,9 @@ class EpubActivity final : public ActivityWithSubactivity {
   /** Callback for MenuDrawer's integrated "Go to Percent" view. */
   void onPercentDrawerSelected(int percent);
   void jumpToPercent(int percent);
+  void onPageDrawerSelected(int page);
+  bool currentBookPagePosition(int& page, int& totalPages) const;
+  void jumpToBookPage(int page, int totalPages);
 
   void displayBookTitle();
   void drawLoadingScreen();

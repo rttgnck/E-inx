@@ -69,7 +69,7 @@ ReaderPresetsActivity::ReaderPresetsActivity(GfxRenderer& renderer, MappedInputM
       onTabLibrary_(std::move(tabNavigateLibrary)),
       onTabSync_(std::move(tabNavigateSync)),
       onTabStatistics_(std::move(tabNavigateStatistics)) {
-  tabSelectorIndex = 2;  // Settings tab
+  tabSelectorIndex = 3;  // Settings tab
 }
 
 void ReaderPresetsActivity::onEnter() {
@@ -128,11 +128,11 @@ void ReaderPresetsActivity::changeXtcSetting(const int row, const int delta) {
 void ReaderPresetsActivity::navigateToSelectedMenu() {
   if (tabSelectorIndex == 0 && onTabRecent_) {
     onTabRecent_();
-  } else if (tabSelectorIndex == 1 && onTabLibrary_) {
+  } else if (tabSelectorIndex == 2 && onTabLibrary_) {
     onTabLibrary_();
-  } else if (tabSelectorIndex == 3 && onTabSync_) {
+  } else if (tabSelectorIndex == 4 && onTabSync_) {
     onTabSync_();
-  } else if (tabSelectorIndex == 4 && onTabStatistics_) {
+  } else if (tabSelectorIndex == 5 && onTabStatistics_) {
     onTabStatistics_();
   }
 }
@@ -378,7 +378,7 @@ void ReaderPresetsActivity::handleListInput() {
 
   if (mappedInput.wasPressed(MenuNav::tabPrev())) {
     tabSelectorIndex = (tabSelectorIndex - 1 + TAB_COUNT) % TAB_COUNT;
-    if (tabSelectorIndex == 2) {
+    if (tabSelectorIndex == 3) {
       render();
     } else {
       navigateToSelectedMenu();
@@ -387,7 +387,7 @@ void ReaderPresetsActivity::handleListInput() {
   }
   if (mappedInput.wasPressed(MenuNav::tabNext())) {
     tabSelectorIndex = (tabSelectorIndex + 1) % TAB_COUNT;
-    if (tabSelectorIndex == 2) {
+    if (tabSelectorIndex == 3) {
       render();
     } else {
       navigateToSelectedMenu();

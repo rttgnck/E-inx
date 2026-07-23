@@ -521,10 +521,14 @@ bool JpegRender::render(FsFile& jpegFile, int x, int y, int targetWidth, int tar
 
   uint32_t mcuDecodeMs = 0;
   uint32_t rowProcessMs = 0;
+  bool decodeOk = true;
   for (int mcuY = 0; mcuY < imageInfo.m_MCUSPerCol; mcuY++) {
     const uint32_t tMcuStart = millis();
     for (int mcuX = 0; mcuX < imageInfo.m_MCUSPerRow; mcuX++) {
-      if (pjpeg_decode_mcu() != 0) break;
+      if (pjpeg_decode_mcu() != 0) {
+        decodeOk = false;
+        break;
+      }
       for (int bY = 0; bY < imageInfo.m_MCUHeight; bY++) {
         for (int bX = 0; bX < imageInfo.m_MCUWidth; bX++) {
           const int pX = mcuX * imageInfo.m_MCUWidth + bX;
@@ -539,6 +543,9 @@ bool JpegRender::render(FsFile& jpegFile, int x, int y, int targetWidth, int tar
     }
     const uint32_t tMcuEnd = millis();
     mcuDecodeMs += tMcuEnd - tMcuStart;
+    if (!decodeOk) {
+      break;
+    }
 
     for (int yInMcu = 0; yInMcu < imageInfo.m_MCUHeight && (mcuY * imageInfo.m_MCUHeight + yInMcu) < imageInfo.m_height;
          yInMcu++) {
@@ -620,13 +627,14 @@ bool JpegRender::render(FsFile& jpegFile, int x, int y, int targetWidth, int tar
   const uint32_t tEnd = millis();
   Serial.printf(
       "[%lu] [IMG-TIMING] JPEG %dx%d->%dx%d mode=%d quality=%d capture=%d: headerScan=%lums init=%lums "
-      "mcuDecode=%lums rowProcess=%lums decode+draw=%lums total=%lums\n",
+      "mcuDecode=%lums rowProcess=%lums rows=%d/%d ok=%d decode+draw=%lums total=%lums\n",
       tEnd, imageInfo.m_width, imageInfo.m_height, outWidth, outHeight, static_cast<int>(mode),
       static_cast<int>(quality), capture ? 1 : 0, static_cast<unsigned long>(tAfterHeaderScan - tRenderStart),
       static_cast<unsigned long>(tAfterInit - tAfterHeaderScan), static_cast<unsigned long>(mcuDecodeMs),
-      static_cast<unsigned long>(rowProcessMs), static_cast<unsigned long>(tEnd - tAfterInit),
+      static_cast<unsigned long>(rowProcessMs), currentOutY, outHeight, decodeOk ? 1 : 0,
+      static_cast<unsigned long>(tEnd - tAfterInit),
       static_cast<unsigned long>(tEnd - tRenderStart));
-  return currentOutY > 0;
+  return decodeOk && currentOutY == outHeight;
 }
 
 bool JpegRender::fromPath(const std::string& path, int x, int y, int targetWidth, int targetHeight, bool cropToFill,

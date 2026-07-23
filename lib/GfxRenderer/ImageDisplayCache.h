@@ -30,6 +30,8 @@ class ImageDisplayCache {
                                        bool fastQuality = false);
   static bool store(GfxRenderer& renderer, const std::string& sourcePath, int x, int y, int width, int height,
                     const ImageDisplayCacheOptions& options);
+  static bool remove(GfxRenderer& renderer, const std::string& sourcePath, int x, int y, int width, int height,
+                     const ImageDisplayCacheOptions& options);
 
  private:
   static bool exists(GfxRenderer& renderer, const std::string& sourcePath, int x, int y, int width, int height,

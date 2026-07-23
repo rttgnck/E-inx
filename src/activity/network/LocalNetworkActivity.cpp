@@ -11,6 +11,7 @@
 #include <esp_task_wdt.h>
 
 #include "WifiSelectionActivity.h"
+#include "state/NetworkCredential.h"
 #include "system/Fonts.h"
 #include "system/MappedInputManager.h"
 #include "system/ScreenComponents.h"
@@ -27,6 +28,7 @@ constexpr int HEADER_TITLE_Y_OFFSET = 10;
 constexpr int SUBTITLE_Y_OFFSET = 40;
 constexpr int DIVIDER_PADDING = 10;
 constexpr int BOTTOM_AREA_HEIGHT = 80;
+constexpr unsigned long SAVED_WIFI_TIMEOUT_MS = 15000;
 
 /**
  * @brief Renders the header section for the activity
@@ -71,7 +73,7 @@ void LocalNetworkActivity::taskTrampoline(void* param) {
 }
 
 /**
- * @brief Initializes the activity when entering, launches WiFi selection
+ * @brief Initializes the activity and connects to WiFi
  */
 void LocalNetworkActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
@@ -81,10 +83,48 @@ void LocalNetworkActivity::onEnter() {
 
   renderingMutex = xSemaphoreCreateMutex();
   updateRequired = true;
-  state = LocalNetworkState::WIFI_SELECTION;
+  state = autoConnectSaved ? LocalNetworkState::WIFI_AUTO_CONNECTING : LocalNetworkState::WIFI_SELECTION;
+  wifiSelectionCompletionPending = false;
+  wifiSelectionConnected = false;
 
   xTaskCreate(&LocalNetworkActivity::taskTrampoline, "LocalNetTask", 4096, this, 1, &displayTaskHandle);
 
+  if (autoConnectSaved) {
+    startSavedWifiConnection();
+  } else {
+    startWifiSelection();
+  }
+}
+
+void LocalNetworkActivity::startSavedWifiConnection() {
+  WIFI_STORE.loadFromFile();
+  const WifiCredential* credential = WIFI_STORE.getLastCredential();
+  if (credential == nullptr || credential->ssid.empty()) {
+    Serial.printf("[%lu] [LOCALNET] No saved WiFi network; opening picker\n", millis());
+    startWifiSelection();
+    return;
+  }
+
+  connectedSSID = credential->ssid;
+  connectedIP.clear();
+  state = LocalNetworkState::WIFI_AUTO_CONNECTING;
+  wifiConnectionStartTime = millis();
+  updateRequired = true;
+
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+  delay(100);
+  if (credential->password.empty()) {
+    WiFi.begin(credential->ssid.c_str());
+  } else {
+    WiFi.begin(credential->ssid.c_str(), credential->password.c_str());
+  }
+  Serial.printf("[%lu] [LOCALNET] Connecting to saved WiFi: %s\n", millis(), credential->ssid.c_str());
+}
+
+void LocalNetworkActivity::startWifiSelection() {
+  state = LocalNetworkState::WIFI_SELECTION;
+  updateRequired = true;
   WiFi.mode(WIFI_STA);
   enterNewActivity(
       new WifiSelectionActivity(renderer, mappedInput, [this](bool connected) { onWifiSelectionComplete(connected); }));
@@ -115,20 +155,31 @@ void LocalNetworkActivity::onExit() {
  * @param connected True if WiFi connection successful
  */
 void LocalNetworkActivity::onWifiSelectionComplete(const bool connected) {
+  wifiSelectionConnected = connected;
+  wifiSelectionCompletionPending = true;
+  if (connected && subActivity) {
+    connectedIP = static_cast<WifiSelectionActivity*>(subActivity.get())->getConnectedIP();
+    connectedSSID = WiFi.SSID().c_str();
+  }
+}
+
+void LocalNetworkActivity::finishWifiSelection() {
+  const bool connected = wifiSelectionConnected;
+  wifiSelectionCompletionPending = false;
+
   if (!connected) {
     Serial.printf("[%lu] [LOCALNET] WiFi selection cancelled\n", millis());
     if (onGoBack) onGoBack();
     return;
   }
 
-  if (subActivity) {
-    connectedIP = static_cast<WifiSelectionActivity*>(subActivity.get())->getConnectedIP();
-  }
-  connectedSSID = WiFi.SSID().c_str();
+  exitActivity();
+  finishConnectedNetwork();
+}
 
+void LocalNetworkActivity::finishConnectedNetwork() {
   Serial.printf("[%lu] [LOCALNET] Connected to %s, IP: %s\n", millis(), connectedSSID.c_str(), connectedIP.c_str());
 
-  exitActivity();
   state = LocalNetworkState::SERVER_STARTING;
   updateRequired = true;
 
@@ -178,6 +229,31 @@ void LocalNetworkActivity::stopWebServer() {
 void LocalNetworkActivity::loop() {
   if (subActivity) {
     subActivity->loop();
+    if (wifiSelectionCompletionPending) {
+      finishWifiSelection();
+    }
+    return;
+  }
+
+  if (state == LocalNetworkState::WIFI_AUTO_CONNECTING) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+      if (onGoBack) onGoBack();
+      return;
+    }
+
+    if (WiFi.status() == WL_CONNECTED && WiFi.localIP() != IPAddress(0, 0, 0, 0)) {
+      connectedSSID = WiFi.SSID().c_str();
+      connectedIP = WiFi.localIP().toString().c_str();
+      finishConnectedNetwork();
+      return;
+    }
+
+    if (WiFi.status() == WL_CONNECT_FAILED || WiFi.status() == WL_NO_SSID_AVAIL ||
+        millis() - wifiConnectionStartTime >= SAVED_WIFI_TIMEOUT_MS) {
+      Serial.printf("[%lu] [LOCALNET] Saved WiFi unavailable; opening picker\n", millis());
+      WiFi.disconnect();
+      startWifiSelection();
+    }
     return;
   }
 
@@ -247,8 +323,16 @@ void LocalNetworkActivity::render() const {
 
   if (state == LocalNetworkState::SERVER_RUNNING) {
     renderServerRunning();
+  } else if (state == LocalNetworkState::WIFI_AUTO_CONNECTING) {
+    renderActivityHeader(renderer, startY, updateLanding ? "Update Server" : "Local Network");
+
+    const int contentStart = startY + SUBTITLE_Y_OFFSET;
+    const int centerY = contentStart + (screenHeight - contentStart - BOTTOM_AREA_HEIGHT) / 2;
+    renderer.text.centered(ATKINSON_HYPERLEGIBLE_10_FONT_ID, centerY - 16, "Connecting to saved WiFi...");
+    renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, centerY + 20,
+                           truncateString(connectedSSID, 30).c_str());
   } else if (state == LocalNetworkState::SERVER_STARTING) {
-    renderActivityHeader(renderer, startY, "Local Network");
+    renderActivityHeader(renderer, startY, updateLanding ? "Update Server" : "Local Network");
 
     int contentStart = startY + SUBTITLE_Y_OFFSET;
     int centerY = contentStart + (screenHeight - contentStart - BOTTOM_AREA_HEIGHT) / 2;
@@ -276,18 +360,21 @@ void LocalNetworkActivity::render() const {
 void LocalNetworkActivity::renderServerRunning() const {
   int startY = TAB_BAR_HEIGHT;
 
-  renderActivityHeader(renderer, startY, "Local Network");
+  renderActivityHeader(renderer, startY, updateLanding ? "Update Server" : "Local Network");
 
-  std::string ipUrl = "http://" + connectedIP + "/";
-  std::string hostnameUrl = std::string("http://") + AP_HOSTNAME + ".local/";
+  const char* path = updateLanding ? "/update" : "/";
+  std::string ipUrl = "http://" + connectedIP + path;
+  std::string hostnameUrl = std::string("http://") + AP_HOSTNAME + ".local" + path;
 
   const int bodyTop = startY + SUBTITLE_Y_OFFSET + 95;
   const int labelFont = ATKINSON_HYPERLEGIBLE_8_FONT_ID;
   const int titleFont = ATKINSON_HYPERLEGIBLE_14_FONT_ID;
   const int bodyFont = ATKINSON_HYPERLEGIBLE_10_FONT_ID;
 
-  renderer.text.centered(labelFont, bodyTop, "LOCAL TRANSFER", true, EpdFontFamily::BOLD);
-  renderer.text.centered(titleFont, bodyTop + 34, "Ready on WiFi", true, EpdFontFamily::BOLD);
+  renderer.text.centered(labelFont, bodyTop, updateLanding ? "FIRMWARE UPDATE" : "LOCAL TRANSFER", true,
+                         EpdFontFamily::BOLD);
+  renderer.text.centered(titleFont, bodyTop + 34, updateLanding ? "Update server ready" : "Ready on WiFi", true,
+                         EpdFontFamily::BOLD);
   renderer.text.centered(bodyFont, bodyTop + 74, truncateString(connectedSSID, 30).c_str());
 
   const int urlY = bodyTop + 136;
@@ -296,5 +383,7 @@ void LocalNetworkActivity::renderServerRunning() const {
   renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, urlY + 64, hostnameUrl.c_str());
 
   const int hintY = renderer.getScreenHeight() - 92;
-  renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, hintY, "Keep this screen open while transferring");
+  renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, hintY,
+                         updateLanding ? "Keep this screen open during the update"
+                                       : "Keep this screen open while transferring");
 }

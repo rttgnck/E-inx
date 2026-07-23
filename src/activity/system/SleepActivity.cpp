@@ -13,6 +13,7 @@
 #include <GfxRenderer.h>
 #include <HalDisplay.h>
 #include <HalGPIO.h>
+#include <ImageDisplayCache.h>
 #include <ImageRender.h>
 #include <SDCardManager.h>
 #include <Txt.h>
@@ -32,6 +33,7 @@
 #include "state/BookSetting.h"
 #include "state/RecentBooks.h"
 #include "state/Session.h"
+#include "state/SleepImageSelection.h"
 #include "state/SystemSetting.h"
 #include "system/FontManager.h"
 #include "system/Fonts.h"
@@ -40,6 +42,17 @@
 #include "util/StringUtils.h"
 
 namespace {
+class SleepImageToneGuard {
+ public:
+  explicit SleepImageToneGuard(GfxRenderer& renderer)
+      : renderer_(renderer), previous_(renderer.setPreserveImageTone(true)) {}
+  ~SleepImageToneGuard() { renderer_.setPreserveImageTone(previous_); }
+
+ private:
+  GfxRenderer& renderer_;
+  bool previous_;
+};
+
 bool isSleepImagePathJpeg(const std::string& path) {
   return StringUtils::checkFileExtension(path, ".jpg") || StringUtils::checkFileExtension(path, ".jpeg");
 }
@@ -71,10 +84,10 @@ ImageRender::Options sleepImageOptions(const bool allowQuality = true) {
   return options;
 }
 
-void runSleepImageTwoBitPasses(GfxRenderer& renderer, const std::string& imagePath,
+bool runSleepImageTwoBitPasses(GfxRenderer& renderer, const std::string& imagePath,
                                const ImageRender::Options& baseOptions, const bool allowQuality = true) {
   if (!sleepTwoBitEnabled()) {
-    return;
+    return true;
   }
 
   ImageRender::Options options = baseOptions;
@@ -86,13 +99,27 @@ void runSleepImageTwoBitPasses(GfxRenderer& renderer, const std::string& imagePa
   options.quality = quality;
   options.fastQuality = false;
 
-  ImageRender::create(renderer, imagePath)
+  return ImageRender::create(renderer, imagePath)
       .displayGrayscale(0, 0, renderer.getScreenWidth(), renderer.getScreenHeight(), options, quality);
 }
 
-void recordSleepImageUsed() {
+void recordSleepImageUsed(const std::string& imagePath) {
+  HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 220, APP_STATE.lastSleepImage);
+  APP_STATE.lastSleepImagePath = imagePath;
   APP_STATE.lastSleepImage++;
   APP_STATE.saveToFile();
+  HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 221, APP_STATE.lastSleepImage);
+}
+
+void renderSleepImageDiagnostic(GfxRenderer& renderer, const char* message) {
+  renderer.clearScreen();
+  const int pageWidth = renderer.getScreenWidth();
+  const int pageHeight = renderer.getScreenHeight();
+  const int font = ATKINSON_HYPERLEGIBLE_12_FONT_ID;
+  const int lineHeight = renderer.text.getLineHeight(font);
+  const std::string text = renderer.text.truncate(font, message, pageWidth - 40, EpdFontFamily::BOLD);
+  renderer.text.render(font, 20, (pageHeight - lineHeight) / 2, text.c_str(), true, EpdFontFamily::BOLD);
+  renderer.displayBuffer();
 }
 
 std::string pathForFixedSleepBmp() {
@@ -102,6 +129,10 @@ std::string pathForFixedSleepBmp() {
   if (strcmp(SETTINGS.sleepCustomBmp, "/sleep.bmp") == 0) return SdMan.exists("/sleep.bmp") ? "/sleep.bmp" : "";
   if (strcmp(SETTINGS.sleepCustomBmp, "/sleep.jpg") == 0) return SdMan.exists("/sleep.jpg") ? "/sleep.jpg" : "";
   if (strcmp(SETTINGS.sleepCustomBmp, "/sleep.jpeg") == 0) return SdMan.exists("/sleep.jpeg") ? "/sleep.jpeg" : "";
+  if (strncmp(SETTINGS.sleepCustomBmp, "/sleep/", 7) == 0 ||
+      strncmp(SETTINGS.sleepCustomBmp, "/Wallpapers/", 12) == 0) {
+    return SdMan.exists(SETTINGS.sleepCustomBmp) ? SETTINGS.sleepCustomBmp : "";
+  }
   const std::string path = std::string("/sleep/") + SETTINGS.sleepCustomBmp;
   if (SdMan.exists(path.c_str())) {
     return path;
@@ -111,23 +142,98 @@ std::string pathForFixedSleepBmp() {
 
 std::vector<std::string> listSleepImagePaths() {
   std::vector<std::string> paths;
-  auto dir = SdMan.open("/sleep");
+  const char* folders[] = {"/sleep", "/Wallpapers"};
 
-  if (dir && dir.isDirectory()) {
-    char name[256];
-    while (auto file = dir.openNextFile()) {
-      file.getName(name, sizeof(name));
-      std::string filename = name;
-      if (filename[0] != '.' && isSupportedSleepImageFile(filename)) {
-        paths.push_back("/sleep/" + filename);
+  for (const char* folder : folders) {
+    auto dir = SdMan.open(folder);
+    if (dir && dir.isDirectory()) {
+      char name[256];
+      while (auto file = dir.openNextFile()) {
+        file.getName(name, sizeof(name));
+        std::string filename = name;
+        if (filename[0] != '.' && isSupportedSleepImageFile(filename)) {
+          const std::string path = std::string(folder) + "/" + filename;
+          if (isSleepImageShuffleEnabled(path)) {
+            paths.push_back(path);
+          }
+        }
+        file.close();
       }
-      file.close();
+      dir.close();
     }
-    dir.close();
   }
 
   std::sort(paths.begin(), paths.end());
   return paths;
+}
+
+size_t randomSleepImagePoolSize() {
+  const std::vector<std::string> sleepImages = listSleepImagePaths();
+  if (!sleepImages.empty()) {
+    return sleepImages.size();
+  }
+
+  size_t fallbackCount = 0;
+  if (SdMan.exists("/sleep.bmp") && isSleepImageShuffleEnabled("/sleep.bmp")) {
+    fallbackCount++;
+  }
+  if (SdMan.exists("/sleep.jpg") && isSleepImageShuffleEnabled("/sleep.jpg")) {
+    fallbackCount++;
+  }
+  if (SdMan.exists("/sleep.jpeg") && isSleepImageShuffleEnabled("/sleep.jpeg")) {
+    fallbackCount++;
+  }
+  return fallbackCount;
+}
+
+void purgeSleepImageDisplayCaches(GfxRenderer& renderer, const std::string& imagePath) {
+  if (imagePath.empty()) {
+    return;
+  }
+
+  constexpr bool cropModes[] = {false, true};
+  for (const bool cropToFill : cropModes) {
+    ImageDisplayCacheOptions oneBit;
+    oneBit.cropToFill = cropToFill;
+    oneBit.mode = ImageRenderMode::OneBit;
+    oneBit.renderPlane = static_cast<uint8_t>(GfxRenderer::BW);
+    ImageDisplayCache::remove(renderer, imagePath, 0, 0, renderer.getScreenWidth(), renderer.getScreenHeight(), oneBit);
+
+    ImageDisplayCacheOptions fastLsb;
+    fastLsb.cropToFill = cropToFill;
+    fastLsb.mode = ImageRenderMode::TwoBit;
+    fastLsb.renderPlane = static_cast<uint8_t>(GfxRenderer::GRAYSCALE_LSB);
+    ImageDisplayCache::remove(renderer, imagePath, 0, 0, renderer.getScreenWidth(), renderer.getScreenHeight(),
+                              fastLsb);
+
+    ImageDisplayCacheOptions fastMsb = fastLsb;
+    fastMsb.renderPlane = static_cast<uint8_t>(GfxRenderer::GRAYSCALE_MSB);
+    ImageDisplayCache::remove(renderer, imagePath, 0, 0, renderer.getScreenWidth(), renderer.getScreenHeight(),
+                              fastMsb);
+
+    ImageDisplayCacheOptions qualityLsb = fastLsb;
+    qualityLsb.renderPlane = static_cast<uint8_t>(GfxRenderer::GRAY2_LSB);
+    qualityLsb.quality = true;
+    ImageDisplayCache::remove(renderer, imagePath, 0, 0, renderer.getScreenWidth(), renderer.getScreenHeight(),
+                              qualityLsb);
+
+    ImageDisplayCacheOptions qualityMsb = qualityLsb;
+    qualityMsb.renderPlane = static_cast<uint8_t>(GfxRenderer::GRAY2_MSB);
+    ImageDisplayCache::remove(renderer, imagePath, 0, 0, renderer.getScreenWidth(), renderer.getScreenHeight(),
+                              qualityMsb);
+  }
+}
+
+void removeCoverPath(GfxRenderer* renderer, const std::string& path) {
+  if (path.empty()) {
+    return;
+  }
+  if (renderer != nullptr) {
+    purgeSleepImageDisplayCaches(*renderer, path);
+  }
+  if (SdMan.exists(path.c_str())) {
+    SdMan.remove(path.c_str());
+  }
 }
 
 uint32_t mixSleepImageSeed(uint32_t value) {
@@ -214,26 +320,55 @@ void beginNewSleepImageCycleIfNeeded(const size_t count) {
   APP_STATE.sleepImageShuffleSeed = nextSeed;
 }
 
-std::string pickSleepBmpPath() {
-  std::string fixed = pathForFixedSleepBmp();
-  if (!fixed.empty()) {
-    return fixed;
+std::string pickSleepBmpPath(const bool ignoreFixed = false) {
+  if (!ignoreFixed) {
+    std::string fixed = pathForFixedSleepBmp();
+    if (!fixed.empty()) {
+      return fixed;
+    }
   }
 
   const std::vector<std::string> sleepImages = listSleepImagePaths();
   if (!sleepImages.empty()) {
     beginNewSleepImageCycleIfNeeded(sleepImages.size());
-    return sleepImages[sleepImageIndexForPosition(APP_STATE.sleepImageShuffleSeed, APP_STATE.lastSleepImage,
-                                                  sleepImages.size())];
+    const size_t count = sleepImages.size();
+    std::string selected =
+        sleepImages[sleepImageIndexForPosition(APP_STATE.sleepImageShuffleSeed, APP_STATE.lastSleepImage, count)];
+    if (ignoreFixed && count > 1 && selected == APP_STATE.lastSleepImagePath) {
+      for (size_t offset = 1; offset < count; ++offset) {
+        const std::string& alternate = sleepImages[sleepImageIndexForPosition(
+            APP_STATE.sleepImageShuffleSeed, APP_STATE.lastSleepImage + offset, count)];
+        if (alternate != APP_STATE.lastSleepImagePath) {
+          selected = alternate;
+          break;
+        }
+      }
+    }
+    return selected;
   }
-  if (SdMan.exists("/sleep.bmp")) {
-    return "/sleep.bmp";
+  std::vector<std::string> fallbackImages;
+  constexpr const char* fallbackPaths[] = {"/sleep.bmp", "/sleep.jpg", "/sleep.jpeg"};
+  for (const char* path : fallbackPaths) {
+    if (SdMan.exists(path) && isSleepImageShuffleEnabled(path)) {
+      fallbackImages.emplace_back(path);
+    }
   }
-  if (SdMan.exists("/sleep.jpg")) {
-    return "/sleep.jpg";
-  }
-  if (SdMan.exists("/sleep.jpeg")) {
-    return "/sleep.jpeg";
+  if (!fallbackImages.empty()) {
+    const size_t count = fallbackImages.size();
+    beginNewSleepImageCycleIfNeeded(count);
+    std::string selected = fallbackImages[sleepImageIndexForPosition(
+        APP_STATE.sleepImageShuffleSeed, APP_STATE.lastSleepImage, count)];
+    if (ignoreFixed && count > 1 && selected == APP_STATE.lastSleepImagePath) {
+      for (size_t offset = 1; offset < count; ++offset) {
+        const std::string& alternate = fallbackImages[sleepImageIndexForPosition(
+            APP_STATE.sleepImageShuffleSeed, APP_STATE.lastSleepImage + offset, count)];
+        if (alternate != APP_STATE.lastSleepImagePath) {
+          selected = alternate;
+          break;
+        }
+      }
+    }
+    return selected;
   }
   return "";
 }
@@ -282,6 +417,71 @@ std::string resolveLastReadCoverPathForSleep(const std::string& path) {
 }
 }  // namespace
 
+bool SleepActivity::shouldScheduleImageRotation(const bool sleptFromReader) {
+  if (!SETTINGS.sleepImageRotationEnabled) {
+    return false;
+  }
+  const bool showingCustomImage = SETTINGS.sleepScreen == SystemSetting::SLEEP_SCREEN_MODE::CUSTOM ||
+                                  SETTINGS.sleepScreen == SystemSetting::SLEEP_SCREEN_MODE::TRANSPARENT ||
+                                  (SETTINGS.sleepScreen == SystemSetting::SLEEP_SCREEN_MODE::HYBRID &&
+                                   !sleptFromReader);
+  if (!showingCustomImage) {
+    return false;
+  }
+  return true;
+}
+
+bool SleepActivity::shouldEnablePowerDoublePressImageAdvance(const bool sleptFromReader) {
+  const bool showingCustomImage = SETTINGS.sleepScreen == SystemSetting::SLEEP_SCREEN_MODE::CUSTOM ||
+                                  SETTINGS.sleepScreen == SystemSetting::SLEEP_SCREEN_MODE::TRANSPARENT ||
+                                  (SETTINGS.sleepScreen == SystemSetting::SLEEP_SCREEN_MODE::HYBRID &&
+                                   !sleptFromReader);
+  return showingCustomImage && SETTINGS.sleepImagePowerDoublePress;
+}
+
+bool SleepActivity::regenerateLastReadCoverForSleep(GfxRenderer* renderer) {
+  if (APP_STATE.lastRead.empty()) {
+    return false;
+  }
+
+  const std::string& path = APP_STATE.lastRead;
+  if (StringUtils::checkFileExtension(path, ".epub")) {
+    Epub book(path, "/.metadata/epub");
+    if (!book.load()) {
+      return false;
+    }
+    book.setupCacheDir();
+    for (const bool cropped : {false, true}) {
+      removeCoverPath(renderer, book.getCoverJpegPath(cropped));
+      removeCoverPath(renderer, book.getCoverBmpPath(cropped));
+    }
+    const bool generated = book.generateCoverBmp(/*cropped=*/false);
+    return generated && (SdMan.exists(book.getCoverJpegPath(false).c_str()) ||
+                         SdMan.exists(book.getCoverBmpPath(false).c_str()));
+  }
+
+  if (StringUtils::checkFileExtension(path, ".xtc") || StringUtils::checkFileExtension(path, ".xtch")) {
+    Xtc book(path, "/.metadata/xtc");
+    if (!book.load()) {
+      return false;
+    }
+    book.setupCacheDir();
+    removeCoverPath(renderer, book.getCoverBmpPath());
+    return book.generateCoverBmp() && SdMan.exists(book.getCoverBmpPath().c_str());
+  }
+
+  if (StringUtils::checkFileExtension(path, ".txt")) {
+    Txt book(path, "/.system");
+    if (!book.load()) {
+      return false;
+    }
+    removeCoverPath(renderer, book.getCoverBmpPath());
+    return book.generateCoverBmp() && SdMan.exists(book.getCoverBmpPath().c_str());
+  }
+
+  return false;
+}
+
 /**
  * @brief Initializes and renders the sleep screen when activity becomes active.
  *
@@ -290,6 +490,7 @@ std::string resolveLastReadCoverPathForSleep(const std::string& path) {
  */
 void SleepActivity::onEnter() {
   Activity::onEnter();
+  HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 100);
 
   // HIGH-quality cover/custom images: our quality LUT doesn't fully clear to white on its own (whites come out
   // gray without a white baseline), so we pre-clear to white with a HALF refresh. A FAST pre-clear only fully
@@ -299,22 +500,33 @@ void SleepActivity::onEnter() {
   const bool renderDateTime =
       SETTINGS.sleepScreen == SystemSetting::SLEEP_SCREEN_MODE::DATETIME && dateTimeSleepScreenAvailable();
   if (SETTINGS.sleepScreen != SystemSetting::SLEEP_SCREEN_MODE::TRANSPARENT && !renderDateTime) {
+    HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 101);
     renderer.clearScreen(0Xff);
     renderer.displayBuffer();
+    HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 102);
   }
 
+  HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 110,
+                                static_cast<uint32_t>(SETTINGS.sleepScreen));
   switch (SETTINGS.sleepScreen) {
     case SystemSetting::SLEEP_SCREEN_MODE::TRANSPARENT:
-      renderTransparentSleepScreen();
+      sleepImageRenderSucceeded = renderTransparentSleepScreen();
       break;
     case SystemSetting::SLEEP_SCREEN_MODE::BLANK:
       renderBlankSleepScreen();
       break;
     case SystemSetting::SLEEP_SCREEN_MODE::CUSTOM:
-      renderCustomSleepScreen();
+      sleepImageRenderSucceeded = renderCustomSleepScreen();
       break;
     case SystemSetting::SLEEP_SCREEN_MODE::COVER:
       renderCoverSleepScreen();
+      break;
+    case SystemSetting::SLEEP_SCREEN_MODE::HYBRID:
+      if (sleptFromReader) {
+        renderCoverSleepScreen();
+      } else {
+        sleepImageRenderSucceeded = renderCustomSleepScreen();
+      }
       break;
     case SystemSetting::SLEEP_SCREEN_MODE::DATETIME:
       if (dateTimeSleepScreenAvailable()) {
@@ -327,6 +539,8 @@ void SleepActivity::onEnter() {
       renderDefaultSleepScreen();
       break;
   }
+  HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 111,
+                                sleepImageRenderSucceeded ? 1UL : 0UL);
 }
 
 /**
@@ -335,39 +549,78 @@ void SleepActivity::onEnter() {
  * Uses a fixed image from settings when set; otherwise picks randomly from /sleep/
  * and SD-root sleep.bmp/jpg/jpeg. Falls back to default sleep screen if no images are found.
  */
-void SleepActivity::renderCustomSleepScreen() const {
-  const std::string imagePath = pickSleepBmpPath();
+bool SleepActivity::renderCustomSleepScreen() const {
+  HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 200);
+  const std::string imagePath = pickSleepBmpPath(forceSleepImageAdvance);
+  HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 201,
+                                static_cast<uint32_t>(imagePath.size()));
+  if (forceSleepImageAdvance && !imagePath.empty() && imagePath == APP_STATE.lastSleepImagePath) {
+    renderSleepImageDiagnostic(renderer, "No different sleep image");
+    return false;
+  }
   if (!imagePath.empty()) {
-    recordSleepImageUsed();
+    SleepImageToneGuard toneGuard(renderer);
 
     if (isSleepImagePathJpeg(imagePath)) {
+      HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 202);
       ImageRender::Options options = sleepImageOptions();
-      if (ImageRender::create(renderer, imagePath)
-              .render(0, 0, renderer.getScreenWidth(), renderer.getScreenHeight(), options)) {
-        if (!sleepImageQualityEnabled()) {
+      const bool willDisplayGrayscale = sleepTwoBitEnabled();
+      const bool rendered = ImageRender::create(renderer, imagePath)
+                                .render(0, 0, renderer.getScreenWidth(), renderer.getScreenHeight(), options);
+      HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 203, rendered ? 1UL : 0UL);
+      if (rendered) {
+        if (!willDisplayGrayscale || !sleepImageQualityEnabled()) {
           renderer.displayBuffer();
         }
-        runSleepImageTwoBitPasses(renderer, imagePath, options);
-        return;
+        HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 204);
+        const bool grayscaleRendered = runSleepImageTwoBitPasses(renderer, imagePath, options);
+        HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 205,
+                                      grayscaleRendered ? 1UL : 0UL);
+        if (grayscaleRendered) {
+          recordSleepImageUsed(imagePath);
+          return true;
+        }
+        purgeSleepImageDisplayCaches(renderer, imagePath);
+        if (!sleepImageQualityEnabled()) {
+          recordSleepImageUsed(imagePath);
+          return true;
+        }
       }
     }
+    HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 206);
     FsFile file;
-    if (SdMan.openFileForRead("SLP", imagePath, file)) {
+    const bool opened = SdMan.openFileForRead("SLP", imagePath, file);
+    HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 207, opened ? 1UL : 0UL);
+    if (opened) {
       Bitmap bitmap(file);
-      if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+      const BmpReaderError headerResult = bitmap.parseHeaders();
+      HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 208,
+                                    headerResult == BmpReaderError::Ok ? 1UL : 0UL);
+      if (headerResult == BmpReaderError::Ok) {
         if (SETTINGS.sleepScreenCoverMode == SystemSetting::SLEEP_SCREEN_COVER_MODE::FIT) {
           renderFill(bitmap);
         } else {
           renderBitmapSleepScreen(bitmap);
         }
+        HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 209);
         file.close();
-        return;
+        recordSleepImageUsed(imagePath);
+        return true;
       }
       file.close();
     }
+    if (forceSleepImageAdvance) {
+      renderSleepImageDiagnostic(renderer, "Sleep image render failed");
+      return false;
+    }
   }
 
+  if (forceSleepImageAdvance) {
+    renderSleepImageDiagnostic(renderer, "No eligible sleep image");
+    return false;
+  }
   renderDefaultSleepScreen();
+  return false;
 }
 
 /**
@@ -375,41 +628,78 @@ void SleepActivity::renderCustomSleepScreen() const {
  *
  * Displays a semi-transparent image overlay on top of the current screen content.
  */
-void SleepActivity::renderTransparentSleepScreen() const {
-  const std::string imagePath = pickSleepBmpPath();
+bool SleepActivity::renderTransparentSleepScreen() const {
+  HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 230);
+  const std::string imagePath = pickSleepBmpPath(forceSleepImageAdvance);
+  HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 231,
+                                static_cast<uint32_t>(imagePath.size()));
+  if (forceSleepImageAdvance && !imagePath.empty() && imagePath == APP_STATE.lastSleepImagePath) {
+    renderSleepImageDiagnostic(renderer, "No different sleep image");
+    return false;
+  }
   if (!imagePath.empty()) {
-    recordSleepImageUsed();
+    SleepImageToneGuard toneGuard(renderer);
     // Transparent overlays only work at LOW/MEDIUM. At HIGH the quality LUT can't composite over the existing
     // screen, so remove the background (clear to white) and render the image opaque instead.
     const bool removeBackground = sleepImageQualityEnabled();
     if (isSleepImagePathJpeg(imagePath)) {
+      HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 232);
       ImageRender::Options options = sleepImageOptions(/*allowQuality=*/false);
       options.useDisplayCache = removeBackground;
       if (removeBackground) {
         renderer.clearScreen();
       }
-      if (ImageRender::create(renderer, imagePath)
-              .render(0, 0, renderer.getScreenWidth(), renderer.getScreenHeight(), options)) {
+      const bool rendered = ImageRender::create(renderer, imagePath)
+                                .render(0, 0, renderer.getScreenWidth(), renderer.getScreenHeight(), options);
+      HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 233, rendered ? 1UL : 0UL);
+      if (rendered) {
         renderer.displayBuffer(HalDisplay::HALF_REFRESH);
-        runSleepImageTwoBitPasses(renderer, imagePath, options, /*allowQuality=*/false);
-        return;
+        HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 234);
+        if (runSleepImageTwoBitPasses(renderer, imagePath, options, /*allowQuality=*/false)) {
+          HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 235, 1);
+          recordSleepImageUsed(imagePath);
+          return true;
+        }
+        HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 235, 0);
+        purgeSleepImageDisplayCaches(renderer, imagePath);
+        recordSleepImageUsed(imagePath);
+        return true;
       }
     }
+    HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 236);
     FsFile file;
-    if (SdMan.openFileForRead("SLP", imagePath, file)) {
+    const bool opened = SdMan.openFileForRead("SLP", imagePath, file);
+    HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 237, opened ? 1UL : 0UL);
+    if (opened) {
       Bitmap bitmap(file);
-      if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+      const BmpReaderError headerResult = bitmap.parseHeaders();
+      HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 238,
+                                    headerResult == BmpReaderError::Ok ? 1UL : 0UL);
+      if (headerResult == BmpReaderError::Ok) {
         if (removeBackground) {
           renderer.clearScreen();
         }
         renderer.bitmap.transparent(bitmap, 0, 0, renderer.getScreenWidth(), renderer.getScreenHeight(), 1);
         renderer.displayBuffer(HalDisplay::HALF_REFRESH);
-        return;
+        HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 239);
+        file.close();
+        recordSleepImageUsed(imagePath);
+        return true;
       }
+      file.close();
+    }
+    if (forceSleepImageAdvance) {
+      renderSleepImageDiagnostic(renderer, "Sleep image render failed");
+      return false;
     }
   }
 
+  if (forceSleepImageAdvance) {
+    renderSleepImageDiagnostic(renderer, "No eligible sleep image");
+    return false;
+  }
   renderDefaultSleepScreen();
+  return false;
 }
 
 /**
@@ -420,32 +710,44 @@ void SleepActivity::renderTransparentSleepScreen() const {
  */
 void SleepActivity::renderCoverSleepScreen() const {
   if (APP_STATE.lastRead.empty()) {
-    return renderCustomSleepScreen();
+    renderCustomSleepScreen();
+    return;
   }
 
   const std::string coverPath = resolveLastReadCoverPathForSleep(APP_STATE.lastRead);
 
   if (!coverPath.empty() && isSleepImagePathJpeg(coverPath)) {
+    SleepImageToneGuard toneGuard(renderer);
     renderer.clearScreen();
     ImageRender::Options options = sleepImageOptions();
+    const bool willDisplayGrayscale = sleepTwoBitEnabled();
     if (ImageRender::create(renderer, coverPath)
             .render(0, 0, renderer.getScreenWidth(), renderer.getScreenHeight(), options)) {
       if (SETTINGS.sleepScreenCoverFilter == SystemSetting::SLEEP_SCREEN_COVER_FILTER::INVERTED_BLACK_AND_WHITE) {
         renderer.invertScreen();
       }
-      if (!sleepImageQualityEnabled()) {
+      if (!willDisplayGrayscale || !sleepImageQualityEnabled()) {
         renderer.displayBuffer();
       }
-      runSleepImageTwoBitPasses(renderer, coverPath, options);
-      return;
+      if (runSleepImageTwoBitPasses(renderer, coverPath, options)) {
+        return;
+      }
+      purgeSleepImageDisplayCaches(renderer, coverPath);
+      if (!sleepImageQualityEnabled()) {
+        return;
+      }
     }
-    return renderCustomSleepScreen();
+    removeCoverPath(&renderer, coverPath);
+    regenerateLastReadCoverForSleep(&renderer);
+    renderCustomSleepScreen();
+    return;
   }
 
   FsFile file;
   if (!coverPath.empty() && SdMan.openFileForRead("SLP", coverPath, file)) {
     Bitmap bitmap(file);
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+      SleepImageToneGuard toneGuard(renderer);
       if (SETTINGS.sleepScreenCoverMode == SystemSetting::SLEEP_SCREEN_COVER_MODE::FIT) {
         renderFill(bitmap);
       } else {

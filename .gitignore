@@ -10,3 +10,8 @@ build
 /compile_commands.json
 /.cache
 /fs_
+cpr-vcodex
+bin
+*.bin
+.claude
+samples
