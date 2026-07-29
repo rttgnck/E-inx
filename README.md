@@ -10,9 +10,9 @@ E-inx is a community firmware for Xteink e-paper readers, forked from [Inx](http
 
 ![](./docs/images/cover.jpg)
 
-## What's New in E-inx 1.2
+## What's New in E-inx 1.2.17
 
-E-inx 1.2 builds on Inx 1.0.16 with the following additions and improvements.
+E-inx 1.2.17 builds on Inx 1.0.17 with the following additions and improvements.
 
 ### New Features
 
@@ -30,6 +30,7 @@ E-inx 1.2 builds on Inx 1.0.16 with the following additions and improvements.
 - **Sleep image selection** — per-image include/exclude for random sleep image shuffle, now scanning both `/sleep/` and `/Wallpapers/`.
 - **Sleep image rotation** — timer-based automatic sleep image cycling during deep sleep.
 - **Power double-press gesture** — double-press the power button during sleep to advance to the next sleep image (configurable timing window).
+- **Emergency restart** — hold the power button for 10 seconds from any screen to force a device restart.
 
 ### Reader Improvements
 
@@ -83,6 +84,9 @@ E-inx 1.2 builds on Inx 1.0.16 with the following additions and improvements.
 - **Boot resilience** — resume path falls back to RTC-retained path; OTA image confirmed on first boot after update.
 - **Deep sleep** — split prepare/enter for checkpoint saving; X3 battery latch managed per wake mode for lower drain.
 - **Power wake detection** — early boot gesture recognition with configurable timing, NVS persistence across sleep cycles, 3-second emergency boot escape.
+- **Display buffer safety** — null-pointer guards on display clear and refresh prevent crashes when frame buffer allocation fails.
+- **Settings migration** — robust upgrade path from E-inx 1.2.0-6 and upstream 1.0.17 settings files; field ordering preserves E-inx custom settings across version upgrades.
+- **Boot diagnostics** — serial boot-stage logging with timestamps and heap usage for debugging startup issues.
 - **Session state** — expanded with sleep timer fields, wake reason tracking, and forward-compatible version loading.
 
 ### Scripts & Utilities

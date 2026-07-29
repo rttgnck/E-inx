@@ -19,6 +19,7 @@ constexpr uint32_t kReadingSessionCountMinMs = 45000;
 void EpubReadingStats::init(const Epub& epub, const Section* section, const int currentSpineIndex) {
   activeSessionTimeMs_ = 0;
   readingSessionCountCommitted_ = false;
+  readerSessionStartMs_ = millis();
 
   if (!loadBookStats(epub.getCachePath().c_str(), stats_)) {
     stats_.path = epub.getCachePath();

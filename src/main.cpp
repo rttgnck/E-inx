@@ -901,7 +901,9 @@ void setup() {
   }
   HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SetupWake, wakeReasonCode(wakeupReason),
                                 static_cast<uint32_t>(powerWakeAction));
+  Serial.printf("[%lu] [BOOT] Display init\n", millis());
   setupDisplayAndFonts();
+  Serial.printf("[%lu] [BOOT] Display OK, heap=%lu\n", millis(), (unsigned long)esp_get_free_heap_size());
   confirmBootedOtaImage();
 
   if (gpio.isUsbConnected()) {
@@ -910,15 +912,20 @@ void setup() {
     while (!Serial && (millis() - start) < 3000) delay(10);
   }
 
+  Serial.printf("[%lu] [BOOT] SD init\n", millis());
   if (!SdMan.begin()) {
     switchTo<FullScreenMessageActivity>(render, input, "SD card error", EpdFontFamily::BOLD);
     return;
   }
+  Serial.printf("[%lu] [BOOT] SD OK\n", millis());
   APP_STATE.loadFromFile();
   Serial.printf("[%lu] [BOOT] APP_STATE.lastRead = \"%s\", rtcLastReadPath = \"%s\"\n", millis(),
                 APP_STATE.lastRead.c_str(), rtcLastReadPath);
 
+  Serial.printf("[%lu] [BOOT] Loading settings\n", millis());
   SETTINGS.loadFromFile();
+  Serial.printf("[%lu] [BOOT] Settings OK, darkMode=%u, heap=%lu\n", millis(), SETTINGS.darkMode,
+                (unsigned long)esp_get_free_heap_size());
   OPDS_STORE.loadOrMigrate({"Default", SETTINGS.opdsServerUrl, SETTINGS.opdsUsername, SETTINGS.opdsPassword});
 #ifndef SIMULATOR
   // A normal wake retains the preceding SleepPlan in RTC memory. Persist it only when restart-safe logs are enabled.
@@ -1000,10 +1007,16 @@ void loop() {
     return;
   }
 
-  if (!powerSleepGuardActive() && gpio.isPressed(HalGPIO::BTN_POWER) &&
-      gpio.getHeldTime() > SETTINGS.getPowerButtonDuration()) {
-    enterDeepSleep();
-    return;
+  if (!powerSleepGuardActive() && gpio.isPressed(HalGPIO::BTN_POWER)) {
+    const unsigned long heldMs = gpio.getHeldTime();
+    if (heldMs >= 10000) {
+      esp_restart();
+      return;
+    }
+    if (heldMs > SETTINGS.getPowerButtonDuration()) {
+      enterDeepSleep();
+      return;
+    }
   }
 
   if (handleGlobalPowerRefresh()) {

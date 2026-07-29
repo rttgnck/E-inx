@@ -199,12 +199,10 @@ void CategorySettingsActivity::setupMenu() {
           entry.change = [this, settingPtr](int) {
             SETTINGS.*(settingPtr->valuePtr) = !(SETTINGS.*(settingPtr->valuePtr));
             SETTINGS.saveToFile();
-            if (setting.valuePtr == &SystemSetting::darkMode) {
-              // Apply immediately and force a full refresh: inverting the whole screen with a
-              // partial refresh would ghost badly.
+            if (settingPtr->valuePtr == &SystemSetting::darkMode) {
               renderer.setDarkMode(SETTINGS.darkMode);
               forceFullRefreshNext_ = true;
-            } else if (setting.valuePtr == &SystemSetting::sunlightFadingFix) {
+            } else if (settingPtr->valuePtr == &SystemSetting::sunlightFadingFix) {
               renderer.setFadingFix(SETTINGS.sunlightFadingFix);
             }
             updateRequired = true;

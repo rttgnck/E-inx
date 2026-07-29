@@ -7,11 +7,6 @@
 
 #include <GfxRenderer.h>
 
-#include "images/Calibre.h"
-#include "images/Opds.h"
-#include "images/Qr.h"
-#include "images/Setting.h"
-#include "images/Wifi.h"
 #include "state/SystemSetting.h"
 #include "system/Fonts.h"
 #include "system/MappedInputManager.h"
@@ -150,31 +145,8 @@ void SyncActivity::render() const {
         renderer.rectangle.fill(0, itemY, screenWidth, LIST_ITEM_HEIGHT, static_cast<int>(GfxRenderer::FillTone::Ink));
       }
 
-      constexpr int kIconSize = 30;
-      const int textX = 70;
-      const int iconX = (textX - kIconSize) / 2;
+      const int textX = 20;
       const int titleY = itemY + (LIST_ITEM_HEIGHT - renderer.text.getLineHeight(ATKINSON_HYPERLEGIBLE_10_FONT_ID)) / 2;
-      const int iconY = itemY + (LIST_ITEM_HEIGHT - kIconSize) / 2;
-
-      switch (i) {
-        case 0:
-          renderer.bitmap.icon(Wifi, iconX, iconY, kIconSize, kIconSize, BitmapRender::Orientation::None, isSelected);
-          break;
-        case 1:
-          renderer.bitmap.icon(Setting, iconX, iconY, kIconSize, kIconSize, BitmapRender::Orientation::None,
-                               isSelected);
-          break;
-        case 2:
-          renderer.bitmap.icon(Calibre, iconX, iconY, kIconSize, kIconSize, BitmapRender::Orientation::None,
-                               isSelected);
-          break;
-        case 3:
-          renderer.bitmap.icon(Qr, iconX, iconY, kIconSize, kIconSize, BitmapRender::Orientation::None, isSelected);
-          break;
-        case 4:
-          renderer.bitmap.icon(Opds, iconX, iconY, kIconSize, kIconSize, BitmapRender::Orientation::None, isSelected);
-          break;
-      }
 
       renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, textX, titleY, MENU_ITEMS[i], !isSelected);
       renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, screenWidth - 30, titleY, "›", !isSelected);

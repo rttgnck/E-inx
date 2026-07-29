@@ -560,7 +560,10 @@ void EInkDisplay::setRamArea(const uint16_t x, uint16_t y, uint16_t w, uint16_t 
   sendData((y + h - 1) / 256);  // high byte
 }
 
-void EInkDisplay::clearScreen(const uint8_t color) const { memset(frameBuffer, color, bufferSize); }
+void EInkDisplay::clearScreen(const uint8_t color) const {
+  if (!frameBuffer) return;
+  memset(frameBuffer, color, bufferSize);
+}
 
 void EInkDisplay::drawImage(const uint8_t* imageData, const uint16_t x, const uint16_t y, const uint16_t w,
                             const uint16_t h, const bool fromProgmem) const {
@@ -772,6 +775,7 @@ void EInkDisplay::cleanupGrayscaleBuffers(const uint8_t* bwBuffer) {
 #endif
 
 void EInkDisplay::displayBuffer(RefreshMode mode, const bool turnOffScreen) {
+  if (!frameBuffer) return;
   if (!_x3Mode && !isScreenOn && !turnOffScreen) {
     // Force half refresh if screen is off (non-X3 only)
     mode = HALF_REFRESH;

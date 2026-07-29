@@ -40,7 +40,7 @@ void readAndValidate(FsFile& file, uint8_t& member, const uint8_t maxValue) {
 }
 
 namespace {
-constexpr uint8_t SETTINGS_FILE_VERSION = 39;
+constexpr uint8_t SETTINGS_FILE_VERSION = 40;
 constexpr uint8_t SETTINGS_COUNT = 87;
 /** Last field index in v9 (1-based count of persisted pods through displayImageDither). */
 constexpr uint8_t SETTINGS_COUNT_V9 = 40;
@@ -408,8 +408,6 @@ bool SystemSetting::saveToFile() const {
   serialization::writePod(outputFile, sleepClockRefreshInterval);
   serialization::writePod(outputFile, shakePageTurn);
   serialization::writePod(outputFile, shakePageTurnSensitivity);
-  serialization::writePod(outputFile, uiTheme);
-  serialization::writePod(outputFile, libraryShelfEnabled);
   serialization::writePod(outputFile, darkMode);
   serialization::writePod(outputFile, dailyReadingGoal);
   serialization::writePod(outputFile, readerRefreshMode);
@@ -429,6 +427,8 @@ bool SystemSetting::saveToFile() const {
   serialization::writeString(outputFile, std::string(newsRepoUrl));
   serialization::writePod(outputFile, newsAutoDownload);
   serialization::writePod(outputFile, newsDownloadHour);
+  serialization::writePod(outputFile, uiTheme);
+  serialization::writePod(outputFile, libraryShelfEnabled);
 
   outputFile.close();
   saveUiThemeSetting(uiTheme);
@@ -782,15 +782,6 @@ bool SystemSetting::loadFromFile() {
       ++settingsRead;
     }
     if (settingsRead < fileSettingsCount) {
-      readAndValidate(inputFile, uiTheme, UI_THEME_COUNT);
-      ++settingsRead;
-    }
-    if (settingsRead < fileSettingsCount) {
-      serialization::readPod(inputFile, libraryShelfEnabled);
-      if (libraryShelfEnabled > 1) libraryShelfEnabled = 0;
-      ++settingsRead;
-    }
-    if (settingsRead < fileSettingsCount) {
       serialization::readPod(inputFile, darkMode);
       if (darkMode > 1) darkMode = 0;
       ++settingsRead;
@@ -885,6 +876,15 @@ bool SystemSetting::loadFromFile() {
       if (newsDownloadHour > 23) newsDownloadHour = 6;
       ++settingsRead;
     }
+    if (settingsRead < fileSettingsCount) {
+      readAndValidate(inputFile, uiTheme, UI_THEME_COUNT);
+      ++settingsRead;
+    }
+    if (settingsRead < fileSettingsCount) {
+      serialization::readPod(inputFile, libraryShelfEnabled);
+      if (libraryShelfEnabled > 1) libraryShelfEnabled = 0;
+      ++settingsRead;
+    }
 
   } while (false);
 
@@ -916,58 +916,58 @@ bool SystemSetting::loadFromFile() {
     shakePageTurnSensitivity = 1;
   }
   if (settingsRead < 67) {
-    uiTheme = UI_THEME_CLASSIC;
-  }
-  if (settingsRead < 68) {
-    libraryShelfEnabled = 0;
-  }
-  if (settingsRead < 69) {
     darkMode = 0;
   }
-  if (settingsRead < 70) {
+  if (settingsRead < 68) {
     dailyReadingGoal = DAILY_GOAL_30_MIN;
   }
-  if (settingsRead < 71) {
+  if (settingsRead < 69) {
     readerRefreshMode = READER_REFRESH_AUTO;
   }
-  if (settingsRead < 72) {
+  if (settingsRead < 70) {
     sunlightFadingFix = 0;
   }
-  if (settingsRead < 73) {
+  if (settingsRead < 71) {
     antiGhostingExperimental = 0;
   }
-  if (settingsRead < 74) {
+  if (settingsRead < 72) {
     sleepImageRotationMinutes = 5;
   }
-  if (settingsRead < 75) {
+  if (settingsRead < 73) {
     sleepImageRotationEnabled = 1;
   }
-  if (settingsRead < 76) {
+  if (settingsRead < 74) {
     sleepImagePowerDoublePress = 0;
   }
-  if (settingsRead < 77) {
+  if (settingsRead < 75) {
     powerWakeGuard = POWER_WAKE_GUARD_OFF;
   }
-  if (settingsRead < 78) {
+  if (settingsRead < 76) {
     sleepImagePowerGestureWindow = 0;
   }
-  if (settingsRead < 79) {
+  if (settingsRead < 77) {
     showBottomBarClock = 0;
   }
-  if (settingsRead < 80) {
+  if (settingsRead < 78) {
     statusBarInnerLeft = STATUS_ITEM_NONE;
   }
-  if (settingsRead < 81) {
+  if (settingsRead < 79) {
     statusBarInnerRight = STATUS_ITEM_NONE;
   }
-  if (settingsRead < 82) {
+  if (settingsRead < 80) {
     sleepImagePowerFirstPressMin = 0;
   }
-  if (settingsRead < 83) {
+  if (settingsRead < 81) {
     sleepImagePowerSecondPressMax = 2;
   }
-  if (settingsRead < 84) {
+  if (settingsRead < 82) {
     persistentSleepLogs = 1;
+  }
+  if (settingsRead < 86) {
+    uiTheme = UI_THEME_CLASSIC;
+  }
+  if (settingsRead < 87) {
+    libraryShelfEnabled = 1;
   }
 
   if (recentVisibleCount < 1 || recentVisibleCount > 9) {

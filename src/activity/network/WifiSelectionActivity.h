@@ -106,6 +106,7 @@ class WifiSelectionActivity final : public ActivityWithSubactivity, public Menu 
   int selectedNetworkIndex = 0;                             ///< Currently selected network index
   std::vector<WifiNetworkInfo> networks;                    ///< List of found networks
   const std::function<void(bool connected)> onComplete;     ///< Connection completion callback
+  const std::function<void(int)> onTabChange;               ///< Tab change callback
 
   std::string selectedSSID;               ///< SSID of selected network
   bool selectedRequiresPassword = false;  ///< Whether selected network requires password
