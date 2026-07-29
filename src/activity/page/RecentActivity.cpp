@@ -1504,8 +1504,8 @@ void RecentActivity::renderStatsDashboard() {
     if (rowProg >= 0.0f && rowProg <= 1.0f) {
       char prog[8];
       snprintf(prog, sizeof(prog), "%d%%", static_cast<int>(rowProg * 100.0f + 0.5f));
-      const int pctW = renderer.text.getWidth(fontSub, prog);
-      const int barW = std::max(24, tw - pctW - 10);
+      const int progTextW = renderer.text.getWidth(fontSub, prog);
+      const int barW = std::max(24, tw - progTextW - 10);
       renderer.rectangle.fill(tx, rowBarY, barW, rowBarH, false);
       renderer.rectangle.render(tx, rowBarY, barW, rowBarH, true);
       if (rowProg > 0.0f) {

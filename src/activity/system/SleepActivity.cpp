@@ -24,6 +24,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <iterator>
 #include <memory>
 #include <vector>
 
@@ -348,13 +349,10 @@ std::string pickSleepBmpPath(const bool ignoreFixed = false) {
     }
     return selected;
   }
-  std::vector<std::string> fallbackImages;
   constexpr const char* fallbackPaths[] = {"/sleep.bmp", "/sleep.jpg", "/sleep.jpeg"};
-  for (const char* path : fallbackPaths) {
-    if (SdMan.exists(path) && isSleepImageShuffleEnabled(path)) {
-      fallbackImages.emplace_back(path);
-    }
-  }
+  std::vector<std::string> fallbackImages;
+  std::copy_if(std::begin(fallbackPaths), std::end(fallbackPaths), std::back_inserter(fallbackImages),
+      [](const char* path) { return SdMan.exists(path) && isSleepImageShuffleEnabled(path); });
   if (!fallbackImages.empty()) {
     const size_t count = fallbackImages.size();
     beginNewSleepImageCycleIfNeeded(count);

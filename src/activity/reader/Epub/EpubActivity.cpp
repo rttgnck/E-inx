@@ -1059,7 +1059,7 @@ void EpubActivity::onPageDrawerSelected(int page) {
 bool EpubActivity::currentBookPagePosition(int& page, int& totalPages) const {
   page = 1;
   totalPages = 1;
-  if (!epub || !section || section->pageCount <= 0) {
+  if (!epub || !section || section->pageCount == 0) {
     return false;
   }
 

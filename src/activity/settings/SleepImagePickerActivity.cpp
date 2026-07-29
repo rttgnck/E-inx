@@ -42,12 +42,8 @@ void SleepImagePickerActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
   freeGridBuffer();
   rebuildRows();
-  int enabledCount = 0;
-  for (const auto& row : rows) {
-    if (isSleepImageShuffleEnabled(row.previewPath)) {
-      enabledCount++;
-    }
-  }
+  const int enabledCount = std::count_if(rows.begin(), rows.end(),
+      [](const Row& row) { return isSleepImageShuffleEnabled(row.previewPath); });
   if (!rows.empty() && enabledCount == 0) {
     for (const auto& row : rows) {
       setSleepImageShuffleEnabled(row.previewPath, true);
@@ -388,12 +384,8 @@ void SleepImagePickerActivity::toggleSelectedShuffleEnabled() {
   const Row& row = rows[static_cast<size_t>(selectedIndex)];
   const bool currentlyEnabled = isSleepImageShuffleEnabled(row.previewPath);
   if (currentlyEnabled) {
-    int enabledCount = 0;
-    for (const auto& r : rows) {
-      if (isSleepImageShuffleEnabled(r.previewPath)) {
-        enabledCount++;
-      }
-    }
+    const int enabledCount = std::count_if(rows.begin(), rows.end(),
+        [](const Row& r) { return isSleepImageShuffleEnabled(r.previewPath); });
     if (enabledCount <= 1) {
       return;
     }

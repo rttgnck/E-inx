@@ -20,10 +20,10 @@ std::string cachePathForRecentBook(const RecentBook& book) {
 
 std::string titleForCachePath(const std::string& cachePath) {
   const auto& books = RECENT_BOOKS.getBooks();
-  for (const auto& book : books) {
-    if (cachePathForRecentBook(book) == cachePath) {
-      return bookDisplayTitle(book);
-    }
+  const auto it = std::find_if(books.begin(), books.end(),
+      [&cachePath](const RecentBook& book) { return cachePathForRecentBook(book) == cachePath; });
+  if (it != books.end()) {
+    return bookDisplayTitle(*it);
   }
   const size_t slash = cachePath.find_last_of('/');
   return slash == std::string::npos ? cachePath : cachePath.substr(slash + 1);
@@ -349,8 +349,6 @@ class RecentActivity::HomeMenuDrawer {
       return;
     }
 
-    const int rowH = mode_ == HomeDrawerMode::Main ? kHomeDrawerMainRowH : kHomeDrawerRowH;
-    const int headerH = headerHeight();
     for (int row = 0; row < rowsPerPage_; ++row) {
       const int itemIndex = scroll_ + row;
       if (itemIndex >= count) {
@@ -612,20 +610,20 @@ class RecentActivity::HomeMenuDrawer {
       int recentIndex = -1;
       const RecentBook* recent = findRecentBookByPath(book.path, &recentIndex);
       const std::string cachePath = recent ? cachePathForRecentBook(*recent) : epubCachePathForBookPath(book.path);
-      std::string title = recent && !recent->title.empty() ? recent->title : book.title;
+      std::string bookTitle = recent && !recent->title.empty() ? recent->title : book.title;
       std::string author = recent && !recent->author.empty() ? recent->author : book.author;
-      if (!hadIndex && (title.empty() || author.empty()) && !cachePath.empty()) {
+      if (!hadIndex && (bookTitle.empty() || author.empty()) && !cachePath.empty()) {
         BookReadingStats stats;
         if (loadBookStats(cachePath.c_str(), stats)) {
-          if (title.empty()) {
-            title = stats.title;
+          if (bookTitle.empty()) {
+            bookTitle = stats.title;
           }
           if (author.empty()) {
             author = stats.author;
           }
         }
       }
-      addRow(book.path, title, author, cachePath, recentIndex);
+      addRow(book.path, bookTitle, author, cachePath, recentIndex);
     }
 
     const auto& books = RECENT_BOOKS.getBooks();
