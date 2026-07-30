@@ -84,6 +84,11 @@ class EInkDisplay {
   // Power management
   void deepSleep();
 
+  // Optional callback invoked periodically during display refresh waits.
+  using WaitCallback = void (*)();
+  static void setWaitCallback(WaitCallback cb) { waitCallback_ = cb; }
+  static void invokeWaitCallback() { if (waitCallback_) waitCallback_(); }
+
   // Access to frame buffer
   uint8_t* getFrameBuffer() const { return frameBuffer; }
 
@@ -137,6 +142,8 @@ class EInkDisplay {
   void waitForRefresh(const char* comment = nullptr);
   void waitWhileBusy(const char* comment = nullptr);
   void initDisplayController();
+
+  static WaitCallback waitCallback_;
 
   // Low-level display operations
   void setRamArea(uint16_t x, uint16_t y, uint16_t w, uint16_t h);

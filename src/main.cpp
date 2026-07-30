@@ -903,6 +903,13 @@ void setup() {
                                 static_cast<uint32_t>(powerWakeAction));
   Serial.printf("[%lu] [BOOT] Display init\n", millis());
   setupDisplayAndFonts();
+  EInkDisplay::setWaitCallback([] {
+    gpio.update();
+    if (gpio.isPressed(HalGPIO::BTN_POWER)) {
+      Serial.printf("[%lu] [DBG] WAIT-CB power pressed, held=%lums\n",
+                    millis(), gpio.getHeldTime());
+    }
+  });
   Serial.printf("[%lu] [BOOT] Display OK, heap=%lu\n", millis(), (unsigned long)esp_get_free_heap_size());
   confirmBootedOtaImage();
 
@@ -1009,11 +1016,14 @@ void loop() {
 
   if (!powerSleepGuardActive() && gpio.isPressed(HalGPIO::BTN_POWER)) {
     const unsigned long heldMs = gpio.getHeldTime();
+    Serial.printf("[%lu] [DBG] PRE-LOOP power held %lums (need %lums)\n",
+                  millis(), heldMs, (unsigned long)SETTINGS.getPowerButtonDuration());
     if (heldMs >= 10000) {
       esp_restart();
       return;
     }
     if (heldMs > SETTINGS.getPowerButtonDuration()) {
+      Serial.printf("[%lu] [DBG] PRE-LOOP -> enterDeepSleep\n", millis());
       enterDeepSleep();
       return;
     }
@@ -1029,6 +1039,20 @@ void loop() {
 
   if (currentActivity) {
     currentActivity->loop();
+  }
+
+  if (!powerSleepGuardActive() && gpio.isPressed(HalGPIO::BTN_POWER)) {
+    const unsigned long heldMs = gpio.getHeldTime();
+    Serial.printf("[%lu] [DBG] POST-LOOP power held %lums\n", millis(), heldMs);
+    if (heldMs >= 10000) {
+      esp_restart();
+      return;
+    }
+    if (heldMs > SETTINGS.getPowerButtonDuration()) {
+      Serial.printf("[%lu] [DBG] POST-LOOP -> enterDeepSleep\n", millis());
+      enterDeepSleep();
+      return;
+    }
   }
 
   if (currentActivity && currentActivity->skipLoopDelay()) {

@@ -13,6 +13,7 @@
 #include <HalDisplay.h>
 #include <ImageRender.h>
 #include <SDCardManager.h>
+#include <esp_heap_caps.h>
 #include <esp_task_wdt.h>
 #include <time.h>
 
@@ -924,8 +925,14 @@ void EpubActivity::loop() {
     }
   }
 
+  if (mappedInput.wasReleased(MappedInputManager::Button::Power)) {
+    Serial.printf("[%lu] [DBG] EPUB power released, shortPwrBtn=%u\n",
+                  millis(), (unsigned)SETTINGS.readerShortPwrBtn);
+  }
+
   if (mappedInput.wasReleased(MappedInputManager::Button::Power) &&
       SETTINGS.readerShortPwrBtn == SystemSetting::READER_SHORT_PWRBTN::READER_PAGE_TURN) {
+    Serial.printf("[%lu] [DBG] EPUB power -> pageTurn\n", millis());
     endPageTimer();
     pageTurn(true);
     lastAutoPageTurnTime = millis();
@@ -934,6 +941,7 @@ void EpubActivity::loop() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Power) &&
       SETTINGS.readerShortPwrBtn == SystemSetting::READER_SHORT_PWRBTN::READER_PAGE_REFRESH) {
+    Serial.printf("[%lu] [DBG] EPUB power -> refresh\n", millis());
     renderer.displayBuffer(HalDisplay::MANUAL_REFRESH);
     updateRequired = true;
     return;
@@ -941,6 +949,7 @@ void EpubActivity::loop() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Power) &&
       SETTINGS.readerShortPwrBtn == SystemSetting::READER_SHORT_PWRBTN::READER_ANNOTATE) {
+    Serial.printf("[%lu] [DBG] EPUB power -> annotate\n", millis());
     pauseReadingStats();
     annUi_.enter(*this);
     return;
@@ -1006,7 +1015,9 @@ void EpubActivity::loop() {
 
   if (updateRequired) {
     updateRequired = false;
+    Serial.printf("[%lu] [DBG] EPUB renderScreen start\n", millis());
     renderScreen();
+    Serial.printf("[%lu] [DBG] EPUB renderScreen done\n", millis());
     return;
   }
 }
@@ -1864,6 +1875,10 @@ void EpubActivity::renderContents(std::unique_ptr<Page> page, const int oriented
                                   const int orientedMarginRight, const int orientedMarginBottom,
                                   const int orientedMarginLeft) {
   if (!page) return;
+  isDoingSomethingHeavy = true;
+  const unsigned long rcStart = millis();
+  Serial.printf("[%lu] [DBG] renderContents start, hasImages=%d, heap=%lu\n",
+                rcStart, page->hasImages(), (unsigned long)esp_get_free_heap_size());
   const int fontId = bookSettings.getReaderFontId();
   FontManager::ensureReaderLayoutFonts(fontId, renderer);
   const int headerFontId = FontManager::getNextFont(fontId);
@@ -1956,8 +1971,11 @@ void EpubActivity::renderContents(std::unique_ptr<Page> page, const int oriented
   const bool smartRefreshAfterLargeImage = lastPageHadImages && lastPageHadLargeImage;
 
   const bool skipImagesInPageRender = needsImageGrayscale && highQuality;
+  Serial.printf("[%lu] [DBG] page->render start (skipImg=%d, gray=%d, highQ=%d, medQ=%d, aa=%d)\n",
+                millis(), skipImagesInPageRender, needsImageGrayscale, highQuality, mediumImageGrayscale, textAa);
   page->render(renderer, fontId, headerFontId, orientedMarginLeft, orientedMarginTop, skipImagesInPageRender, imageMode,
                /*skipOnlyGrayscaleImages=*/highQuality);
+  Serial.printf("[%lu] [DBG] page->render done\n", millis());
 
   renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
   if (isCurrentPageBookmarked()) {
@@ -1965,7 +1983,9 @@ void EpubActivity::renderContents(std::unique_ptr<Page> page, const int oriented
   }
 
   if (pageHasImages && !skipImagesInPageRender) {
+    Serial.printf("[%lu] [DBG] renderImages start\n", millis());
     page->renderImages(renderer, fontId, orientedMarginLeft, orientedMarginTop, imageMode);
+    Serial.printf("[%lu] [DBG] renderImages done\n", millis());
   }
 
   // Medium uses the same BW restore/rebase lifecycle as text AA. Without a
@@ -1993,13 +2013,17 @@ void EpubActivity::renderContents(std::unique_ptr<Page> page, const int oriented
     page->fillImageRects(renderer, orientedMarginLeft, orientedMarginTop, true, /*onlyGrayscale=*/true);
   }
   if (!displayWithQualityPass || !highQualityCacheReady) {
+    Serial.printf("[%lu] [DBG] displayPageBuffer start\n", millis());
     displayPageBuffer();
+    Serial.printf("[%lu] [DBG] displayPageBuffer done\n", millis());
   } else if (pagesUntilFullRefresh <= 1) {
     pagesUntilFullRefresh = bookSettings.refreshFrequency;
   } else {
     pagesUntilFullRefresh--;
   }
 
+  Serial.printf("[%lu] [DBG] grayscale phase: highQ=%d bwStored=%d medGray=%d aaPass=%d\n",
+                millis(), highQuality, bwStored, mediumImageGrayscale, needsTextAntiAliasPass);
   if (highQuality && bwStored) {
     ImageRender::displayGrayscale(
         renderer, /*quality=*/true, /*preserveText=*/true,
@@ -2042,6 +2066,10 @@ void EpubActivity::renderContents(std::unique_ptr<Page> page, const int oriented
   } else if (bwStored) {
     renderer.restoreBwBuffer();
   }
+
+  isDoingSomethingHeavy = false;
+  Serial.printf("[%lu] [DBG] renderContents done, total=%lums, heap=%lu\n",
+                millis(), millis() - rcStart, (unsigned long)esp_get_free_heap_size());
 
   lastPageHadImages = pageHasImages;
   lastPageHadLargeImage = pageHasLargeImage;

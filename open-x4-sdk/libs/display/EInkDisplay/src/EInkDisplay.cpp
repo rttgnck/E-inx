@@ -5,6 +5,8 @@
 #include <fstream>
 #include <vector>
 
+EInkDisplay::WaitCallback EInkDisplay::waitCallback_ = nullptr;
+
 // SSD1677 command definitions
 // Initialization and reset
 #define CMD_SOFT_RESET 0x12             // Soft reset
@@ -353,21 +355,34 @@ void EInkDisplay::resetDisplay() {
 
 void EInkDisplay::waitForRefresh(const char* comment) {
   unsigned long start = millis();
+  unsigned long lastCb = start;
   if (!_x3Mode) {
     while (digitalRead(_busy) == HIGH) {
       delay(1);
+      if (waitCallback_ && millis() - lastCb >= 50) {
+        waitCallback_();
+        lastCb = millis();
+      }
       if (millis() - start > 30000) break;
     }
   } else {
     bool sawLow = false;
     while (digitalRead(_busy) == HIGH) {
       delay(1);
+      if (waitCallback_ && millis() - lastCb >= 50) {
+        waitCallback_();
+        lastCb = millis();
+      }
       if (millis() - start > 1000) break;
     }
     if (digitalRead(_busy) == LOW) {
       sawLow = true;
       while (digitalRead(_busy) == LOW) {
         delay(1);
+        if (waitCallback_ && millis() - lastCb >= 50) {
+          waitCallback_();
+          lastCb = millis();
+        }
         if (millis() - start > 30000) break;
       }
     }
