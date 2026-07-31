@@ -127,7 +127,7 @@ void ReaderActivity::onGoToEpubReader(std::unique_ptr<Epub> epub) {
           callback(bookPath);
         }
       },
-      [] {}));
+      [] {}, openNavigationOnLaunch));
 }
 
 /**

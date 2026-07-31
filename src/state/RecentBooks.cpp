@@ -53,6 +53,16 @@ void RecentBooks::updateProgress(const std::string& path, float progress) {
   }
 }
 
+void RecentBooks::updateMetadata(const std::string& path, const std::string& title, const std::string& author) {
+  auto it =
+      std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
+  if (it != recentBooks.end()) {
+    it->title = title;
+    it->author = author;
+    saveToFile();
+  }
+}
+
 bool RecentBooks::saveToFile() const {
   SdMan.mkdir("/.metadata");
 

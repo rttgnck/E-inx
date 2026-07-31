@@ -97,6 +97,7 @@ static bool doFetch(const std::string& url, FetchCtx* fetchCtx, const std::strin
   cfg.keep_alive_enable = false;
   cfg.buffer_size = 2048;
   cfg.buffer_size_tx = 1024;
+  cfg.max_redirection_count = 10;
 
   esp_http_client_handle_t client = esp_http_client_init(&cfg);
   if (!client) {
@@ -209,6 +210,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   cfg.keep_alive_enable = false;
   cfg.buffer_size = 2048;
   cfg.buffer_size_tx = 1024;
+  cfg.max_redirection_count = 10;
 
   esp_http_client_handle_t client = esp_http_client_init(&cfg);
   if (!client) {

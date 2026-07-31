@@ -96,7 +96,9 @@ bool WifiCredentialStore::addCredential(const std::string& ssid, const std::stri
   const auto cred = find_if(credentials.begin(), credentials.end(),
                             [&ssid](const WifiCredential& cred) { return cred.ssid == ssid; });
   if (cred != credentials.end()) {
-    cred->password = password;
+    WifiCredential updated{ssid, password};
+    credentials.erase(cred);
+    credentials.push_back(updated);
     Serial.printf("[%lu] [WCS] Updated credentials for: %s\n", millis(), ssid.c_str());
     return saveToFile();
   }
@@ -131,6 +133,10 @@ const WifiCredential* WifiCredentialStore::findCredential(const std::string& ssi
   }
 
   return nullptr;
+}
+
+const WifiCredential* WifiCredentialStore::getLastCredential() const {
+  return credentials.empty() ? nullptr : &credentials.back();
 }
 
 bool WifiCredentialStore::hasSavedCredential(const std::string& ssid) const { return findCredential(ssid) != nullptr; }

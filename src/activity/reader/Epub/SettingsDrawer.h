@@ -140,13 +140,16 @@ class SettingsDrawer {
     BionicReading,      ///< Bionic Reading toggle
     AntiAliasing,       ///< Text anti-aliasing toggle
     RefreshRate,        ///< Display refresh frequency
+    ReaderRefreshMode,  ///< Force reader refresh mode
     ReaderPowerButton,  ///< Reader short power button behavior
     ChapterSkip,        ///< Long-press chapter skip toggle
     NavigationLock,     ///< Navigation lock setting
 
-    StatusBarLeft,    ///< Left status bar section content
+    StatusBarLeft,  ///< Left status bar section content
+    StatusBarInnerLeft,
     StatusBarMiddle,  ///< Middle status bar section content
-    StatusBarRight,   ///< Right status bar section content
+    StatusBarInnerRight,
+    StatusBarRight,  ///< Right status bar section content
 
     ReaderImageGrayscale,     ///< Global: EPUB image grayscale pass
     ReaderSmartImageRefresh,  ///< Global: half refresh on image pages

@@ -130,3 +130,22 @@ GlobalReadingStats aggregateGlobalStatsFromBooks(const std::vector<BookReadingSt
  * Recomputes global totals by scanning all per-book statistics files.
  */
 GlobalReadingStats generateGlobalStats();
+
+/**
+ * Backs up every book's stats to a single human-editable JSON file at
+ * `<backupRoot>/reading_stats.json` (reading time exposed as whole seconds).
+ *
+ * @param backupRoot Destination root (e.g., "/.backups/reading_stats")
+ * @return Number of books written
+ */
+int backupAllBookStats(const char* backupRoot);
+
+/**
+ * Restores stats from `<backupRoot>/reading_stats.json` back into the per-book cache dirs, replacing
+ * current values. Use this to carry reading time across firmware flashes, hand-edit reading time, or
+ * import stats from another device.
+ *
+ * @param backupRoot Source root (e.g., "/.backups/reading_stats")
+ * @return Number of books restored
+ */
+int restoreAllBookStats(const char* backupRoot);

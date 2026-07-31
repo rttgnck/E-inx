@@ -15,6 +15,7 @@
 #include <cstring>
 #include <iterator>
 
+#include "state/SleepImageSelection.h"
 #include "state/SystemSetting.h"
 #include "system/Fonts.h"
 #include "system/MappedInputManager.h"
@@ -35,13 +36,19 @@ constexpr int THUMB_INSET_Y = 12;
 constexpr int RANDOM_BUTTON_W = 178;
 constexpr int RANDOM_BUTTON_H = 28;
 constexpr int FOOTER_SIDE_PAD = 20;
-
 }  // namespace
 
 void SleepImagePickerActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
   freeGridBuffer();
   rebuildRows();
+  const int enabledCount = std::count_if(rows.begin(), rows.end(),
+                                         [](const Row& row) { return isSleepImageShuffleEnabled(row.previewPath); });
+  if (!rows.empty() && enabledCount == 0) {
+    for (const auto& row : rows) {
+      setSleepImageShuffleEnabled(row.previewPath, true);
+    }
+  }
 
   randomEnabled = SETTINGS.sleepCustomBmp[0] == '\0';
   selectedIndex = 0;
@@ -60,21 +67,28 @@ void SleepImagePickerActivity::rebuildRows() {
   rows.clear();
 
   std::vector<Row> folderImages;
-  auto dir = SdMan.open("/sleep");
-  if (dir && dir.isDirectory()) {
-    char name[256];
-    while (auto file = dir.openNextFile()) {
-      file.getName(name, sizeof(name));
-      std::string filename = name;
-      const bool supported = StringUtils::checkFileExtension(filename, ".bmp") ||
-                             StringUtils::checkFileExtension(filename, ".jpg") ||
-                             StringUtils::checkFileExtension(filename, ".jpeg");
-      if (filename[0] != '.' && supported) {
-        folderImages.push_back({filename, filename, std::string("/sleep/") + filename});
+  const char* folders[] = {"/sleep", "/Wallpapers"};
+  for (const char* folder : folders) {
+    auto dir = SdMan.open(folder);
+    if (dir && dir.isDirectory()) {
+      char name[256];
+      while (auto file = dir.openNextFile()) {
+        file.getName(name, sizeof(name));
+        std::string filename = name;
+        const bool supported = StringUtils::checkFileExtension(filename, ".bmp") ||
+                               StringUtils::checkFileExtension(filename, ".jpg") ||
+                               StringUtils::checkFileExtension(filename, ".jpeg");
+        if (filename[0] != '.' && supported) {
+          const std::string path = std::string(folder) + "/" + filename;
+          const bool legacySleepFolder = strcmp(folder, "/sleep") == 0;
+          const std::string value = legacySleepFolder ? filename : path;
+          const std::string label = legacySleepFolder ? filename : std::string("Wallpapers/") + filename;
+          folderImages.push_back({label, value, path});
+        }
+        file.close();
       }
-      file.close();
+      dir.close();
     }
-    dir.close();
   }
 
   std::sort(folderImages.begin(), folderImages.end(), [](const Row& a, const Row& b) { return a.label < b.label; });
@@ -183,7 +197,7 @@ void SleepImagePickerActivity::drawPickerChrome(const int pageStart, const int r
   renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, buttonTextX, buttonTextY, buttonText, true,
                        EpdFontFamily::BOLD);
 
-  const auto labels = mappedInput.mapLabels("\xC2\xAB Back", "Select", "Random", "Next");
+  const auto labels = mappedInput.mapLabels("\xC2\xAB Back", "Toggle", "Random", "Next");
   renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
@@ -227,6 +241,21 @@ void SleepImagePickerActivity::drawPickerThumbnails(const int pageStart, const i
       const int msgW = renderer.text.getWidth(msgFont, msg);
       renderer.text.render(msgFont, cellX + (cellW - msgW) / 2,
                            cellY + (cellH - renderer.text.getLineHeight(msgFont)) / 2, msg, true);
+    }
+
+    const bool checked = isSleepImageShuffleEnabled(row.previewPath);
+    const int box = 18;
+    const int boxX = cellX + cellW - box - 8;
+    const int boxY = cellY + 8;
+    renderer.rectangle.fill(boxX - 2, boxY - 2, box + 4, box + 4, false);
+    if (checked) {
+      renderer.rectangle.fill(boxX, boxY, box, box, true);
+      renderer.line.render(boxX + 4, boxY + 10, boxX + 8, boxY + 14, false);
+      renderer.line.render(boxX + 8, boxY + 14, boxX + 15, boxY + 4, false);
+      renderer.line.render(boxX + 4, boxY + 11, boxX + 8, boxY + 15, false);
+      renderer.line.render(boxX + 8, boxY + 15, boxX + 15, boxY + 5, false);
+    } else {
+      renderer.rectangle.render(boxX, boxY, box, box, true);
     }
 
     renderer.rectangle.render(cellX, cellY, cellW, cellH, true);
@@ -338,20 +367,34 @@ void SleepImagePickerActivity::render() {
   }
 }
 
-void SleepImagePickerActivity::applySelection() {
-  if (randomEnabled) {
+void SleepImagePickerActivity::applyRandomMode() {
+  if (randomEnabled || rows.empty() || selectedIndex < 0 || selectedIndex >= static_cast<int>(rows.size())) {
     SETTINGS.setSleepCustomBmpFromInput("");
-    SETTINGS.saveToFile();
-    onBack();
-    return;
+  } else {
+    const std::string& v = rows[static_cast<size_t>(selectedIndex)].value;
+    SETTINGS.setSleepCustomBmpFromInput(v.c_str());
   }
+  SETTINGS.saveToFile();
+}
+
+void SleepImagePickerActivity::toggleSelectedShuffleEnabled() {
   if (selectedIndex < 0 || selectedIndex >= static_cast<int>(rows.size())) {
     return;
   }
-  const std::string& v = rows[static_cast<size_t>(selectedIndex)].value;
-  SETTINGS.setSleepCustomBmpFromInput(v.c_str());
-  SETTINGS.saveToFile();
-  onBack();
+  const Row& row = rows[static_cast<size_t>(selectedIndex)];
+  const bool currentlyEnabled = isSleepImageShuffleEnabled(row.previewPath);
+  if (currentlyEnabled) {
+    const int enabledCount =
+        std::count_if(rows.begin(), rows.end(), [](const Row& r) { return isSleepImageShuffleEnabled(r.previewPath); });
+    if (enabledCount <= 1) {
+      return;
+    }
+  }
+  setSleepImageShuffleEnabled(row.previewPath, !currentlyEnabled);
+  applyRandomMode();
+  renderedPageStart = -1;
+  freeGridBuffer();
+  requestRedraw();
 }
 
 void SleepImagePickerActivity::requestRedraw() {
@@ -383,9 +426,8 @@ void SleepImagePickerActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    randomEnabled = false;
-    applySelection();
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    toggleSelectedShuffleEnabled();
     return;
   }
 
@@ -398,9 +440,7 @@ void SleepImagePickerActivity::loop() {
 
   if (randomPressed) {
     randomEnabled = !randomEnabled;
-    SETTINGS.setSleepCustomBmpFromInput(
-        randomEnabled ? "" : (rows.empty() ? "" : rows[static_cast<size_t>(selectedIndex)].value.c_str()));
-    SETTINGS.saveToFile();
+    applyRandomMode();
     renderedPageStart = -1;
     freeGridBuffer();
     needRedraw = true;

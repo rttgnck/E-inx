@@ -11,6 +11,7 @@
 #include <string>
 
 #include "Epub.h"
+#include "EpubReadingStats.h"
 #include "GfxRenderer.h"
 #include "state/BookSetting.h"
 
@@ -25,7 +26,8 @@ class StatusBar {
    * @param epub Reference to the EPUB document
    * @param settings Reference to the book settings
    */
-  StatusBar(GfxRenderer& renderer, const Epub& epub, const BookSettings& settings);
+  StatusBar(GfxRenderer& renderer, const Epub& epub, const BookSettings& settings,
+            const EpubReadingStats& readingStats);
 
   /**
    * @brief Renders the complete status bar
@@ -100,6 +102,7 @@ class StatusBar {
    * @return Battery percentage string
    */
   std::string getBatteryPercentString() const;
+  std::string getSessionTimeString() const;
 
   /**
    * @brief Gets the current chapter title
@@ -119,6 +122,7 @@ class StatusBar {
   GfxRenderer& m_renderer;
   const Epub& m_epub;
   const BookSettings& m_settings;
+  const EpubReadingStats& m_readingStats;
   bool m_visible;
 };
 

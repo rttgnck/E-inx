@@ -32,6 +32,8 @@ class ImageDisplayCache {
                               const ImageDisplayCacheOptions& options, bool quality = false);
   static bool store(GfxRenderer& renderer, const std::string& sourcePath, int x, int y, int width, int height,
                     const ImageDisplayCacheOptions& options);
+  static bool remove(GfxRenderer& renderer, const std::string& sourcePath, int x, int y, int width, int height,
+                     const ImageDisplayCacheOptions& options);
 
  private:
   static std::string pathFor(GfxRenderer& renderer, const std::string& sourcePath, int x, int y, int width, int height,

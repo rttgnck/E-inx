@@ -22,10 +22,11 @@
  * @brief Represents the operational states of the local network activity
  */
 enum class LocalNetworkState {
-  WIFI_SELECTION,  /**< Waiting for WiFi network selection */
-  SERVER_STARTING, /**< Web server initialization in progress */
-  SERVER_RUNNING,  /**< Web server active and accepting connections */
-  ERROR            /**< Error state, unable to proceed */
+  WIFI_AUTO_CONNECTING, /**< Connecting to the most recently saved network */
+  WIFI_SELECTION,       /**< Waiting for WiFi network selection */
+  SERVER_STARTING,      /**< Web server initialization in progress */
+  SERVER_RUNNING,       /**< Web server active and accepting connections */
+  ERROR                 /**< Error state, unable to proceed */
 };
 
 /**
@@ -44,15 +45,22 @@ class LocalNetworkActivity final : public ActivityWithSubactivity, public Menu {
    * @param onGoBack Callback function invoked when user requests to go back
    */
   explicit LocalNetworkActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                const std::function<void()>& onGoBack)
+                                const std::function<void()>& onGoBack, bool autoConnectSaved = false,
+                                bool updateLanding = false)
       : ActivityWithSubactivity("LocalNetwork", renderer, mappedInput),
         Menu(),
         displayTaskHandle(nullptr),
         renderingMutex(nullptr),
         updateRequired(false),
         state(LocalNetworkState::WIFI_SELECTION),
+        wifiSelectionCompletionPending(false),
+        wifiSelectionConnected(false),
+        autoConnectSaved(autoConnectSaved),
+        updateLanding(updateLanding),
+        wifiConnectionStartTime(0),
+        lastHandleClientTime(0),
         onGoBack(onGoBack) {
-    tabSelectorIndex = 3;
+    tabSelectorIndex = 4;
   }
 
   /**
@@ -107,6 +115,18 @@ class LocalNetworkActivity final : public ActivityWithSubactivity, public Menu {
    */
   void onWifiSelectionComplete(bool connected);
 
+  /** @brief Completes the WiFi handoff after the child callback has returned */
+  void finishWifiSelection();
+
+  /** @brief Connects to the most recently saved WiFi network */
+  void startSavedWifiConnection();
+
+  /** @brief Opens the normal WiFi picker */
+  void startWifiSelection();
+
+  /** @brief Starts services after either automatic or manual WiFi connection */
+  void finishConnectedNetwork();
+
   /** @brief Initializes and starts the web server */
   void startWebServer();
 
@@ -116,14 +136,20 @@ class LocalNetworkActivity final : public ActivityWithSubactivity, public Menu {
   /** @brief Navigate to selected menu tab (not used in this activity) */
   void navigateToSelectedMenu() override {}
 
-  TaskHandle_t displayTaskHandle;   /**< Handle for display update task */
-  SemaphoreHandle_t renderingMutex; /**< Mutex for thread-safe rendering */
-  bool updateRequired;              /**< Flag indicating render update needed */
-  LocalNetworkState state;          /**< Current activity state */
+  TaskHandle_t displayTaskHandle;        /**< Handle for display update task */
+  SemaphoreHandle_t renderingMutex;      /**< Mutex for thread-safe rendering */
+  bool updateRequired;                   /**< Flag indicating render update needed */
+  LocalNetworkState state;               /**< Current activity state */
+  bool wifiSelectionCompletionPending;   /**< Deferred child completion callback */
+  bool wifiSelectionConnected;           /**< Result captured by the deferred callback */
+  const bool autoConnectSaved;           /**< Try the newest saved credential before showing the picker */
+  const bool updateLanding;              /**< Show the /update URL and update-specific device copy */
+  unsigned long wifiConnectionStartTime; /**< Start time for saved-network connection timeout */
 
   std::string connectedIP;                /**< IP address of connected WiFi */
   std::string connectedSSID;              /**< SSID of connected WiFi network */
   std::unique_ptr<LocalServer> webServer; /**< Web server instance */
+  unsigned long lastHandleClientTime;     /**< Timestamp of last client handling */
 
   const std::function<void()> onGoBack; /**< Callback invoked when going back */
 };

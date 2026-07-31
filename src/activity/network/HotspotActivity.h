@@ -50,7 +50,7 @@ class HotspotActivity final : public Activity, public Menu {
         updateRequired(false),
         state(HotspotState::STARTING),
         onGoBack(onGoBack) {
-    tabSelectorIndex = 3;
+    tabSelectorIndex = 4;
   }
 
   /**

@@ -17,6 +17,8 @@
 extern HalGPIO gpio;
 #endif
 
+#include "../../src/state/SystemSetting.h"
+
 GfxRenderer::GfxRenderer(HalDisplay& halDisplay)
     : display(halDisplay),
       renderMode(BW),
@@ -113,7 +115,10 @@ __attribute__((optimize("O2"))) void GfxRenderer::drawPixel(const int x, const i
   const uint32_t byteIndex = rotatedY * panelWidthBytes + (rotatedX / 8);
   const uint8_t bitPosition = 7 - (rotatedX % 8);
 
-  if (state) {
+  // Global dark mode inverts 1-bit (BW) drawing only; grayscale image passes are left untouched.
+  const bool effectiveState = (darkMode && renderMode == BW && !preservingImageTone_) ? !state : state;
+
+  if (effectiveState) {
     frameBuffer[byteIndex] &= ~(1 << bitPosition);
   } else {
     frameBuffer[byteIndex] |= 1 << bitPosition;
@@ -193,7 +198,13 @@ void GfxRenderer::drawPackedRow1bpp(const int x, const int y, const int width, c
   }
 }
 
-void GfxRenderer::clearScreen(const uint8_t color) const { display.clearScreen(color); }
+void GfxRenderer::clearScreen(const uint8_t color) const {
+  // In dark mode, a white (paper) clear becomes a black (ink) background so the whole UI is inverted.
+  // Only applies to BW drawing; grayscale passes clear with their own baseline and must be left alone.
+  const uint8_t effectiveColor =
+      (darkMode && renderMode == BW && color == 0xFF && !preservingImageTone_) ? 0x00 : color;
+  display.clearScreen(effectiveColor);
+}
 
 void GfxRenderer::invertScreen() const {
   uint8_t* buffer = display.getFrameBuffer();
@@ -206,7 +217,15 @@ void GfxRenderer::invertScreen() const {
   }
 }
 
-void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const { display.displayBuffer(refreshMode); }
+void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const {
+  HalDisplay::RefreshMode mode = refreshMode;
+  if (nextRefreshOverridePending_) {
+    nextRefreshOverridePending_ = false;
+    mode = nextRefreshOverride_;
+  }
+  const bool turnOffScreen = SystemSetting::getInstance().sunlightFadingFix != 0;
+  display.displayBuffer(mode, turnOffScreen);
+}
 
 bool GfxRenderer::deviceIsX3() const {
 #ifdef SIMULATOR
@@ -257,15 +276,15 @@ void GfxRenderer::displayGrayBuffer(const bool quality, const bool trackForRever
   (void)trackForRevert;
   display.displayGrayBuffer(quality);
 #else
-  display.displayGrayBuffer(quality, trackForRevert);
+  display.displayGrayBuffer(quality, trackForRevert, SystemSetting::getInstance().sunlightFadingFix != 0);
 #endif
 }
 
 void GfxRenderer::displayGrayBufferFastQuality() const {
 #ifdef SIMULATOR
-  display.displayGrayBuffer(false);
+  display.displayGrayBuffer(false, true, SystemSetting::getInstance().sunlightFadingFix != 0);
 #else
-  display.displayGrayBufferFastQuality();
+  display.displayGrayBufferFastQuality(SystemSetting::getInstance().sunlightFadingFix != 0);
 #endif
 }
 

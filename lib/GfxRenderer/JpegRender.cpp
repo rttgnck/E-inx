@@ -5,6 +5,7 @@
 
 #include "JpegRender.h"
 
+#include <EInkDisplay.h>
 #include <SDCardManager.h>
 #include <picojpeg.h>
 
@@ -362,32 +363,54 @@ bool JpegRender::render(FsFile& jpegFile, int x, int y, int targetWidth, int tar
   if (pjpeg_decode_init(&imageInfo, jpegReadCallback, &context, 0) != 0) {
     return false;
   }
+
+  bool useReduce = false;
+  if (imageInfo.m_width >= targetWidth * 4 && imageInfo.m_height >= targetHeight * 4) {
+    pjpeg_decode_deinit();
+    jpegFile.seek(0);
+    context.bufferPos = 0;
+    context.bufferFilled = 0;
+    if (pjpeg_decode_init(&imageInfo, jpegReadCallback, &context, 1) == 0) {
+      useReduce = true;
+    } else {
+      jpegFile.seek(0);
+      context.bufferPos = 0;
+      context.bufferFilled = 0;
+      if (pjpeg_decode_init(&imageInfo, jpegReadCallback, &context, 0) != 0) {
+        return false;
+      }
+    }
+  }
   const uint32_t tAfterInit = millis();
 
-  int outWidth = imageInfo.m_width;
-  int outHeight = imageInfo.m_height;
+  const int imgW = useReduce ? (imageInfo.m_width + 7) / 8 : imageInfo.m_width;
+  const int imgH = useReduce ? (imageInfo.m_height + 7) / 8 : imageInfo.m_height;
+  const int mcuPixelH = useReduce ? std::max(1, imageInfo.m_MCUHeight / 8) : imageInfo.m_MCUHeight;
+
+  int outWidth = imgW;
+  int outHeight = imgH;
   uint32_t scaleX_fp = 65536;
   uint32_t scaleY_fp = 65536;
   int srcOffsetX = 0;
   int srcOffsetY = 0;
-  int cropSrcWidth = imageInfo.m_width;
-  int cropSrcHeight = imageInfo.m_height;
+  int cropSrcWidth = imgW;
+  int cropSrcHeight = imgH;
 
   {
-    const float sx = static_cast<float>(targetWidth) / static_cast<float>(imageInfo.m_width);
-    const float sy = static_cast<float>(targetHeight) / static_cast<float>(imageInfo.m_height);
+    const float sx = static_cast<float>(targetWidth) / static_cast<float>(imgW);
+    const float sy = static_cast<float>(targetHeight) / static_cast<float>(imgH);
     if (cropToFill) {
       const float scale = std::max(sx, sy);
       cropSrcWidth = std::max(1, static_cast<int>(targetWidth / scale));
       cropSrcHeight = std::max(1, static_cast<int>(targetHeight / scale));
-      srcOffsetX = std::max(0, (imageInfo.m_width - cropSrcWidth) / 2);
-      srcOffsetY = std::max(0, (imageInfo.m_height - cropSrcHeight) / 2);
+      srcOffsetX = std::max(0, (imgW - cropSrcWidth) / 2);
+      srcOffsetY = std::max(0, (imgH - cropSrcHeight) / 2);
       outWidth = targetWidth;
       outHeight = targetHeight;
     } else {
       float scale = std::min(sx, sy);
-      outWidth = std::max(1, static_cast<int>(std::lround(imageInfo.m_width * scale)));
-      outHeight = std::max(1, static_cast<int>(std::lround(imageInfo.m_height * scale)));
+      outWidth = std::max(1, static_cast<int>(std::lround(imgW * scale)));
+      outHeight = std::max(1, static_cast<int>(std::lround(imgH * scale)));
     }
     scaleX_fp = static_cast<uint32_t>((static_cast<uint64_t>(cropSrcWidth) << 16) / static_cast<uint32_t>(outWidth));
     scaleY_fp = static_cast<uint32_t>((static_cast<uint64_t>(cropSrcHeight) << 16) / static_cast<uint32_t>(outHeight));
@@ -419,7 +442,7 @@ bool JpegRender::render(FsFile& jpegFile, int x, int y, int targetWidth, int tar
     capture = nullptr;
   }
 
-  uint8_t* mcuRowBuffer = static_cast<uint8_t*>(malloc(static_cast<size_t>(imageInfo.m_width) * imageInfo.m_MCUHeight));
+  uint8_t* mcuRowBuffer = static_cast<uint8_t*>(malloc(static_cast<size_t>(imgW) * mcuPixelH));
   uint8_t* scaledRow = static_cast<uint8_t*>(malloc(static_cast<size_t>(outWidth)));
   uint8_t* prevScaledRow = verticalUpscale ? static_cast<uint8_t*>(malloc(static_cast<size_t>(outWidth))) : nullptr;
   uint8_t* blendedRow = verticalUpscale ? static_cast<uint8_t*>(malloc(static_cast<size_t>(outWidth))) : nullptr;
@@ -536,31 +559,59 @@ bool JpegRender::render(FsFile& jpegFile, int x, int y, int targetWidth, int tar
 
   uint32_t mcuDecodeMs = 0;
   uint32_t rowProcessMs = 0;
+  bool decodeOk = true;
+  unsigned long lastCbMs = millis();
+  const int blocksPerMcuX = imageInfo.m_MCUWidth / 8;
+  const int blocksPerMcuY = imageInfo.m_MCUHeight / 8;
   for (int mcuY = 0; mcuY < imageInfo.m_MCUSPerCol; mcuY++) {
     const uint32_t tMcuStart = millis();
     for (int mcuX = 0; mcuX < imageInfo.m_MCUSPerRow; mcuX++) {
-      if (pjpeg_decode_mcu() != 0) break;
-      for (int bY = 0; bY < imageInfo.m_MCUHeight; bY++) {
-        for (int bX = 0; bX < imageInfo.m_MCUWidth; bX++) {
-          const int pX = mcuX * imageInfo.m_MCUWidth + bX;
-          if (pX >= imageInfo.m_width) continue;
-          const int off = (bY / 8 * (imageInfo.m_MCUWidth / 8) + bX / 8) * 64 + (bY % 8) * 8 + (bX % 8);
-          uint8_t gray = (imageInfo.m_comps == 1) ? imageInfo.m_pMCUBufR[off]
-                                                  : grayFromRgb(imageInfo.m_pMCUBufR[off], imageInfo.m_pMCUBufG[off],
-                                                                imageInfo.m_pMCUBufB[off]);
-          mcuRowBuffer[bY * imageInfo.m_width + pX] = gray;
+      if (pjpeg_decode_mcu() != 0) {
+        decodeOk = false;
+        break;
+      }
+      if (millis() - lastCbMs >= 50) {
+        EInkDisplay::invokeWaitCallback();
+        lastCbMs = millis();
+      }
+      if (useReduce) {
+        for (int by = 0; by < blocksPerMcuY; by++) {
+          for (int bx = 0; bx < blocksPerMcuX; bx++) {
+            const int pX = mcuX * blocksPerMcuX + bx;
+            if (pX >= imgW) continue;
+            const int blockIdx = by * blocksPerMcuX + bx;
+            const int off = blockIdx * 64;
+            uint8_t gray = (imageInfo.m_comps == 1) ? imageInfo.m_pMCUBufR[off]
+                                                    : grayFromRgb(imageInfo.m_pMCUBufR[off], imageInfo.m_pMCUBufG[off],
+                                                                  imageInfo.m_pMCUBufB[off]);
+            mcuRowBuffer[by * imgW + pX] = gray;
+          }
+        }
+      } else {
+        for (int bY = 0; bY < imageInfo.m_MCUHeight; bY++) {
+          for (int bX = 0; bX < imageInfo.m_MCUWidth; bX++) {
+            const int pX = mcuX * imageInfo.m_MCUWidth + bX;
+            if (pX >= imgW) continue;
+            const int off = (bY / 8 * blocksPerMcuX + bX / 8) * 64 + (bY % 8) * 8 + (bX % 8);
+            uint8_t gray = (imageInfo.m_comps == 1) ? imageInfo.m_pMCUBufR[off]
+                                                    : grayFromRgb(imageInfo.m_pMCUBufR[off], imageInfo.m_pMCUBufG[off],
+                                                                  imageInfo.m_pMCUBufB[off]);
+            mcuRowBuffer[bY * imgW + pX] = gray;
+          }
         }
       }
     }
     const uint32_t tMcuEnd = millis();
     mcuDecodeMs += tMcuEnd - tMcuStart;
+    if (!decodeOk) {
+      break;
+    }
 
-    for (int yInMcu = 0; yInMcu < imageInfo.m_MCUHeight && (mcuY * imageInfo.m_MCUHeight + yInMcu) < imageInfo.m_height;
-         yInMcu++) {
+    for (int yInMcu = 0; yInMcu < mcuPixelH && (mcuY * mcuPixelH + yInMcu) < imgH; yInMcu++) {
       const uint32_t tRowStart = millis();
-      const int srcY = mcuY * imageInfo.m_MCUHeight + yInMcu;
+      const int srcY = mcuY * mcuPixelH + yInMcu;
       if (srcY < srcOffsetY || srcY >= srcYEnd) continue;
-      const uint8_t* srcRow = mcuRowBuffer + yInMcu * imageInfo.m_width;
+      const uint8_t* srcRow = mcuRowBuffer + yInMcu * imgW;
 
       buildScaledRow(srcRow, scaledRow);
 
@@ -634,14 +685,14 @@ bool JpegRender::render(FsFile& jpegFile, int x, int y, int targetWidth, int tar
   delete oneBitDitherer;
   const uint32_t tEnd = millis();
   Serial.printf(
-      "[%lu] [IMG-TIMING] JPEG %dx%d->%dx%d mode=%d quality=%d capture=%d: headerScan=%lums init=%lums "
-      "mcuDecode=%lums rowProcess=%lums decode+draw=%lums total=%lums\n",
-      tEnd, imageInfo.m_width, imageInfo.m_height, outWidth, outHeight, static_cast<int>(mode),
+      "[%lu] [IMG-TIMING] JPEG %dx%d%s->%dx%d mode=%d quality=%d capture=%d: headerScan=%lums init=%lums "
+      "mcuDecode=%lums rowProcess=%lums rows=%d/%d ok=%d decode+draw=%lums total=%lums\n",
+      tEnd, imageInfo.m_width, imageInfo.m_height, useReduce ? "(r)" : "", outWidth, outHeight, static_cast<int>(mode),
       static_cast<int>(quality), capture ? 1 : 0, static_cast<unsigned long>(tAfterHeaderScan - tRenderStart),
       static_cast<unsigned long>(tAfterInit - tAfterHeaderScan), static_cast<unsigned long>(mcuDecodeMs),
-      static_cast<unsigned long>(rowProcessMs), static_cast<unsigned long>(tEnd - tAfterInit),
-      static_cast<unsigned long>(tEnd - tRenderStart));
-  return currentOutY > 0;
+      static_cast<unsigned long>(rowProcessMs), currentOutY, outHeight, decodeOk ? 1 : 0,
+      static_cast<unsigned long>(tEnd - tAfterInit), static_cast<unsigned long>(tEnd - tRenderStart));
+  return decodeOk && currentOutY == outHeight;
 }
 
 bool JpegRender::fromPath(const std::string& path, int x, int y, int targetWidth, int targetHeight, bool cropToFill,

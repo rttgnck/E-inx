@@ -9,6 +9,8 @@
 #include <HardwareSerial.h>
 #include <SDCardManager.h>
 
+#include <algorithm>
+#include <cmath>
 #include <memory>
 
 #include "../../src/util/StringUtils.h"
@@ -18,6 +20,83 @@
 #include "ImageDisplayCache.h"
 #include "JpegRender.h"
 #include "PngRender.h"
+
+namespace {
+class ImageToneGuard {
+ public:
+  explicit ImageToneGuard(GfxRenderer& renderer)
+      : renderer_(renderer), previous_(renderer.setPreserveImageTone(true)) {}
+  ~ImageToneGuard() { renderer_.setPreserveImageTone(previous_); }
+
+ private:
+  GfxRenderer& renderer_;
+  bool previous_;
+};
+
+void clearBwImageMatte(GfxRenderer& renderer, const int x, const int y, const int width, const int height) {
+  if (renderer.getRenderMode() != GfxRenderer::BW || width <= 0 || height <= 0) {
+    return;
+  }
+  renderer.rectangle.fill(x, y, width, height, false);
+}
+
+struct DrawRect {
+  int x = 0;
+  int y = 0;
+  int width = 0;
+  int height = 0;
+};
+
+bool imageDrawRect(const int x, const int y, const int targetWidth, const int targetHeight, const int sourceWidth,
+                   const int sourceHeight, const bool cropToFill, const bool centersContain, DrawRect& out) {
+  if (targetWidth <= 0 || targetHeight <= 0 || sourceWidth <= 0 || sourceHeight <= 0) {
+    return false;
+  }
+  if (cropToFill) {
+    out.x = x;
+    out.y = y;
+    out.width = targetWidth;
+    out.height = targetHeight;
+    return true;
+  }
+  const float scale = std::min(static_cast<float>(targetWidth) / static_cast<float>(sourceWidth),
+                               static_cast<float>(targetHeight) / static_cast<float>(sourceHeight));
+  const int drawnW = std::max(1, static_cast<int>(std::lround(static_cast<float>(sourceWidth) * scale)));
+  const int drawnH = std::max(1, static_cast<int>(std::lround(static_cast<float>(sourceHeight) * scale)));
+  out.width = std::min(targetWidth, drawnW);
+  out.height = std::min(targetHeight, drawnH);
+  out.x = centersContain ? x + (targetWidth - out.width) / 2 : x;
+  out.y = centersContain ? y + (targetHeight - out.height) / 2 : y;
+  return true;
+}
+
+void fillBwDarkModeLetterboxMatte(GfxRenderer& renderer, const int x, const int y, const int width, const int height,
+                                  const DrawRect& content) {
+  if (renderer.getRenderMode() != GfxRenderer::BW || !renderer.isDarkMode() || width <= 0 || height <= 0 ||
+      content.width <= 0 || content.height <= 0) {
+    return;
+  }
+  const int targetRight = x + width;
+  const int targetBottom = y + height;
+  const int contentX = std::max(x, std::min(content.x, targetRight));
+  const int contentY = std::max(y, std::min(content.y, targetBottom));
+  const int contentRight = std::max(contentX, std::min(content.x + content.width, targetRight));
+  const int contentBottom = std::max(contentY, std::min(content.y + content.height, targetBottom));
+
+  if (contentY > y) {
+    renderer.rectangle.fill(x, y, width, contentY - y, false);
+  }
+  if (contentBottom < targetBottom) {
+    renderer.rectangle.fill(x, contentBottom, width, targetBottom - contentBottom, false);
+  }
+  if (contentX > x && contentBottom > contentY) {
+    renderer.rectangle.fill(x, contentY, contentX - x, contentBottom - contentY, false);
+  }
+  if (contentRight < targetRight && contentBottom > contentY) {
+    renderer.rectangle.fill(contentRight, contentY, targetRight - contentRight, contentBottom - contentY, false);
+  }
+}
+}  // namespace
 
 ImageRender ImageRender::create(GfxRenderer& renderer, const std::string& path) {
   return ImageRender(renderer, path, detectFormat(path));
@@ -108,41 +187,63 @@ bool ImageRender::render(int x, int y, int width, int height, const Options& opt
   }
 
   bool ok = false;
-  if (format_ == Format::Jpeg) {
-    JpegRender jpeg(renderer_);
-    if (jpegCapture && jpegCapture->captured) {
-      jpeg.replayCapture(*jpegCapture, options.mode);
-      ok = true;
-    } else {
-      ok = jpeg.fromPath(path_, x, y, width, height, options.cropToFill, options.mode, options.quality, jpegCapture);
-    }
-  } else if (format_ == Format::Png) {
-    PngRender png(renderer_);
-    ok = png.fromPath(path_, x, y, width, height, options.cropToFill, options.mode);
-  } else {
-    FsFile file;
-    if (!SdMan.openFileForRead("EHP", path_, file)) {
-      Serial.printf("[PAGEIMG] Failed to open image file: %s\n", path_.c_str());
-      return false;
-    }
-
-    Bitmap bitmap(file);
-    ok = bitmap.parseHeaders() == BmpReaderError::Ok;
-    if (ok) {
-      float cropX = 0.f;
-      float cropY = 0.f;
-      if (options.cropToFill && bitmap.getWidth() > 0 && bitmap.getHeight() > 0 && width > 0 && height > 0) {
-        const float imageRatio = static_cast<float>(bitmap.getWidth()) / static_cast<float>(bitmap.getHeight());
-        const float targetRatio = static_cast<float>(width) / static_cast<float>(height);
-        if (imageRatio > targetRatio) {
-          cropX = 1.0f - (targetRatio / imageRatio);
-        } else {
-          cropY = 1.0f - (imageRatio / targetRatio);
-        }
+  DrawRect contentRect;
+  bool haveContentRect = false;
+  {
+    ImageToneGuard imageToneGuard(renderer_);
+    clearBwImageMatte(renderer_, x, y, width, height);
+    if (format_ == Format::Jpeg) {
+      int sourceW = 0;
+      int sourceH = 0;
+      haveContentRect =
+          getDimensions(&sourceW, &sourceH) && imageDrawRect(x, y, width, height, sourceW, sourceH, options.cropToFill,
+                                                             /*centersContain=*/true, contentRect);
+      JpegRender jpeg(renderer_);
+      if (jpegCapture && jpegCapture->captured) {
+        jpeg.replayCapture(*jpegCapture, options.mode);
+        ok = true;
+      } else {
+        ok = jpeg.fromPath(path_, x, y, width, height, options.cropToFill, options.mode, options.quality, jpegCapture);
       }
-      renderer_.bitmap.render(bitmap, x, y, width, height, cropX, cropY, options.roundedOutside, options.mode);
+    } else if (format_ == Format::Png) {
+      int sourceW = 0;
+      int sourceH = 0;
+      haveContentRect =
+          getDimensions(&sourceW, &sourceH) && imageDrawRect(x, y, width, height, sourceW, sourceH, options.cropToFill,
+                                                             /*centersContain=*/true, contentRect);
+      PngRender png(renderer_);
+      ok = png.fromPath(path_, x, y, width, height, options.cropToFill, options.mode);
+    } else {
+      FsFile file;
+      if (!SdMan.openFileForRead("EHP", path_, file)) {
+        Serial.printf("[PAGEIMG] Failed to open image file: %s\n", path_.c_str());
+        return false;
+      }
+
+      Bitmap bitmap(file);
+      ok = bitmap.parseHeaders() == BmpReaderError::Ok;
+      if (ok) {
+        haveContentRect = imageDrawRect(x, y, width, height, bitmap.getWidth(), bitmap.getHeight(), options.cropToFill,
+                                        /*centersContain=*/false, contentRect);
+        float cropX = 0.f;
+        float cropY = 0.f;
+        if (options.cropToFill && bitmap.getWidth() > 0 && bitmap.getHeight() > 0 && width > 0 && height > 0) {
+          const float imageRatio = static_cast<float>(bitmap.getWidth()) / static_cast<float>(bitmap.getHeight());
+          const float targetRatio = static_cast<float>(width) / static_cast<float>(height);
+          if (imageRatio > targetRatio) {
+            cropX = 1.0f - (targetRatio / imageRatio);
+          } else {
+            cropY = 1.0f - (imageRatio / targetRatio);
+          }
+        }
+        renderer_.bitmap.render(bitmap, x, y, width, height, cropX, cropY, options.roundedOutside, options.mode);
+      }
+      file.close();
     }
-    file.close();
+  }
+
+  if (ok && haveContentRect) {
+    fillBwDarkModeLetterboxMatte(renderer_, x, y, width, height, contentRect);
   }
 
   if (ok && options.roundedOutside != BitmapRender::RoundedOutside::None) {
@@ -197,6 +298,12 @@ bool ImageRender::displayGrayscale(int x, int y, int width, int height, const Op
     return true;  // served from cache (handles both planes + refresh + cleanup)
   }
 
+  auto cleanupFailedGrayscale = [&] {
+    renderer_.setRenderMode(GfxRenderer::BW);
+    renderer_.clearScreen(0xFF);
+    renderer_.cleanupGrayscaleWithFrameBuffer();
+  };
+
   // JPEGs decode via a slow SD read + DCT pass; renderGrayscalePasses below calls its drawPlane lambda
   // once per plane (LSB, then MSB), and a plain render() re-decodes the whole file each time. Capture the
   // first pass's per-pixel dither level and replay it for the second pass instead - same visual result,
@@ -213,24 +320,68 @@ bool ImageRender::displayGrayscale(int x, int y, int width, int height, const Op
       capture.values = captureBuffer.get();
       capture.capacity = neededBytes;
 
-      renderer_.renderGrayscalePasses(
-          effectiveQuality, /*preserveText=*/false,
-          [&] {
-            renderer_.clearScreen(effectiveQuality ? 0xFF : 0x00);
-            render(x, y, width, height, opt, &capture);
-          },
-          opt.fastQuality);
+      const bool useFastQuality = quality && opt.fastQuality && !renderer_.deviceIsX3();
+      if (quality && !renderer_.deviceIsX3()) {
+        renderer_.prepareQualityGrayscale();
+      }
+
+      renderer_.setRenderMode(quality ? GfxRenderer::GRAY2_LSB : GfxRenderer::GRAYSCALE_LSB);
+      renderer_.clearScreen(quality ? 0xFF : 0x00);
+      if (!render(x, y, width, height, opt, &capture)) {
+        cleanupFailedGrayscale();
+        return false;
+      }
+      renderer_.copyGrayscaleLsbBuffers();
+
+      renderer_.setRenderMode(quality ? GfxRenderer::GRAY2_MSB : GfxRenderer::GRAYSCALE_MSB);
+      renderer_.clearScreen(quality ? 0xFF : 0x00);
+      if (!render(x, y, width, height, opt, &capture)) {
+        cleanupFailedGrayscale();
+        return false;
+      }
+      renderer_.copyGrayscaleMsbBuffers();
+
+      if (useFastQuality) {
+        renderer_.displayGrayBufferFastQuality();
+      } else {
+        renderer_.displayGrayBuffer(quality, true);
+      }
+      renderer_.setRenderMode(GfxRenderer::BW);
+      renderer_.clearScreen(0xFF);
+      renderer_.cleanupGrayscaleWithFrameBuffer();
       return true;
     }
   }
 
-  renderer_.renderGrayscalePasses(
-      effectiveQuality, /*preserveText=*/false,
-      [&] {
-        renderer_.clearScreen(effectiveQuality ? 0xFF : 0x00);
-        render(x, y, width, height, opt);  // renders into the current plane's render mode AND stores to cache
-      },
-      opt.fastQuality);
+  const bool useFastQuality = quality && opt.fastQuality && !renderer_.deviceIsX3();
+  if (quality && !renderer_.deviceIsX3()) {
+    renderer_.prepareQualityGrayscale();
+  }
+
+  renderer_.setRenderMode(quality ? GfxRenderer::GRAY2_LSB : GfxRenderer::GRAYSCALE_LSB);
+  renderer_.clearScreen(quality ? 0xFF : 0x00);
+  if (!render(x, y, width, height, opt)) {
+    cleanupFailedGrayscale();
+    return false;
+  }
+  renderer_.copyGrayscaleLsbBuffers();
+
+  renderer_.setRenderMode(quality ? GfxRenderer::GRAY2_MSB : GfxRenderer::GRAYSCALE_MSB);
+  renderer_.clearScreen(quality ? 0xFF : 0x00);
+  if (!render(x, y, width, height, opt)) {
+    cleanupFailedGrayscale();
+    return false;
+  }
+  renderer_.copyGrayscaleMsbBuffers();
+
+  if (useFastQuality) {
+    renderer_.displayGrayBufferFastQuality();
+  } else {
+    renderer_.displayGrayBuffer(quality, true);
+  }
+  renderer_.setRenderMode(GfxRenderer::BW);
+  renderer_.clearScreen(0xFF);
+  renderer_.cleanupGrayscaleWithFrameBuffer();
   return true;
 }
 

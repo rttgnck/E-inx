@@ -6,9 +6,11 @@
 #include "state/Statistics.h"
 
 #include <Arduino.h>
+#include <ArduinoJson.h>
 #include <SDCardManager.h>
 
 #include <cstring>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -328,3 +330,189 @@ GlobalReadingStats aggregateGlobalStatsFromBooks(const std::vector<BookReadingSt
 }
 
 GlobalReadingStats generateGlobalStats() { return aggregateGlobalStatsFromBooks(getAllBooksStats()); }
+
+namespace {
+
+/** Per-book cache roots that hold a `statistics.bin`, and their type tag used in the JSON backup. */
+struct StatsCacheRoot {
+  const char* cacheRoot;  ///< e.g. "/.metadata/epub"
+  const char* typeTag;    ///< value written to the "type" field, e.g. "epub"
+};
+const StatsCacheRoot kStatsCacheRoots[] = {{"/.metadata/epub", "epub"}, {"/.metadata/xtc", "xtc"}};
+
+/** Human-editable backup file holding all books' stats. Lives directly under the backup root. */
+const char* kReadingStatsJson = "reading_stats.json";
+
+/** Resolves a "type" tag ("epub"/"xtc") to its cache root, or nullptr if unknown. */
+const char* cacheRootForType(const char* type) {
+  if (!type) return nullptr;
+  for (const auto& r : kStatsCacheRoots) {
+    if (strcmp(type, r.typeTag) == 0) return r.cacheRoot;
+  }
+  return nullptr;
+}
+
+/**
+ * Iterates each `<hash>` subdirectory of `parentDir` that contains a `statistics.bin`, invoking
+ * `fn(hashName)`. Returns the number of invocations that returned true.
+ */
+int forEachStatsSubdir(const char* parentDir, const std::function<bool(const std::string&)>& fn) {
+  FsFile root;
+  FileGuard rootGuard(root);
+  root = SdMan.open(parentDir);
+  if (!root || !root.isDirectory()) {
+    return 0;
+  }
+  root.rewindDirectory();
+
+  int count = 0;
+  char name[128];
+  while (true) {
+    FsFile entry;
+    FileGuard entryGuard(entry);
+    entry = root.openNextFile();
+    if (!entry) {
+      break;
+    }
+    if (!entry.isDirectory()) {
+      continue;
+    }
+    entry.getName(name, sizeof(name));
+    const std::string statsPath = std::string(parentDir) + "/" + name + "/statistics.bin";
+    if (!SdMan.exists(statsPath.c_str())) {
+      continue;
+    }
+    if (fn(std::string(name))) {
+      count++;
+    }
+  }
+  return count;
+}
+
+}  // namespace
+
+/**
+ * Writes every book's stats to a single human-editable JSON file at `<backupRoot>/reading_stats.json`.
+ * Reading time is exposed as whole seconds ("totalReadingTimeSeconds") for easy hand-editing; the
+ * "type" + "id" fields identify the book's cache dir and must be kept intact for restore to match.
+ *
+ * @param backupRoot Destination root (e.g. "/.backups/reading_stats")
+ * @return Number of books written
+ */
+int backupAllBookStats(const char* backupRoot) {
+  if (!backupRoot) return 0;
+  SdMan.mkdir(backupRoot);
+
+  JsonDocument doc;
+  JsonObject rootObj = doc.to<JsonObject>();
+  rootObj["version"] = 1;
+  rootObj["note"] =
+      "Edit totalReadingTimeSeconds (or other fields) then use Settings > Actions > Restore Reading "
+      "Stats. Keep each book's type and id unchanged so it maps back to the right book.";
+  JsonArray books = rootObj["books"].to<JsonArray>();
+
+  int count = 0;
+  for (const auto& root : kStatsCacheRoots) {
+    forEachStatsSubdir(root.cacheRoot, [&](const std::string& hash) -> bool {
+      const std::string cacheDir = std::string(root.cacheRoot) + "/" + hash;
+      BookReadingStats s;
+      if (!loadBookStats(cacheDir.c_str(), s)) {
+        return false;
+      }
+      JsonObject o = books.add<JsonObject>();
+      o["type"] = root.typeTag;
+      o["id"] = hash;
+      o["title"] = s.title;
+      o["author"] = s.author;
+      o["totalReadingTimeSeconds"] = s.totalReadingTimeMs / 1000;
+      o["totalPagesRead"] = s.totalPagesRead;
+      o["totalChaptersRead"] = s.totalChaptersRead;
+      o["sessionCount"] = s.sessionCount;
+      o["progressPercent"] = s.progressPercent;
+      o["lastSpineIndex"] = s.lastSpineIndex;
+      o["lastPageNumber"] = s.lastPageNumber;
+      o["avgPageTimeMs"] = s.avgPageTimeMs;
+      o["lastReadTimeMs"] = s.lastReadTimeMs;
+      count++;
+      return true;
+    });
+  }
+
+  const std::string jsonPath = std::string(backupRoot) + "/" + kReadingStatsJson;
+  FsFile f = SdMan.open(jsonPath.c_str(), O_WRITE | O_CREAT | O_TRUNC);
+  if (!f) {
+    Serial.printf("[%lu] [STBK] Failed to open %s for write\n", millis(), jsonPath.c_str());
+    return 0;
+  }
+  serializeJsonPretty(doc, f);
+  f.close();
+
+  Serial.printf("[%lu] [STBK] Backup complete: %d book(s) -> %s\n", millis(), count, jsonPath.c_str());
+  return count;
+}
+
+/**
+ * Restores stats from `<backupRoot>/reading_stats.json` into the per-book cache dirs, replacing
+ * current values. Missing JSON fields keep whatever the book already had; the cache dir is created
+ * if absent so stats survive a firmware flash (hash-matched). Reading time is read in seconds.
+ *
+ * @param backupRoot Source root (e.g. "/.backups/reading_stats")
+ * @return Number of books restored
+ */
+int restoreAllBookStats(const char* backupRoot) {
+  if (!backupRoot) return 0;
+
+  const std::string jsonPath = std::string(backupRoot) + "/" + kReadingStatsJson;
+  FsFile f = SdMan.open(jsonPath.c_str(), O_READ);
+  if (!f) {
+    Serial.printf("[%lu] [STBK] No backup file at %s\n", millis(), jsonPath.c_str());
+    return 0;
+  }
+
+  JsonDocument doc;
+  const DeserializationError err = deserializeJson(doc, f);
+  f.close();
+  if (err || !doc["books"].is<JsonArray>()) {
+    Serial.printf("[%lu] [STBK] Invalid JSON in %s (%s)\n", millis(), jsonPath.c_str(), err.c_str());
+    return 0;
+  }
+
+  int restored = 0;
+  for (JsonObject o : doc["books"].as<JsonArray>()) {
+    const char* type = o["type"] | "";
+    const char* id = o["id"] | "";
+    const char* cacheRoot = cacheRootForType(type);
+    if (cacheRoot == nullptr || id[0] == '\0') {
+      continue;
+    }
+
+    const std::string cacheDir = std::string(cacheRoot) + "/" + id;
+
+    // Start from whatever the book already has so unspecified JSON fields are preserved.
+    BookReadingStats s;
+    loadBookStats(cacheDir.c_str(), s);
+    s.path = cacheDir;
+    s.title = o["title"] | s.title.c_str();
+    s.author = o["author"] | s.author.c_str();
+    s.totalReadingTimeMs = (o["totalReadingTimeSeconds"] | (s.totalReadingTimeMs / 1000)) * 1000;
+    s.totalPagesRead = o["totalPagesRead"] | s.totalPagesRead;
+    s.totalChaptersRead = o["totalChaptersRead"] | s.totalChaptersRead;
+    s.sessionCount = o["sessionCount"] | s.sessionCount;
+    s.progressPercent = o["progressPercent"] | s.progressPercent;
+    s.lastSpineIndex = o["lastSpineIndex"] | s.lastSpineIndex;
+    s.lastPageNumber = o["lastPageNumber"] | s.lastPageNumber;
+    s.avgPageTimeMs = o["avgPageTimeMs"] | s.avgPageTimeMs;
+    s.lastReadTimeMs = o["lastReadTimeMs"] | s.lastReadTimeMs;
+
+    SdMan.mkdir(cacheDir.c_str());
+    saveBookStats(cacheDir.c_str(), s);
+    restored++;
+    Serial.printf("[%lu] [STBK] Restored %s (%u s)\n", millis(), cacheDir.c_str(), s.totalReadingTimeMs / 1000);
+  }
+
+  if (restored > 0) {
+    saveGlobalStats(generateGlobalStats());
+  }
+  Serial.printf("[%lu] [STBK] Restore complete: %d book(s)\n", millis(), restored);
+  return restored;
+}

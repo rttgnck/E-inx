@@ -68,9 +68,13 @@ class WifiSelectionActivity final : public ActivityWithSubactivity, public Menu 
    * @param onComplete Callback when connection process completes (true=connected, false=cancelled/failed)
    */
   explicit WifiSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                 const std::function<void(bool connected)>& onComplete)
-      : ActivityWithSubactivity("WifiSelection", renderer, mappedInput), Menu(), onComplete(onComplete) {
-    tabSelectorIndex = 3;
+                                 const std::function<void(bool connected)>& onComplete,
+                                 const std::function<void(int)>& onTabChange = nullptr)
+      : ActivityWithSubactivity("WifiSelection", renderer, mappedInput),
+        Menu(),
+        onComplete(onComplete),
+        onTabChange(onTabChange) {
+    tabSelectorIndex = 4;
   }
 
   /**
@@ -102,6 +106,7 @@ class WifiSelectionActivity final : public ActivityWithSubactivity, public Menu 
   int selectedNetworkIndex = 0;                             ///< Currently selected network index
   std::vector<WifiNetworkInfo> networks;                    ///< List of found networks
   const std::function<void(bool connected)> onComplete;     ///< Connection completion callback
+  const std::function<void(int)> onTabChange;               ///< Tab change callback
 
   std::string selectedSSID;               ///< SSID of selected network
   bool selectedRequiresPassword = false;  ///< Whether selected network requires password

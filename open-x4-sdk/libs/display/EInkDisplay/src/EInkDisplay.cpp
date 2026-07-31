@@ -5,6 +5,8 @@
 #include <fstream>
 #include <vector>
 
+EInkDisplay::WaitCallback EInkDisplay::waitCallback_ = nullptr;
+
 // SSD1677 command definitions
 // Initialization and reset
 #define CMD_SOFT_RESET 0x12             // Soft reset
@@ -353,21 +355,34 @@ void EInkDisplay::resetDisplay() {
 
 void EInkDisplay::waitForRefresh(const char* comment) {
   unsigned long start = millis();
+  unsigned long lastCb = start;
   if (!_x3Mode) {
     while (digitalRead(_busy) == HIGH) {
       delay(1);
+      if (waitCallback_ && millis() - lastCb >= 50) {
+        waitCallback_();
+        lastCb = millis();
+      }
       if (millis() - start > 30000) break;
     }
   } else {
     bool sawLow = false;
     while (digitalRead(_busy) == HIGH) {
       delay(1);
+      if (waitCallback_ && millis() - lastCb >= 50) {
+        waitCallback_();
+        lastCb = millis();
+      }
       if (millis() - start > 1000) break;
     }
     if (digitalRead(_busy) == LOW) {
       sawLow = true;
       while (digitalRead(_busy) == LOW) {
         delay(1);
+        if (waitCallback_ && millis() - lastCb >= 50) {
+          waitCallback_();
+          lastCb = millis();
+        }
         if (millis() - start > 30000) break;
       }
     }
@@ -560,7 +575,10 @@ void EInkDisplay::setRamArea(const uint16_t x, uint16_t y, uint16_t w, uint16_t 
   sendData((y + h - 1) / 256);  // high byte
 }
 
-void EInkDisplay::clearScreen(const uint8_t color) const { memset(frameBuffer, color, bufferSize); }
+void EInkDisplay::clearScreen(const uint8_t color) const {
+  if (!frameBuffer) return;
+  memset(frameBuffer, color, bufferSize);
+}
 
 void EInkDisplay::drawImage(const uint8_t* imageData, const uint16_t x, const uint16_t y, const uint16_t w,
                             const uint16_t h, const bool fromProgmem) const {
@@ -772,6 +790,7 @@ void EInkDisplay::cleanupGrayscaleBuffers(const uint8_t* bwBuffer) {
 #endif
 
 void EInkDisplay::displayBuffer(RefreshMode mode, const bool turnOffScreen) {
+  if (!frameBuffer) return;
   if (!_x3Mode && !isScreenOn && !turnOffScreen) {
     // Force half refresh if screen is off (non-X3 only)
     mode = HALF_REFRESH;

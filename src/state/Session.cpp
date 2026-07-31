@@ -10,7 +10,7 @@
 #include <Serialization.h>
 
 namespace {
-constexpr uint8_t STATE_FILE_VERSION = 3;
+constexpr uint8_t STATE_FILE_VERSION = 5;
 constexpr char STATE_FILE[] = "/.system/state.bin";
 }  // namespace
 
@@ -32,6 +32,11 @@ bool Session::saveToFile() const {
   serialization::writeString(outputFile, lastRead);
   serialization::writePod(outputFile, lastSleepImage);
   serialization::writePod(outputFile, sleepImageShuffleSeed);
+  serialization::writeString(outputFile, lastSleepImagePath);
+  serialization::writePod(outputFile, lastSleepTimerArmSeconds);
+  serialization::writePod(outputFile, sleepTimerArmCount);
+  serialization::writePod(outputFile, sleepTimerWakeCount);
+  serialization::writePod(outputFile, lastWakeReason);
 
   outputFile.close();
   return true;
@@ -40,16 +45,26 @@ bool Session::saveToFile() const {
 bool Session::loadFromFile() {
   if (!SdMan.exists(STATE_FILE)) {
     lastRead = "";
+    lastSleepImagePath = "";
     lastSleepImage = 0;
     sleepImageShuffleSeed = 0;
+    lastSleepTimerArmSeconds = 0;
+    sleepTimerArmCount = 0;
+    sleepTimerWakeCount = 0;
+    lastWakeReason = 0;
     return saveToFile();
   }
 
   FsFile inputFile;
   if (!SdMan.openFileForRead("CPS", STATE_FILE, inputFile)) {
     lastRead = "";
+    lastSleepImagePath = "";
     lastSleepImage = 0;
     sleepImageShuffleSeed = 0;
+    lastSleepTimerArmSeconds = 0;
+    sleepTimerArmCount = 0;
+    sleepTimerWakeCount = 0;
+    lastWakeReason = 0;
     return saveToFile();
   }
 
@@ -59,8 +74,13 @@ bool Session::loadFromFile() {
   if (version > STATE_FILE_VERSION) {
     inputFile.close();
     lastRead = "";
+    lastSleepImagePath = "";
     lastSleepImage = 0;
     sleepImageShuffleSeed = 0;
+    lastSleepTimerArmSeconds = 0;
+    sleepTimerArmCount = 0;
+    sleepTimerWakeCount = 0;
+    lastWakeReason = 0;
     return saveToFile();
   }
 
@@ -79,13 +99,39 @@ bool Session::loadFromFile() {
     sleepImageShuffleSeed = 0;
   }
 
+  if (version >= 4) {
+    serialization::readString(inputFile, lastSleepImagePath);
+    serialization::readPod(inputFile, lastSleepTimerArmSeconds);
+    if (version >= 5) {
+      serialization::readPod(inputFile, sleepTimerArmCount);
+    } else {
+      sleepTimerArmCount = 0;
+    }
+    serialization::readPod(inputFile, sleepTimerWakeCount);
+    serialization::readPod(inputFile, lastWakeReason);
+  } else {
+    lastSleepImagePath = "";
+    lastSleepTimerArmSeconds = 0;
+    sleepTimerArmCount = 0;
+    sleepTimerWakeCount = 0;
+    lastWakeReason = 0;
+  }
+
   inputFile.close();
 
   if (lastRead.length() > 512) {
     lastRead = "";
+    lastSleepImagePath = "";
     lastSleepImage = 0;
     sleepImageShuffleSeed = 0;
+    lastSleepTimerArmSeconds = 0;
+    sleepTimerArmCount = 0;
+    sleepTimerWakeCount = 0;
+    lastWakeReason = 0;
     return saveToFile();
+  }
+  if (lastSleepImagePath.length() > 256) {
+    lastSleepImagePath = "";
   }
 
   return true;

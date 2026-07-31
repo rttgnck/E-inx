@@ -14,8 +14,9 @@
 #include "system/UiTheme.h"
 
 namespace {
-constexpr int MENU_ITEM_COUNT = 4;
-const char* MENU_ITEMS[MENU_ITEM_COUNT] = {"Join a Network", "Connect to Calibre", "Create Hotspot", "OPDS Browser"};
+constexpr int MENU_ITEM_COUNT = 5;
+const char* MENU_ITEMS[MENU_ITEM_COUNT] = {"Join a Network", "Firmware Update", "Connect to Calibre", "Create Hotspot",
+                                           "OPDS Browser"};
 constexpr int LIST_ITEM_HEIGHT = UiTheme::DRAWER_LIST_ITEM_HEIGHT;
 }  // namespace
 
@@ -36,7 +37,7 @@ void SyncActivity::onEnter() {
  * Processes button presses for menu navigation and tab switching.
  */
 void SyncActivity::loop() {
-  if (tabSelectorIndex == 3 && updateRequired) {
+  if (tabSelectorIndex == 4 && updateRequired) {
     updateRequired = false;
     render();
   }
@@ -54,18 +55,18 @@ void SyncActivity::loop() {
   }
 
   if (mappedInput.wasPressed(MenuNav::tabPrev())) {
-    tabSelectorIndex = 2;
+    tabSelectorIndex = 3;
     navigateToSelectedMenu();
     return;
   }
 
   if (mappedInput.wasPressed(MenuNav::tabNext())) {
-    tabSelectorIndex = 4;
+    tabSelectorIndex = 5;
     navigateToSelectedMenu();
     return;
   }
 
-  if (tabSelectorIndex != 3) {
+  if (tabSelectorIndex != 4) {
     return;
   }
 
@@ -73,14 +74,18 @@ void SyncActivity::loop() {
     NetworkMode mode = NetworkMode::JOIN_NETWORK;
 
     if (selectedIndex == 1) {
-      mode = NetworkMode::CONNECT_CALIBRE;
+      mode = NetworkMode::UPDATE_SERVER;
     }
 
     if (selectedIndex == 2) {
-      mode = NetworkMode::CREATE_HOTSPOT;
+      mode = NetworkMode::CONNECT_CALIBRE;
     }
 
     if (selectedIndex == 3) {
+      mode = NetworkMode::CREATE_HOTSPOT;
+    }
+
+    if (selectedIndex == 4) {
       mode = NetworkMode::OPDS_BROWSER;
     }
 

@@ -22,6 +22,8 @@ extern HalGPIO gpio;
 extern MappedInputManager mappedInputManager;
 extern GfxRenderer renderer;
 extern Activity* currentActivity;
+extern char rtcLastReadPath[256];
+extern bool rtcLastSleepSleptFromReader;
 
 BootActivity::BootActivity(GfxRenderer& renderer, MappedInputManager& inputManager)
     : Activity("BootActivity", renderer, inputManager) {}
@@ -48,13 +50,18 @@ void BootActivity::onEnter() {
  */
 void BootActivity::loop() {
   if (bootComplete) {
-    if (APP_STATE.lastRead.empty() || SETTINGS.bootSetting == SystemSetting::HOME_PAGE) {
+    std::string resumePath = APP_STATE.lastRead;
+    if (resumePath.empty() && rtcLastReadPath[0] != '\0') {
+      resumePath = rtcLastReadPath;
+    }
+    const bool resumeFromSleep = !resumePath.empty() && rtcLastSleepSleptFromReader;
+    if (resumePath.empty() || (!resumeFromSleep && SETTINGS.bootSetting == SystemSetting::HOME_PAGE)) {
       onGoToRecent();
     } else {
-      const auto path = APP_STATE.lastRead;
       APP_STATE.lastRead = "";
       APP_STATE.saveToFile();
-      onGoToReader(path);
+      rtcLastReadPath[0] = '\0';
+      onGoToReader(resumePath);
     }
     return;
   }

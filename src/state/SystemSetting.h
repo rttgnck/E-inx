@@ -34,6 +34,7 @@ class SystemSetting {
     TRANSPARENT = 4,  ///< Transparent
     BLANK = 5,        ///< Blank screen
     DATETIME = 6,     ///< Minimal date and time
+    HYBRID = 7,       ///< Book cover when sleeping from reader, otherwise custom sleep image/wallpaper
     SLEEP_SCREEN_MODE_COUNT
   };
 
@@ -53,6 +54,14 @@ class SystemSetting {
     CLOCK_REFRESH_30_MIN = 3,
     CLOCK_REFRESH_60_MIN = 4,
     CLOCK_REFRESH_INTERVAL_COUNT
+  };
+
+  enum DAILY_READING_GOAL {
+    DAILY_GOAL_15_MIN = 0,
+    DAILY_GOAL_30_MIN = 1,
+    DAILY_GOAL_45_MIN = 2,
+    DAILY_GOAL_60_MIN = 3,
+    DAILY_READING_GOAL_COUNT
   };
 
   /**
@@ -79,6 +88,33 @@ class SystemSetting {
     SLEEP_IMAGE_MEDIUM = 1,  ///< 2-bit fast image rendering
     SLEEP_IMAGE_HIGH = 2,    ///< 2-bit quality image rendering
     SLEEP_IMAGE_QUALITY_COUNT
+  };
+
+  enum POWER_WAKE_GUARD {
+    POWER_WAKE_GUARD_OFF = 0,
+    POWER_WAKE_GUARD_400MS = 1,
+    POWER_WAKE_GUARD_500MS = 2,
+    POWER_WAKE_GUARD_600MS = 3,
+    POWER_WAKE_GUARD_700MS = 4,
+    POWER_WAKE_GUARD_800MS = 5,
+    POWER_WAKE_GUARD_900MS = 6,
+    POWER_WAKE_GUARD_1000MS = 7,
+    POWER_WAKE_GUARD_1100MS = 8,
+    POWER_WAKE_GUARD_1200MS = 9,
+    POWER_WAKE_GUARD_1300MS = 10,
+    POWER_WAKE_GUARD_1400MS = 11,
+    POWER_WAKE_GUARD_1500MS = 12,
+    POWER_WAKE_GUARD_1600MS = 13,
+    POWER_WAKE_GUARD_1700MS = 14,
+    POWER_WAKE_GUARD_1800MS = 15,
+    POWER_WAKE_GUARD_1900MS = 16,
+    POWER_WAKE_GUARD_2000MS = 17,
+    POWER_WAKE_GUARD_2100MS = 18,
+    POWER_WAKE_GUARD_2200MS = 19,
+    POWER_WAKE_GUARD_2300MS = 20,
+    POWER_WAKE_GUARD_2400MS = 21,
+    POWER_WAKE_GUARD_2500MS = 22,
+    POWER_WAKE_GUARD_COUNT
   };
 
   /**
@@ -108,6 +144,8 @@ class SystemSetting {
     STATUS_ITEM_BOOK_TITLE = 10,                 ///< Book title
     STATUS_ITEM_AUTHOR_NAME = 11,                ///< Author name
     STATUS_ITEM_PAGE_NUMBERS_WITH_PERCENT = 12,  ///< Page numbers and percentage combined (e.g., "12/340 45%")
+    STATUS_ITEM_TIME = 13,                       ///< Current device time
+    STATUS_ITEM_SESSION_TIME = 14,               ///< Elapsed time in the current reading session
     STATUS_BAR_ITEM_COUNT
   };
 
@@ -264,6 +302,14 @@ class SystemSetting {
     REFRESH_FREQUENCY_COUNT
   };
 
+  enum READER_REFRESH_MODE {
+    READER_REFRESH_AUTO = 0,  ///< Use cadence-based fast/half refreshes
+    READER_REFRESH_FAST = 1,  ///< Force fast refresh for reader page turns
+    READER_REFRESH_HALF = 2,  ///< Force half refresh for reader page turns
+    READER_REFRESH_FULL = 3,  ///< Force full refresh for reader page turns
+    READER_REFRESH_MODE_COUNT
+  };
+
   /**
    * @brief Global short power button behavior (for library, home, etc.)
    */
@@ -305,8 +351,9 @@ class SystemSetting {
     RECENT_FLOW = 2,             ///< Flow carousel
     RECENT_SIMPLE = 3,           ///< Simple: recent cover on top, favorites list below
     RECENT_BOOK_LIST = 4,        ///< Vertical list: thumb left, title/author/progress (5 visible, scrollable)
-    RECENT_ICONS = 5,            ///< 3×3 icon grid; scroll for more books
+    RECENT_ICONS = 5,            ///< 3x3 icon grid; scroll for more books
     RECENT_COVER = 6,            ///< Latest recent book cover with title, author, and progress
+    RECENT_STATS = 7,            ///< Current book stats (reading time/pages/chapters/avg) + book list below
     RECENT_LIBRARY_MODE_COUNT
   };
 
@@ -361,17 +408,37 @@ class SystemSetting {
    * Exactly "/sleep.bmp" (or /sleep.jpg/.jpeg) = use SD-root fallback file only.
    */
   char sleepCustomBmp[64] = "";
+  /** Minutes between automatic random sleep-image rotations while asleep. Stored in 5-minute steps. */
+  uint8_t sleepImageRotationMinutes = 5;
+  /** When set, random sleep images wake briefly and rotate while the device remains asleep. */
+  uint8_t sleepImageRotationEnabled = 1;
+  /** When set, a quick Power double-press while asleep advances the sleep image and returns to sleep. */
+  uint8_t sleepImagePowerDoublePress = 0;
+  /** Wallpaper gesture completion window: 0=automatic, otherwise enum index 1..17 maps to 600..2200 ms. */
+  uint8_t sleepImagePowerGestureWindow = 0;
+  /** Minimum first Power hold for wallpaper double-press: 0=automatic, 1..15 maps to 100..1500 ms. */
+  uint8_t sleepImagePowerFirstPressMin = 0;
+  /** Maximum second Power hold for wallpaper double-press: enum index 0..9 maps to 100..1000 ms. */
+  uint8_t sleepImagePowerSecondPressMax = 2;
+  /** Persist sleep/wake trace checkpoints to SD so diagnostics survive a restart. */
+  uint8_t persistentSleepLogs = 1;
+  /** Optional Power wake confirmation hold while asleep; off by default so Power always wakes. */
+  uint8_t powerWakeGuard = POWER_WAKE_GUARD_OFF;
   uint8_t sleepClockStyle = CLOCK_CENTERED_DATE;          ///< Date/time sleep screen style
   uint8_t sleepClockTimeFormat = CLOCK_24_HOUR;           ///< 12/24 hour clock format
   uint8_t sleepClockRefreshInterval = CLOCK_REFRESH_OFF;  ///< Legacy settings slot; Date Time is X3-only
+  uint8_t dailyReadingGoal = DAILY_GOAL_30_MIN;           ///< X3 RTC-backed daily reading goal
   /** UTC offset in 15-minute steps, biased by +12h. 0=UTC-12:00, 80=UTC+08:00, 104=UTC+14:00. */
   uint8_t timeZoneQuarterOffset = 80;
 
   uint8_t statusBar = FULL;  ///< Legacy status bar mode
 
   uint8_t statusBarLeft = STATUS_ITEM_BATTERY_ICON_WITH_PERCENT;  ///< Left status bar section
+  uint8_t statusBarInnerLeft = STATUS_ITEM_NONE;                  ///< Inner-left status bar section
   uint8_t statusBarMiddle = STATUS_ITEM_CHAPTER_TITLE;            ///< Middle status bar section
+  uint8_t statusBarInnerRight = STATUS_ITEM_NONE;                 ///< Inner-right status bar section
   uint8_t statusBarRight = STATUS_ITEM_PAGE_NUMBERS;              ///< Right status bar section
+  uint8_t showBottomBarClock = 0;                                 ///< Show current time beside main-menu battery
 
   uint8_t extraParagraphSpacing = 1;  ///< Extra paragraph spacing enabled
   uint8_t textAntiAliasing = 0;       ///< Text anti-aliasing enabled
@@ -403,14 +470,19 @@ class SystemSetting {
   uint8_t sleepTimeout = SLEEP_10_MIN;  ///< Sleep timeout
 
   uint8_t refreshFrequency = REFRESH_15;  ///< Refresh frequency
-  uint8_t hyphenationEnabled = 1;         ///< Hyphenation enabled
-  uint8_t bionicReadingEnabled = 0;       ///< Bionic Reading enabled
+  uint8_t readerRefreshMode = READER_REFRESH_AUTO;
+  uint8_t hyphenationEnabled = 1;    ///< Hyphenation enabled
+  uint8_t bionicReadingEnabled = 0;  ///< Bionic Reading enabled
 
   uint8_t screenMargin = 20;  ///< Screen margin in pixels
 
   char opdsServerUrl[128] = "";  ///< OPDS server URL
   char opdsUsername[64] = "";    ///< OPDS username
   char opdsPassword[64] = "";    ///< OPDS password
+
+  char newsRepoUrl[192] = "https://raw.githubusercontent.com/rttgnck/news-reader/main/archive";
+  uint8_t newsAutoDownload = 0;
+  uint8_t newsDownloadHour = 6;
 
   uint8_t hideBatteryPercentage = HIDE_NEVER;  ///< Hide battery percentage setting
   /** Long-press on prev/next: 0=off, 1=chapter skip (EPUB), 2=skip 5 pages (EPUB). Legacy files used 0/1 only. */
@@ -427,10 +499,10 @@ class SystemSetting {
   uint8_t refreshOnLoadStatistics = 0;
   uint8_t disableNavigation = NAV_NONE;  ///< Navigation disable mode
 
-  uint8_t recentLibraryMode = RECENT_FLOW;         ///< Recent library display mode
-  uint8_t libraryMode = LIBRARY_GRID;              ///< Library browser display mode
-  uint8_t libraryViewMode = LIBRARY_VIEW_FOLDERS;  ///< Last Library browser content view
-  uint8_t libraryShelfEnabled = 0;                 ///< Allow cover shelf view in Library
+  uint8_t recentLibraryMode = RECENT_FLOW;       ///< Recent library display mode
+  uint8_t libraryMode = LIBRARY_GRID;            ///< Library browser display mode
+  uint8_t libraryViewMode = LIBRARY_VIEW_SHELF;  ///< Last Library browser content view
+  uint8_t libraryShelfEnabled = 1;               ///< Allow cover shelf view in Library
   /** How many recent books to show on the Recent hub (1–8). */
   uint8_t recentVisibleCount = 9;
   /** Library: 0 = folders and books A-Z only; 1 = use librarySortMode (favorites / groups / reading / tags). */
@@ -470,6 +542,12 @@ class SystemSetting {
   /** When set, hub thumbnails use rounded clip on `GfxRenderer::drawBitmap` (Recent: sparse ink outside arc; stats:
    * paper). */
   uint8_t bitmapRoundedCorners = 0;
+  /** When set, display colors are inverted globally (black becomes white, white becomes black). */
+  uint8_t darkMode = 0;
+  /** When set, display pushes turn the panel off after refresh to reduce sunlight fading. */
+  uint8_t sunlightFadingFix = 0;
+  /** Experimental: request an extra half-refresh cleanup on activity transitions. */
+  uint8_t antiGhostingExperimental = 0;
   /** X3 only: 0=off, 1=normal direction, 2=inverted direction. */
   uint8_t shakePageTurn = 0;
   /** X3 gyro threshold: 0=low, 1=normal, 2=high sensitivity. */
@@ -544,6 +622,21 @@ class SystemSetting {
    * @return Sleep timeout in milliseconds
    */
   unsigned long getSleepTimeoutMs() const;
+
+  /**
+   * @brief Gets the sleep-image rotation interval in minutes, clamped to supported 5-minute steps.
+   */
+  uint8_t getSleepImageRotationMinutes() const;
+
+  /**
+   * @brief Gets optional Power wake confirmation duration in milliseconds. 0 means disabled.
+   */
+  uint16_t getPowerWakeGuardMs() const;
+
+  /** Returns 0 for automatic, otherwise the configured wallpaper gesture completion window. */
+  uint16_t getSleepImagePowerGestureWindowMs() const;
+  uint16_t getSleepImagePowerFirstPressMinMs() const;
+  uint16_t getSleepImagePowerSecondPressMaxMs() const;
 
   /**
    * @brief Gets screen refresh frequency in pages

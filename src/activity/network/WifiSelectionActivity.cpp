@@ -72,6 +72,21 @@ void WifiSelectionActivity::onEnter() {
 void WifiSelectionActivity::onExit() {
   Activity::onExit();
 
+  // Stop the render task while its shared state is still valid. Clearing strings and vectors first allowed
+  // the task to render freed storage during the connection handoff.
+  if (renderingMutex) {
+    xSemaphoreTake(renderingMutex, portMAX_DELAY);
+    if (displayTaskHandle) {
+      vTaskDelete(displayTaskHandle);
+      displayTaskHandle = nullptr;
+    }
+    xSemaphoreGive(renderingMutex);
+    vSemaphoreDelete(renderingMutex);
+    renderingMutex = nullptr;
+  }
+
+  exitActivity();
+
   WiFi.scanDelete();
 
   networks.clear();
@@ -86,18 +101,6 @@ void WifiSelectionActivity::onExit() {
     WiFi.disconnect(true);
     WiFi.mode(WIFI_OFF);
   }
-
-  xSemaphoreTake(renderingMutex, portMAX_DELAY);
-
-  if (displayTaskHandle) {
-    vTaskDelete(displayTaskHandle);
-    displayTaskHandle = nullptr;
-  }
-
-  vSemaphoreDelete(renderingMutex);
-  renderingMutex = nullptr;
-
-  exitActivity();
 }
 
 /**
@@ -256,6 +259,7 @@ void WifiSelectionActivity::checkConnectionStatus() {
       savePromptSelection = 0;
       updateRequired = true;
     } else {
+      state = WifiSelectionState::CONNECTED;
       onComplete(true);
     }
     return;
@@ -323,8 +327,10 @@ void WifiSelectionActivity::loop() {
         WIFI_STORE.addCredential(selectedSSID, enteredPassword);
         xSemaphoreGive(renderingMutex);
       }
+      state = WifiSelectionState::CONNECTED;
       onComplete(true);
     } else if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+      state = WifiSelectionState::CONNECTED;
       onComplete(true);
     }
     return;

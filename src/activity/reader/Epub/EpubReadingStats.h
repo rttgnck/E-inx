@@ -20,6 +20,7 @@ class EpubReadingStats {
   void addChapterRead();
   void save(const Epub& epub);
   void display(GfxRenderer& renderer, const Epub& epub) const;
+  uint32_t sessionElapsedMs() const;
 
  private:
   static std::string formatTime(uint32_t timeMs);
@@ -29,4 +30,5 @@ class EpubReadingStats {
   uint32_t lastSaveTime_ = 0;
   uint32_t activeSessionTimeMs_ = 0;
   bool readingSessionCountCommitted_ = false;
+  uint32_t readerSessionStartMs_ = 0;
 };

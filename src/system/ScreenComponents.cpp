@@ -14,6 +14,7 @@
 #include <cstdio>
 #include <string>
 
+#include "state/SystemSetting.h"
 #include "system/Fonts.h"
 
 extern HalGPIO gpio;
@@ -73,6 +74,30 @@ void ScreenComponents::drawBattery(const GfxRenderer& renderer, const int left, 
   if (charging) {
     drawBatteryLightningBolt(renderer, x + 4, y + 2);
   }
+}
+
+std::string ScreenComponents::currentTimeText() {
+#ifdef SIMULATOR
+  const uint8_t hour = 12;
+  const uint8_t minute = 0;
+#else
+  HalGPIO::DateTime dateTime;
+  if (!gpio.readDateTime(dateTime)) {
+    return "";
+  }
+  const uint8_t hour = dateTime.hour;
+  const uint8_t minute = dateTime.minute;
+#endif
+
+  char text[12];
+  if (SETTINGS.sleepClockTimeFormat == SystemSetting::CLOCK_12_HOUR) {
+    const uint8_t displayHour = hour % 12 == 0 ? 12 : hour % 12;
+    snprintf(text, sizeof(text), "%u:%02u %s", static_cast<unsigned>(displayHour), static_cast<unsigned>(minute),
+             hour < 12 ? "AM" : "PM");
+  } else {
+    snprintf(text, sizeof(text), "%02u:%02u", static_cast<unsigned>(hour), static_cast<unsigned>(minute));
+  }
+  return std::string(text);
 }
 
 ScreenComponents::PopupLayout ScreenComponents::drawPopup(const GfxRenderer& renderer, const char* message) {

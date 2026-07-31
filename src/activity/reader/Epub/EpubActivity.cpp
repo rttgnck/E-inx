@@ -13,6 +13,7 @@
 #include <HalDisplay.h>
 #include <ImageRender.h>
 #include <SDCardManager.h>
+#include <esp_heap_caps.h>
 #include <esp_task_wdt.h>
 #include <time.h>
 
@@ -21,6 +22,7 @@
 #include <cstdio>
 #include <cstring>
 #include <functional>
+#include <iterator>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -32,6 +34,7 @@
 #include "KOReaderSyncActivity.h"
 #include "MenuDrawer.h"
 #include "SettingsDrawer.h"
+#include "activity/reader/ReaderRefresh.h"
 #include "state/BookProgress.h"
 #include "state/BookSetting.h"
 #include "state/BookState.h"
@@ -112,7 +115,8 @@ bool pageImageFootprintAtLeastHalfScreen(const Page& page, const GfxRenderer& re
  * @param onGoToRecent Callback for navigating to recent books
  */
 EpubActivity::EpubActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub,
-                           const std::function<void()>& onGoBack, const std::function<void()>& onGoToRecent)
+                           const std::function<void()>& onGoBack, const std::function<void()>& onGoToRecent,
+                           const bool openNavigationOnLaunch)
     : ActivityWithSubactivity("EpubReader", renderer, mappedInput),
       currentFontId(0),
       nextFontId(0),
@@ -125,6 +129,7 @@ EpubActivity::EpubActivity(GfxRenderer& renderer, MappedInputManager& mappedInpu
       cachedSpineIndex(0),
       cachedChapterTotalPageCount(0),
       updateRequired(false),
+      openNavigationOnLaunch_(openNavigationOnLaunch),
       loadingProgress(0),
       showBookmarkIndicator(false),
       lastPreloadedSpineIndex(-1),
@@ -154,12 +159,14 @@ ViewportInfo EpubActivity::calculateViewport() {
   info.totalMarginLeft = oL + bookSettings.screenMargin;
   info.totalMarginRight = oR + bookSettings.screenMargin;
 
-  bool hasStatusBar = (bookSettings.statusBarLeft.item != StatusBarItem::NONE ||
-                       bookSettings.statusBarMiddle.item != StatusBarItem::NONE ||
-                       bookSettings.statusBarRight.item != StatusBarItem::NONE);
-
-  bool showProgressBar = (bookSettings.statusBarMiddle.item == StatusBarItem::PROGRESS_BAR ||
-                          bookSettings.statusBarMiddle.item == StatusBarItem::PROGRESS_BAR_WITH_PERCENT);
+  const StatusBarItem statusItems[] = {bookSettings.statusBarLeft.item, bookSettings.statusBarInnerLeft.item,
+                                       bookSettings.statusBarMiddle.item, bookSettings.statusBarInnerRight.item,
+                                       bookSettings.statusBarRight.item};
+  const bool hasStatusBar = std::any_of(std::begin(statusItems), std::end(statusItems),
+                                        [](StatusBarItem item) { return item != StatusBarItem::NONE; });
+  const bool showProgressBar = std::any_of(std::begin(statusItems), std::end(statusItems), [](StatusBarItem item) {
+    return item == StatusBarItem::PROGRESS_BAR || item == StatusBarItem::PROGRESS_BAR_WITH_PERCENT;
+  });
 
   if (hasStatusBar) {
     info.totalMarginBottom +=
@@ -442,6 +449,24 @@ void EpubActivity::saveProgress(int spineIndex, int currentPage, int pageCount, 
   if (pageCount > 0) {
     float spineProgress = static_cast<float>(currentPage) / static_cast<float>(pageCount);
     data.progressPercent = epub->calculateProgress(spineIndex, spineProgress) * 100.0f;
+
+    const size_t totalBytes = epub->getBookSize();
+    const size_t prevBytes = (spineIndex > 0) ? epub->getCumulativeSpineItemSize(spineIndex - 1) : 0;
+    const size_t spineEndBytes = epub->getCumulativeSpineItemSize(spineIndex);
+    const size_t spineBytes = (spineEndBytes > prevBytes) ? (spineEndBytes - prevBytes) : 0;
+    if (totalBytes > 0 && spineBytes > 0) {
+      const float pagesPerByte = static_cast<float>(pageCount) / static_cast<float>(spineBytes);
+      int totalBookPages = static_cast<int>(static_cast<float>(totalBytes) * pagesPerByte + 0.5f);
+      if (totalBookPages < 1) totalBookPages = 1;
+
+      const int currentPageOneBased = std::max(1, std::min(currentPage + 1, pageCount));
+      int bookPage = static_cast<int>(static_cast<float>(prevBytes) * pagesPerByte + 0.5f) + currentPageOneBased;
+      if (bookPage < 1) bookPage = 1;
+      if (bookPage > totalBookPages) bookPage = totalBookPages;
+
+      data.bookPage = static_cast<uint16_t>(std::min(bookPage, 65535));
+      data.bookPageCount = static_cast<uint16_t>(std::min(totalBookPages, 65535));
+    }
   }
 
   bookProgress->save(data);
@@ -581,7 +606,7 @@ void EpubActivity::fastPath() {
   }
 
   loadCurrentSection();
-  statusBar = std::unique_ptr<StatusBar>(new StatusBar(renderer, *epub, bookSettings));
+  statusBar = std::unique_ptr<StatusBar>(new StatusBar(renderer, *epub, bookSettings, readingStats_));
 }
 
 /**
@@ -611,7 +636,7 @@ bool EpubActivity::slowPath() {
   loadingProgress = 100;
   drawLoadingScreen();
 
-  statusBar = std::unique_ptr<StatusBar>(new StatusBar(renderer, *epub, bookSettings));
+  statusBar = std::unique_ptr<StatusBar>(new StatusBar(renderer, *epub, bookSettings, readingStats_));
   renderer.clearScreen(0xff);
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
   if (!section) {
@@ -665,6 +690,11 @@ void EpubActivity::onEnter() {
   chapterRecoveryAttempted_ = false;
 
   annUi_.clearSessionAndCapture();
+
+  if (openNavigationOnLaunch_) {
+    openNavigationOnLaunch_ = false;
+    toggleMenuDrawer();
+  }
 }
 
 /**
@@ -895,8 +925,13 @@ void EpubActivity::loop() {
     }
   }
 
+  if (mappedInput.wasReleased(MappedInputManager::Button::Power)) {
+    Serial.printf("[%lu] [DBG] EPUB power released, shortPwrBtn=%u\n", millis(), (unsigned)SETTINGS.readerShortPwrBtn);
+  }
+
   if (mappedInput.wasReleased(MappedInputManager::Button::Power) &&
       SETTINGS.readerShortPwrBtn == SystemSetting::READER_SHORT_PWRBTN::READER_PAGE_TURN) {
+    Serial.printf("[%lu] [DBG] EPUB power -> pageTurn\n", millis());
     endPageTimer();
     pageTurn(true);
     lastAutoPageTurnTime = millis();
@@ -905,6 +940,7 @@ void EpubActivity::loop() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Power) &&
       SETTINGS.readerShortPwrBtn == SystemSetting::READER_SHORT_PWRBTN::READER_PAGE_REFRESH) {
+    Serial.printf("[%lu] [DBG] EPUB power -> refresh\n", millis());
     renderer.displayBuffer(HalDisplay::MANUAL_REFRESH);
     updateRequired = true;
     return;
@@ -912,6 +948,7 @@ void EpubActivity::loop() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Power) &&
       SETTINGS.readerShortPwrBtn == SystemSetting::READER_SHORT_PWRBTN::READER_ANNOTATE) {
+    Serial.printf("[%lu] [DBG] EPUB power -> annotate\n", millis());
     pauseReadingStats();
     annUi_.enter(*this);
     return;
@@ -977,7 +1014,9 @@ void EpubActivity::loop() {
 
   if (updateRequired) {
     updateRequired = false;
+    Serial.printf("[%lu] [DBG] EPUB renderScreen start\n", millis());
     renderScreen();
+    Serial.printf("[%lu] [DBG] EPUB renderScreen done\n", millis());
     return;
   }
 }
@@ -1017,6 +1056,42 @@ void EpubActivity::onPercentDrawerSelected(int percent) {
   startPageTimer();
 }
 
+void EpubActivity::onPageDrawerSelected(int page) {
+  toggleMenuDrawer();
+  int currentPage = 1;
+  int totalPages = 1;
+  currentBookPagePosition(currentPage, totalPages);
+  jumpToBookPage(page, totalPages);
+  updateRequired = true;
+  startPageTimer();
+}
+
+bool EpubActivity::currentBookPagePosition(int& page, int& totalPages) const {
+  page = 1;
+  totalPages = 1;
+  if (!epub || !section || section->pageCount == 0) {
+    return false;
+  }
+
+  const size_t totalBytes = epub->getBookSize();
+  const size_t prevBytes = (currentSpineIndex > 0) ? epub->getCumulativeSpineItemSize(currentSpineIndex - 1) : 0;
+  const size_t spineEndBytes = epub->getCumulativeSpineItemSize(currentSpineIndex);
+  const size_t spineBytes = (spineEndBytes > prevBytes) ? (spineEndBytes - prevBytes) : 0;
+  if (totalBytes == 0 || spineBytes == 0) {
+    return false;
+  }
+
+  const float pagesPerByte = static_cast<float>(section->pageCount) / static_cast<float>(spineBytes);
+  totalPages = static_cast<int>(static_cast<float>(totalBytes) * pagesPerByte + 0.5f);
+  if (totalPages < 1) totalPages = 1;
+
+  const int currentPageOneBased = std::max(1, std::min(section->currentPage + 1, static_cast<int>(section->pageCount)));
+  page = static_cast<int>(static_cast<float>(prevBytes) * pagesPerByte + 0.5f) + currentPageOneBased;
+  if (page < 1) page = 1;
+  if (page > totalPages) page = totalPages;
+  return true;
+}
+
 void EpubActivity::goToAnnotationPage(int spine, int page) {
   if (currentSpineIndex != spine) {
     currentSpineIndex = spine;
@@ -1048,6 +1123,9 @@ void EpubActivity::toggleMenuDrawer() {
             case MenuDrawer::MenuAction::GO_TO_PERCENT:
               // Handled inside MenuDrawer itself (percentProvider/percentSelectedCallback below), same
               // as SELECT_CHAPTER/SHOW_BOOKMARKS/SHOW_ANNOTATIONS - never reaches this callback.
+              break;
+            case MenuDrawer::MenuAction::GO_TO_PAGE:
+              // Handled inside MenuDrawer itself (pageProvider/pageSelectedCallback below), same as GO_TO_PERCENT.
               break;
             case MenuDrawer::MenuAction::GO_HOME:
               goHome();
@@ -1163,6 +1241,19 @@ void EpubActivity::toggleMenuDrawer() {
         return initialPercent;
       });
       menuDrawer->setPercentSelectedCallback([this](const int percent) { onPercentDrawerSelected(percent); });
+      menuDrawer->setPageProvider([this]() -> int {
+        int page = 1;
+        int total = 1;
+        currentBookPagePosition(page, total);
+        return page;
+      });
+      menuDrawer->setPageCountProvider([this]() -> int {
+        int page = 1;
+        int total = 1;
+        currentBookPagePosition(page, total);
+        return total;
+      });
+      menuDrawer->setPageSelectedCallback([this](const int page) { onPageDrawerSelected(page); });
     }
   }
 
@@ -1554,6 +1645,63 @@ void EpubActivity::jumpToPercent(int percent) {
   section.reset();
 }
 
+void EpubActivity::jumpToBookPage(int page, int totalPages) {
+  if (!epub) {
+    return;
+  }
+
+  const size_t bookSize = epub->getBookSize();
+  if (bookSize == 0) {
+    return;
+  }
+
+  if (totalPages <= 0) {
+    int currentPage = 1;
+    totalPages = 1;
+    currentBookPagePosition(currentPage, totalPages);
+  }
+  totalPages = std::max(1, totalPages);
+  page = std::max(1, std::min(totalPages, page));
+
+  size_t targetSize = 0;
+  if (totalPages > 1 && bookSize > 1) {
+    targetSize = static_cast<size_t>((static_cast<uint64_t>(page - 1) * static_cast<uint64_t>(bookSize - 1)) /
+                                     static_cast<uint64_t>(totalPages - 1));
+  }
+
+  const int spineCount = epub->getSpineItemsCount();
+  if (spineCount == 0) {
+    return;
+  }
+
+  int targetSpineIndex = spineCount - 1;
+  size_t prevCumulative = 0;
+
+  for (int i = 0; i < spineCount; i++) {
+    const size_t cumulative = epub->getCumulativeSpineItemSize(i);
+    if (targetSize <= cumulative) {
+      targetSpineIndex = i;
+      prevCumulative = (i > 0) ? epub->getCumulativeSpineItemSize(i - 1) : 0;
+      break;
+    }
+  }
+
+  const size_t cumulative = epub->getCumulativeSpineItemSize(targetSpineIndex);
+  const size_t spineSize = (cumulative > prevCumulative) ? (cumulative - prevCumulative) : 0;
+  pendingSpineProgress =
+      (spineSize == 0) ? 0.0f : static_cast<float>(targetSize - prevCumulative) / static_cast<float>(spineSize);
+  if (pendingSpineProgress < 0.0f) {
+    pendingSpineProgress = 0.0f;
+  } else if (pendingSpineProgress > 1.0f) {
+    pendingSpineProgress = 1.0f;
+  }
+
+  currentSpineIndex = targetSpineIndex;
+  nextPageNumber = 0;
+  pendingPercentJump = true;
+  section.reset();
+}
+
 /**
  * @brief Handles page turning logic
  * @param forward True for forward page turn, false for backward
@@ -1726,6 +1874,10 @@ void EpubActivity::renderContents(std::unique_ptr<Page> page, const int oriented
                                   const int orientedMarginRight, const int orientedMarginBottom,
                                   const int orientedMarginLeft) {
   if (!page) return;
+  isDoingSomethingHeavy = true;
+  const unsigned long rcStart = millis();
+  Serial.printf("[%lu] [DBG] renderContents start, hasImages=%d, heap=%lu\n", rcStart, page->hasImages(),
+                (unsigned long)esp_get_free_heap_size());
   const int fontId = bookSettings.getReaderFontId();
   FontManager::ensureReaderLayoutFonts(fontId, renderer);
   const int headerFontId = FontManager::getNextFont(fontId);
@@ -1818,8 +1970,11 @@ void EpubActivity::renderContents(std::unique_ptr<Page> page, const int oriented
   const bool smartRefreshAfterLargeImage = lastPageHadImages && lastPageHadLargeImage;
 
   const bool skipImagesInPageRender = needsImageGrayscale && highQuality;
+  Serial.printf("[%lu] [DBG] page->render start (skipImg=%d, gray=%d, highQ=%d, medQ=%d, aa=%d)\n", millis(),
+                skipImagesInPageRender, needsImageGrayscale, highQuality, mediumImageGrayscale, textAa);
   page->render(renderer, fontId, headerFontId, orientedMarginLeft, orientedMarginTop, skipImagesInPageRender, imageMode,
                /*skipOnlyGrayscaleImages=*/highQuality);
+  Serial.printf("[%lu] [DBG] page->render done\n", millis());
 
   renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
   if (isCurrentPageBookmarked()) {
@@ -1827,7 +1982,9 @@ void EpubActivity::renderContents(std::unique_ptr<Page> page, const int oriented
   }
 
   if (pageHasImages && !skipImagesInPageRender) {
+    Serial.printf("[%lu] [DBG] renderImages start\n", millis());
     page->renderImages(renderer, fontId, orientedMarginLeft, orientedMarginTop, imageMode);
+    Serial.printf("[%lu] [DBG] renderImages done\n", millis());
   }
 
   // Medium uses the same BW restore/rebase lifecycle as text AA. Without a
@@ -1838,12 +1995,12 @@ void EpubActivity::renderContents(std::unique_ptr<Page> page, const int oriented
   const bool displayWithQualityPass = highQuality && bwStored;
   const bool smartRefreshThisPageAfterLargeImage = smartImageRefreshEnabled && smartRefreshAfterLargeImage;
   auto displayPageBuffer = [this, smartRefreshThisPageAfterLargeImage]() {
-    if (smartRefreshThisPageAfterLargeImage || pagesUntilFullRefresh <= 1) {
+    if (smartRefreshThisPageAfterLargeImage) {
       renderer.displayBuffer(HalDisplay::HALF_REFRESH);
       pagesUntilFullRefresh = bookSettings.refreshFrequency;
     } else {
-      renderer.displayBuffer();
-      pagesUntilFullRefresh--;
+      ReaderRefresh::displayWithCycle(renderer, pagesUntilFullRefresh, bookSettings.refreshFrequency,
+                                      bookSettings.readerRefreshMode);
     }
   };
 
@@ -1855,13 +2012,17 @@ void EpubActivity::renderContents(std::unique_ptr<Page> page, const int oriented
     page->fillImageRects(renderer, orientedMarginLeft, orientedMarginTop, true, /*onlyGrayscale=*/true);
   }
   if (!displayWithQualityPass || !highQualityCacheReady) {
+    Serial.printf("[%lu] [DBG] displayPageBuffer start\n", millis());
     displayPageBuffer();
+    Serial.printf("[%lu] [DBG] displayPageBuffer done\n", millis());
   } else if (pagesUntilFullRefresh <= 1) {
     pagesUntilFullRefresh = bookSettings.refreshFrequency;
   } else {
     pagesUntilFullRefresh--;
   }
 
+  Serial.printf("[%lu] [DBG] grayscale phase: highQ=%d bwStored=%d medGray=%d aaPass=%d\n", millis(), highQuality,
+                bwStored, mediumImageGrayscale, needsTextAntiAliasPass);
   if (highQuality && bwStored) {
     ImageRender::displayGrayscale(
         renderer, /*quality=*/true, /*preserveText=*/true,
@@ -1904,6 +2065,10 @@ void EpubActivity::renderContents(std::unique_ptr<Page> page, const int oriented
   } else if (bwStored) {
     renderer.restoreBwBuffer();
   }
+
+  isDoingSomethingHeavy = false;
+  Serial.printf("[%lu] [DBG] renderContents done, total=%lums, heap=%lu\n", millis(), millis() - rcStart,
+                (unsigned long)esp_get_free_heap_size());
 
   lastPageHadImages = pageHasImages;
   lastPageHadLargeImage = pageHasLargeImage;

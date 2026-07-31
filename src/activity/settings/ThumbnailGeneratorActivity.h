@@ -32,7 +32,7 @@ class ThumbnailGeneratorActivity final : public ActivityWithSubactivity {
   [[noreturn]] void displayTaskLoop();
   void workerTaskLoop();
   void render();
-  void startGeneration();
+  void startGeneration(bool force);
   bool scanPath(const std::string& path);
   bool processBook(const std::string& path);
   bool isSupportedBookFile(const std::string& filename) const;
@@ -44,6 +44,7 @@ class ThumbnailGeneratorActivity final : public ActivityWithSubactivity {
   SemaphoreHandle_t renderingMutex = nullptr;
   volatile bool updateRequired = false;
   volatile bool cancelRequested = false;
+  volatile bool forceRegeneration = false;
   volatile State state = READY;
 
   int processedCount = 0;

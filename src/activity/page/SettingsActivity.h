@@ -51,11 +51,11 @@ class SettingsActivity final : public ActivityWithSubactivity, public Menu {
     SETTINGS.saveToFile();
     if (tabSelectorIndex == 0 && onRecentOpen) {
       onRecentOpen();
-    } else if (tabSelectorIndex == 1 && onLibraryOpen) {
+    } else if (tabSelectorIndex == 2 && onLibraryOpen) {
       onLibraryOpen();
-    } else if (tabSelectorIndex == 3 && onSyncOpen) {
+    } else if (tabSelectorIndex == 4 && onSyncOpen) {
       onSyncOpen();
-    } else if (tabSelectorIndex == 4 && onStatisticsOpen) {
+    } else if (tabSelectorIndex == 5 && onStatisticsOpen) {
       onStatisticsOpen();
     }
   }
@@ -77,7 +77,7 @@ class SettingsActivity final : public ActivityWithSubactivity, public Menu {
         onLibraryOpen(onLibraryOpen),
         onSyncOpen(onSyncOpen),
         onStatisticsOpen(onStatisticsOpen) {
-    tabSelectorIndex = 2;
+    tabSelectorIndex = 3;
   }
 
   void onEnter() override;
