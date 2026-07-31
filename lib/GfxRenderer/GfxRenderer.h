@@ -135,7 +135,7 @@ class GfxRenderer {
    * @details When enabled, all 1-bit (BW) drawing is inverted at the pixel level so the whole
    *          interface renders light-on-dark. Grayscale image passes (renderMode != BW) are left
    *          untouched, so photos and covers keep their natural tones.
-  */
+   */
   void setDarkMode(const bool enabled) { darkMode = enabled; }
   bool isDarkMode() const { return darkMode; }
   void setFadingFix(const bool enabled) { fadingFix_ = enabled; }

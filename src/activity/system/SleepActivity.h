@@ -5,8 +5,8 @@
  * @brief Public interface and types for SleepActivity.
  */
 
-#include <memory>
 #include <cstdint>
+#include <memory>
 #include <string>
 
 #include "../Activity.h"

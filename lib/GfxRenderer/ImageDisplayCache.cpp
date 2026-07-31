@@ -195,7 +195,6 @@ bool ImageDisplayCache::remove(GfxRenderer& renderer, const std::string& sourceP
   return SdMan.remove(cachePath.c_str());
 }
 
-
 bool ImageDisplayCache::renderIfAvailable(GfxRenderer& renderer, const std::string& sourcePath, const int x,
                                           const int y, const int width, const int height,
                                           const ImageDisplayCacheOptions& options) {
@@ -369,7 +368,8 @@ bool ImageDisplayCache::store(GfxRenderer& renderer, const std::string& sourcePa
   FsFile file;
   if (!SdMan.openFileForWrite("IDC", tempPath, file)) {
     if (options.quality) {
-      Serial.printf("[%lu] [IDC-Q] store open failed plane=%s path=%s\n", millis(), planeName(options), tempPath.c_str());
+      Serial.printf("[%lu] [IDC-Q] store open failed plane=%s path=%s\n", millis(), planeName(options),
+                    tempPath.c_str());
     }
     return false;
   }

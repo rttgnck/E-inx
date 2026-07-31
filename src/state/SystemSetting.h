@@ -427,7 +427,7 @@ class SystemSetting {
   uint8_t sleepClockStyle = CLOCK_CENTERED_DATE;          ///< Date/time sleep screen style
   uint8_t sleepClockTimeFormat = CLOCK_24_HOUR;           ///< 12/24 hour clock format
   uint8_t sleepClockRefreshInterval = CLOCK_REFRESH_OFF;  ///< Legacy settings slot; Date Time is X3-only
-  uint8_t dailyReadingGoal = DAILY_GOAL_30_MIN;            ///< X3 RTC-backed daily reading goal
+  uint8_t dailyReadingGoal = DAILY_GOAL_30_MIN;           ///< X3 RTC-backed daily reading goal
   /** UTC offset in 15-minute steps, biased by +12h. 0=UTC-12:00, 80=UTC+08:00, 104=UTC+14:00. */
   uint8_t timeZoneQuarterOffset = 80;
 
@@ -471,8 +471,8 @@ class SystemSetting {
 
   uint8_t refreshFrequency = REFRESH_15;  ///< Refresh frequency
   uint8_t readerRefreshMode = READER_REFRESH_AUTO;
-  uint8_t hyphenationEnabled = 1;         ///< Hyphenation enabled
-  uint8_t bionicReadingEnabled = 0;       ///< Bionic Reading enabled
+  uint8_t hyphenationEnabled = 1;    ///< Hyphenation enabled
+  uint8_t bionicReadingEnabled = 0;  ///< Bionic Reading enabled
 
   uint8_t screenMargin = 20;  ///< Screen margin in pixels
 
@@ -499,10 +499,10 @@ class SystemSetting {
   uint8_t refreshOnLoadStatistics = 0;
   uint8_t disableNavigation = NAV_NONE;  ///< Navigation disable mode
 
-  uint8_t recentLibraryMode = RECENT_FLOW;         ///< Recent library display mode
-  uint8_t libraryMode = LIBRARY_GRID;              ///< Library browser display mode
-  uint8_t libraryViewMode = LIBRARY_VIEW_SHELF;    ///< Last Library browser content view
-  uint8_t libraryShelfEnabled = 1;                 ///< Allow cover shelf view in Library
+  uint8_t recentLibraryMode = RECENT_FLOW;       ///< Recent library display mode
+  uint8_t libraryMode = LIBRARY_GRID;            ///< Library browser display mode
+  uint8_t libraryViewMode = LIBRARY_VIEW_SHELF;  ///< Last Library browser content view
+  uint8_t libraryShelfEnabled = 1;               ///< Allow cover shelf view in Library
   /** How many recent books to show on the Recent hub (1–8). */
   uint8_t recentVisibleCount = 9;
   /** Library: 0 = folders and books A-Z only; 1 = use librarySortMode (favorites / groups / reading / tags). */

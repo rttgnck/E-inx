@@ -18,8 +18,7 @@ struct NewsEntry {
 class NewsActivity final : public Activity, public Menu {
  public:
   explicit NewsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                        const std::function<void()>& onRecentOpen,
-                        const std::function<void()>& onLibraryOpen,
+                        const std::function<void()>& onRecentOpen, const std::function<void()>& onLibraryOpen,
                         const std::function<void(const std::string& path)>& onOpenBook,
                         const std::function<void()>& onGoToNews)
       : Activity("News", renderer, mappedInput),

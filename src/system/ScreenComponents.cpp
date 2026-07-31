@@ -14,8 +14,8 @@
 #include <cstdio>
 #include <string>
 
-#include "system/Fonts.h"
 #include "state/SystemSetting.h"
+#include "system/Fonts.h"
 
 extern HalGPIO gpio;
 

@@ -15,8 +15,8 @@
 
 namespace {
 constexpr int MENU_ITEM_COUNT = 5;
-const char* MENU_ITEMS[MENU_ITEM_COUNT] = {"Join a Network", "Firmware Update", "Connect to Calibre",
-                                           "Create Hotspot", "OPDS Browser"};
+const char* MENU_ITEMS[MENU_ITEM_COUNT] = {"Join a Network", "Firmware Update", "Connect to Calibre", "Create Hotspot",
+                                           "OPDS Browser"};
 constexpr int LIST_ITEM_HEIGHT = UiTheme::DRAWER_LIST_ITEM_HEIGHT;
 }  // namespace
 

@@ -28,4 +28,3 @@ class IfFoundActivity final : public Activity {
   void loadText();
   void render();
 };
-

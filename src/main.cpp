@@ -7,9 +7,9 @@
 #include <GfxRenderer.h>
 #include <HalDisplay.h>
 #include <HalGPIO.h>
+#include <Preferences.h>
 #include <SDCardManager.h>
 #include <SPI.h>
-#include <Preferences.h>
 #include <esp_heap_caps.h>
 #include <esp_sleep.h>
 #include <esp_system.h>
@@ -17,14 +17,14 @@
 #include <esp_ota_ops.h>
 #endif
 
+#include <Epub.h>
+
 #include <algorithm>
 #include <cctype>
-#include <ctime>
 #include <cstring>
+#include <ctime>
 #include <new>
 #include <string>
-
-#include <Epub.h>
 
 #include "activity/OpdsServerListActivity.h"
 #include "activity/network/CalibreConnectActivity.h"
@@ -190,9 +190,8 @@ bool earlyTimerWakeCandidate() {
   const HalGPIO::SleepTimerTickState timing = HalGPIO::getSleepTimerTickState();
   const uint64_t elapsedTicks = timing.currentTicks - timing.startTicks;
   const bool deadlineReached = timing.durationTicks != 0 && elapsedTicks >= timing.durationTicks;
-  HalGPIO::recordSleepWakeTrace(
-      HalGPIO::SleepWakeTraceEvent::DeadlineCheck, static_cast<uint32_t>(elapsedTicks),
-      static_cast<uint32_t>(timing.durationTicks) | (signatureValid ? 0x80000000UL : 0));
+  HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::DeadlineCheck, static_cast<uint32_t>(elapsedTicks),
+                                static_cast<uint32_t>(timing.durationTicks) | (signatureValid ? 0x80000000UL : 0));
   if (!signatureValid || !deadlineReached) {
     return false;
   }
@@ -211,8 +210,7 @@ uint32_t packEarlyWakeConfig(const uint16_t guardMs, const bool doublePressEnabl
   return EARLY_WAKE_CONFIG_SIGNATURE | (static_cast<uint32_t>(guardMs) & EARLY_WAKE_CONFIG_GUARD_MASK) |
          (doublePressEnabled ? EARLY_WAKE_CONFIG_DOUBLE_PRESS : 0) |
          (sleptFromReader ? EARLY_WAKE_CONFIG_SLEPT_FROM_READER : 0) |
-         ((static_cast<uint32_t>(gestureWindow) << EARLY_WAKE_CONFIG_GESTURE_SHIFT) &
-          EARLY_WAKE_CONFIG_GESTURE_MASK);
+         ((static_cast<uint32_t>(gestureWindow) << EARLY_WAKE_CONFIG_GESTURE_SHIFT) & EARLY_WAKE_CONFIG_GESTURE_MASK);
 }
 
 bool validEarlyWakeConfig(const uint32_t packed) {
@@ -230,26 +228,26 @@ uint32_t packEarlyGestureConfig(const uint8_t firstPressMin, const uint8_t secon
 
 bool validEarlyGestureConfig(const uint32_t packed) {
   const uint8_t firstPressMin = static_cast<uint8_t>(packed & EARLY_GESTURE_CONFIG_FIRST_PRESS_MASK);
-  const uint8_t secondPressMax = static_cast<uint8_t>(
-      (packed & EARLY_GESTURE_CONFIG_SECOND_PRESS_MASK) >> EARLY_GESTURE_CONFIG_SECOND_PRESS_SHIFT);
-  return (packed & EARLY_GESTURE_CONFIG_SIGNATURE_MASK) == EARLY_GESTURE_CONFIG_SIGNATURE &&
-         firstPressMin <= 15 && secondPressMax <= 9;
+  const uint8_t secondPressMax = static_cast<uint8_t>((packed & EARLY_GESTURE_CONFIG_SECOND_PRESS_MASK) >>
+                                                      EARLY_GESTURE_CONFIG_SECOND_PRESS_SHIFT);
+  return (packed & EARLY_GESTURE_CONFIG_SIGNATURE_MASK) == EARLY_GESTURE_CONFIG_SIGNATURE && firstPressMin <= 15 &&
+         secondPressMax <= 9;
 }
 
 void applyEarlyWakeConfig(const uint32_t packed) {
   rtcLastSleepPowerWakeGuardMs = static_cast<uint16_t>(packed & EARLY_WAKE_CONFIG_GUARD_MASK);
   rtcLastSleepPowerDoublePressEnabled = (packed & EARLY_WAKE_CONFIG_DOUBLE_PRESS) != 0;
   rtcLastSleepSleptFromReader = (packed & EARLY_WAKE_CONFIG_SLEPT_FROM_READER) != 0;
-  rtcLastSleepPowerGestureWindow = static_cast<uint8_t>(
-      (packed & EARLY_WAKE_CONFIG_GESTURE_MASK) >> EARLY_WAKE_CONFIG_GESTURE_SHIFT);
+  rtcLastSleepPowerGestureWindow =
+      static_cast<uint8_t>((packed & EARLY_WAKE_CONFIG_GESTURE_MASK) >> EARLY_WAKE_CONFIG_GESTURE_SHIFT);
   rtcEarlyWakeConfigSignature = EARLY_WAKE_CONFIG_SIGNATURE;
   rtcPersistedEarlyWakeConfig = packed;
 }
 
 void applyEarlyGestureConfig(const uint32_t packed) {
   rtcLastSleepPowerFirstPressMin = static_cast<uint8_t>(packed & EARLY_GESTURE_CONFIG_FIRST_PRESS_MASK);
-  rtcLastSleepPowerSecondPressMax = static_cast<uint8_t>(
-      (packed & EARLY_GESTURE_CONFIG_SECOND_PRESS_MASK) >> EARLY_GESTURE_CONFIG_SECOND_PRESS_SHIFT);
+  rtcLastSleepPowerSecondPressMax = static_cast<uint8_t>((packed & EARLY_GESTURE_CONFIG_SECOND_PRESS_MASK) >>
+                                                         EARLY_GESTURE_CONFIG_SECOND_PRESS_SHIFT);
   rtcEarlyGestureConfigSignature = EARLY_GESTURE_CONFIG_SIGNATURE;
   rtcPersistedEarlyGestureConfig = packed;
 }
@@ -398,8 +396,9 @@ bool isExportedNoteImage(const std::string& path) {
 }
 
 void onGoToReaderNavigation(const std::string& path) {
-  switchTo<ReaderActivity>(render, input, path, [](const std::string&) { onGoToRecent(); },
-                           /*openNavigationOnLaunch=*/true);
+  switchTo<ReaderActivity>(
+      render, input, path, [](const std::string&) { onGoToRecent(); },
+      /*openNavigationOnLaunch=*/true);
 }
 
 /**
@@ -436,11 +435,14 @@ void onGoToStatistics() { switchTo<StatisticActivity>(render, input, onGoToRecen
 /**
  * @brief Navigates to the recent books activity.
  */
-void onGoToNews() { switchTo<NewsActivity>(render, input, onGoToRecent, []() { onGoToLibrary("/"); }, onGoToReader, onGoToNews); }
+void onGoToNews() {
+  switchTo<NewsActivity>(render, input, onGoToRecent, []() { onGoToLibrary("/"); }, onGoToReader, onGoToNews);
+}
 
 void onGoToRecent() {
-  switchTo<RecentActivity>(render, input, onGoToNews, []() { onGoToLibrary("/"); }, onGoToStatistics, onSelectBook,
-                           onSelectBookNavigation, onGoToRecent);
+  switchTo<RecentActivity>(
+      render, input, onGoToNews, []() { onGoToLibrary("/"); }, onGoToStatistics, onSelectBook, onSelectBookNavigation,
+      onGoToRecent);
 }
 
 /**
@@ -569,10 +571,9 @@ PowerWakeAction detectPowerWakeAction(const bool powerWakeCandidate) {
   const uint32_t wakeGuardMs = rtcLastSleepPowerWakeGuardMs;
   const uint32_t firstPressMinMs =
       rtcLastSleepPowerFirstPressMin <= 15 ? static_cast<uint32_t>(rtcLastSleepPowerFirstPressMin) * 100UL : 0;
-  const uint32_t secondPressMaxMs =
-      rtcLastSleepPowerSecondPressMax <= 9
-          ? static_cast<uint32_t>(rtcLastSleepPowerSecondPressMax + 1) * 100UL
-          : POWER_DOUBLE_PRESS_DEFAULT_SECOND_HOLD_MAX_MS;
+  const uint32_t secondPressMaxMs = rtcLastSleepPowerSecondPressMax <= 9
+                                        ? static_cast<uint32_t>(rtcLastSleepPowerSecondPressMax + 1) * 100UL
+                                        : POWER_DOUBLE_PRESS_DEFAULT_SECOND_HOLD_MAX_MS;
   const uint32_t configuredGestureWindowMs =
       rtcLastSleepPowerGestureWindow == 0 || rtcLastSleepPowerGestureWindow > 17
           ? 0
@@ -584,21 +585,18 @@ PowerWakeAction detectPowerWakeAction(const bool powerWakeCandidate) {
                                     : POWER_DOUBLE_PRESS_NO_GUARD_WINDOW_MS;
   }
   if (wakeGuardMs > 0) {
-    const uint32_t guardedDeadline = wakeGuardMs > POWER_DOUBLE_PRESS_GUARD_MARGIN_MS
-                                         ? wakeGuardMs - POWER_DOUBLE_PRESS_GUARD_MARGIN_MS
-                                         : 0;
+    const uint32_t guardedDeadline =
+        wakeGuardMs > POWER_DOUBLE_PRESS_GUARD_MARGIN_MS ? wakeGuardMs - POWER_DOUBLE_PRESS_GUARD_MARGIN_MS : 0;
     secondTapFinishDeadlineMs = std::min(secondTapFinishDeadlineMs, guardedDeadline);
   }
-  HalGPIO::recordSleepWakeTrace(
-      HalGPIO::SleepWakeTraceEvent::PowerGesture, 0,
-      (wakeGuardMs & 0xFFFFUL) | ((secondTapFinishDeadlineMs & 0xFFFFUL) << 16));
+  HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::PowerGesture, 0,
+                                (wakeGuardMs & 0xFFFFUL) | ((secondTapFinishDeadlineMs & 0xFFFFUL) << 16));
 
   // The X3 power key must be sampled directly before peripheral and input-manager initialization. Once the
   // wake-causing press is released, this boot can never enter the UI; only a valid second tap may change the image.
   while (digitalRead(POWER_BUTTON_GPIO) == LOW) {
     const unsigned long continuouslyHeldMs = millis() - firstPressStartedMs;
-    if (continuouslyHeldMs >= POWER_WAKE_EMERGENCY_BOOT_MS ||
-        (wakeGuardMs > 0 && continuouslyHeldMs >= wakeGuardMs)) {
+    if (continuouslyHeldMs >= POWER_WAKE_EMERGENCY_BOOT_MS || (wakeGuardMs > 0 && continuouslyHeldMs >= wakeGuardMs)) {
       HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::PowerGesture, 4, continuouslyHeldMs);
       return PowerWakeAction::Boot;
     }
@@ -635,15 +633,13 @@ PowerWakeAction detectPowerWakeAction(const bool powerWakeCandidate) {
     const unsigned long secondPressFinishedMs = millis();
     const unsigned long secondPressDurationMs = secondPressFinishedMs - secondPressStartMs;
     HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::PowerGesture, 2, secondPressDurationMs);
-    if (!timeBefore(secondTapFinishDeadline, secondPressFinishedMs) &&
-        secondPressDurationMs <= secondPressMaxMs) {
+    if (!timeBefore(secondTapFinishDeadline, secondPressFinishedMs) && secondPressDurationMs <= secondPressMaxMs) {
       return PowerWakeAction::DoublePress;
     }
     return PowerWakeAction::ShortPress;
   }
 
-  HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::PowerGesture, 3,
-                                millis() - gestureObservationStartedMs);
+  HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::PowerGesture, 3, millis() - gestureObservationStartedMs);
   return PowerWakeAction::ShortPress;
 }
 
@@ -772,15 +768,13 @@ void startDeepSleepCycle(const bool sleptFromReader, const bool continueExisting
   waitForAnyButtonRelease();
   HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 31);
   const uint32_t configuredTimerSeconds = sleepImageTimerSecondsFor(sleptFromReader, renderedSleepImage);
-  const bool previousTimerValid = APP_STATE.lastSleepTimerArmSeconds > 0 &&
-                                  APP_STATE.lastSleepTimerArmSeconds <= MAX_SLEEP_IMAGE_TIMER_SECONDS;
-  const uint32_t sleepImageTimerSeconds =
-      preserveTimerDeadline && previousTimerValid
-          ? remainingSleepImageTimerSeconds(APP_STATE.lastSleepTimerArmSeconds)
-          : configuredTimerSeconds;
+  const bool previousTimerValid =
+      APP_STATE.lastSleepTimerArmSeconds > 0 && APP_STATE.lastSleepTimerArmSeconds <= MAX_SLEEP_IMAGE_TIMER_SECONDS;
+  const uint32_t sleepImageTimerSeconds = preserveTimerDeadline && previousTimerValid
+                                              ? remainingSleepImageTimerSeconds(APP_STATE.lastSleepTimerArmSeconds)
+                                              : configuredTimerSeconds;
   const uint32_t sleepPlanFlags = (sleptFromReader ? 1UL : 0UL) | (continueExistingSleep ? 2UL : 0UL) |
-                                  (renderedSleepImage ? 4UL : 0UL) |
-                                  (SETTINGS.sleepImageRotationEnabled ? 8UL : 0UL) |
+                                  (renderedSleepImage ? 4UL : 0UL) | (SETTINGS.sleepImageRotationEnabled ? 8UL : 0UL) |
                                   (preserveTimerDeadline ? 16UL : 0UL);
   HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepPlan, sleepImageTimerSeconds, sleepPlanFlags);
   persistEarlyWakeConfig(sleptFromReader);
@@ -791,13 +785,11 @@ void startDeepSleepCycle(const bool sleptFromReader, const bool continueExisting
   }
   APP_STATE.saveToFile();
   HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 33);
-  rtcExpectedSleepTimerWakeSignature =
-      sleepImageTimerSeconds > 0 ? EXPECTED_SLEEP_TIMER_WAKE_SIGNATURE : 0;
+  rtcExpectedSleepTimerWakeSignature = sleepImageTimerSeconds > 0 ? EXPECTED_SLEEP_TIMER_WAKE_SIGNATURE : 0;
   const uint32_t newsTimer = newsDownloadTimerSeconds();
   const uint32_t hardwareTimerSeconds =
-      newsTimer > 0
-          ? (sleepImageTimerSeconds > 0 ? std::min(sleepImageTimerSeconds, newsTimer) : newsTimer)
-          : sleepImageTimerSeconds;
+      newsTimer > 0 ? (sleepImageTimerSeconds > 0 ? std::min(sleepImageTimerSeconds, newsTimer) : newsTimer)
+                    : sleepImageTimerSeconds;
   HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 34);
   display.deepSleep();
   HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 35);
@@ -818,24 +810,21 @@ void reenterDeepSleepWithoutRedraw() {
 }
 
 void enterDeepSleep(const bool forceSleepImageAdvance, const bool continueExistingSleep) {
-  HalGPIO::recordSleepWakeTrace(
-      HalGPIO::SleepWakeTraceEvent::SleepStage, 1,
-      (forceSleepImageAdvance ? 1UL : 0UL) | (continueExistingSleep ? 2UL : 0UL) |
-          (static_cast<uint32_t>(SETTINGS.sleepScreen) << 8));
+  HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 1,
+                                (forceSleepImageAdvance ? 1UL : 0UL) | (continueExistingSleep ? 2UL : 0UL) |
+                                    (static_cast<uint32_t>(SETTINGS.sleepScreen) << 8));
   normalizeUnavailableClockSettings();
-  const bool sleptFromReader =
-      currentActivity != nullptr
-          ? (strcmp(currentActivity->getName(), "Reader") == 0 ||
-             strcmp(currentActivity->getName(), "EpubReader") == 0 ||
-             strcmp(currentActivity->getName(), "XtcReader") == 0 ||
-             strcmp(currentActivity->getName(), "TxtReader") == 0)
-          : rtcLastSleepSleptFromReader;
+  const bool sleptFromReader = currentActivity != nullptr ? (strcmp(currentActivity->getName(), "Reader") == 0 ||
+                                                             strcmp(currentActivity->getName(), "EpubReader") == 0 ||
+                                                             strcmp(currentActivity->getName(), "XtcReader") == 0 ||
+                                                             strcmp(currentActivity->getName(), "TxtReader") == 0)
+                                                          : rtcLastSleepSleptFromReader;
   SleepActivity* sleepActivity = switchTo<SleepActivity>(render, input, sleptFromReader, forceSleepImageAdvance);
   HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 2);
-  HalGPIO::recordSleepWakeTrace(
-      HalGPIO::SleepWakeTraceEvent::ImageResult, APP_STATE.lastSleepImage,
-      (forceSleepImageAdvance ? 1UL : 0UL) | (sleepActivity->didRenderSleepImage() ? 2UL : 0UL) |
-          (continueExistingSleep ? 4UL : 0UL));
+  HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::ImageResult, APP_STATE.lastSleepImage,
+                                (forceSleepImageAdvance ? 1UL : 0UL) |
+                                    (sleepActivity->didRenderSleepImage() ? 2UL : 0UL) |
+                                    (continueExistingSleep ? 4UL : 0UL));
   // Persist settings from a clean single-threaded context right before power is cut. switchTo has torn
   // down the previous activity's render task, so this write can't race with concurrent SD reads. This is
   // the durable persist point for in-RAM settings (e.g. dark mode) that a screen toggle may not commit.
@@ -885,9 +874,9 @@ void setup() {
       loadEarlyWakeConfig();
       startupPowerWakeCandidate = earlyPowerWakeCandidate() || powerWasDownAtSetup;
       startupPowerWakeAction = detectPowerWakeAction(startupPowerWakeCandidate);
-      HalGPIO::recordSleepWakeTrace(
-          HalGPIO::SleepWakeTraceEvent::PowerAction, static_cast<uint32_t>(startupPowerWakeAction),
-          (startupPowerWakeCandidate ? 1UL : 0UL) | (powerWasDownAtSetup ? 2UL : 0UL));
+      HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::PowerAction,
+                                    static_cast<uint32_t>(startupPowerWakeAction),
+                                    (startupPowerWakeCandidate ? 1UL : 0UL) | (powerWasDownAtSetup ? 2UL : 0UL));
     }
   }
   const bool powerWakeCandidate = startupPowerWakeCandidate;
@@ -906,8 +895,7 @@ void setup() {
   EInkDisplay::setWaitCallback([] {
     gpio.update();
     if (gpio.isPressed(HalGPIO::BTN_POWER)) {
-      Serial.printf("[%lu] [DBG] WAIT-CB power pressed, held=%lums\n",
-                    millis(), gpio.getHeldTime());
+      Serial.printf("[%lu] [DBG] WAIT-CB power pressed, held=%lums\n", millis(), gpio.getHeldTime());
     }
   });
   Serial.printf("[%lu] [BOOT] Display OK, heap=%lu\n", millis(), (unsigned long)esp_get_free_heap_size());
@@ -1016,8 +1004,8 @@ void loop() {
 
   if (!powerSleepGuardActive() && gpio.isPressed(HalGPIO::BTN_POWER)) {
     const unsigned long heldMs = gpio.getHeldTime();
-    Serial.printf("[%lu] [DBG] PRE-LOOP power held %lums (need %lums)\n",
-                  millis(), heldMs, (unsigned long)SETTINGS.getPowerButtonDuration());
+    Serial.printf("[%lu] [DBG] PRE-LOOP power held %lums (need %lums)\n", millis(), heldMs,
+                  (unsigned long)SETTINGS.getPowerButtonDuration());
     if (heldMs >= 10000) {
       esp_restart();
       return;

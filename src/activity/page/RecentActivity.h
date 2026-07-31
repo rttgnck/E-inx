@@ -64,12 +64,12 @@ class RecentActivity final : public Activity, public Menu {
    * View mode enumeration for displaying recent books.
    */
   enum class ViewMode {
-    Grid,     /**< Display books in a grid with covers */
-    Flow,     /**< Flow carousel */
-    SimpleUi, /**< Recent cover on gray band, favorites list below */
-    List,     /**< Thumbnail left; title, author, progress (5 rows, scrollable) */
-    Icons,    /**< 3×3 icon grid; scroll for more books */
-    Cover,    /**< Latest recent cover only, with progress below */
+    Grid,          /**< Display books in a grid with covers */
+    Flow,          /**< Flow carousel */
+    SimpleUi,      /**< Recent cover on gray band, favorites list below */
+    List,          /**< Thumbnail left; title, author, progress (5 rows, scrollable) */
+    Icons,         /**< 3×3 icon grid; scroll for more books */
+    Cover,         /**< Latest recent cover only, with progress below */
     StatsDashboard /**< Selected book cover + stats column + progress on top, book list below */
   };
 

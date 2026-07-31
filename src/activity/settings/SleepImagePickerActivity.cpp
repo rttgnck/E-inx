@@ -15,8 +15,8 @@
 #include <cstring>
 #include <iterator>
 
-#include "state/SystemSetting.h"
 #include "state/SleepImageSelection.h"
+#include "state/SystemSetting.h"
 #include "system/Fonts.h"
 #include "system/MappedInputManager.h"
 #include "system/MenuNav.h"
@@ -43,7 +43,7 @@ void SleepImagePickerActivity::onEnter() {
   freeGridBuffer();
   rebuildRows();
   const int enabledCount = std::count_if(rows.begin(), rows.end(),
-      [](const Row& row) { return isSleepImageShuffleEnabled(row.previewPath); });
+                                         [](const Row& row) { return isSleepImageShuffleEnabled(row.previewPath); });
   if (!rows.empty() && enabledCount == 0) {
     for (const auto& row : rows) {
       setSleepImageShuffleEnabled(row.previewPath, true);
@@ -384,8 +384,8 @@ void SleepImagePickerActivity::toggleSelectedShuffleEnabled() {
   const Row& row = rows[static_cast<size_t>(selectedIndex)];
   const bool currentlyEnabled = isSleepImageShuffleEnabled(row.previewPath);
   if (currentlyEnabled) {
-    const int enabledCount = std::count_if(rows.begin(), rows.end(),
-        [](const Row& r) { return isSleepImageShuffleEnabled(r.previewPath); });
+    const int enabledCount =
+        std::count_if(rows.begin(), rows.end(), [](const Row& r) { return isSleepImageShuffleEnabled(r.previewPath); });
     if (enabledCount <= 1) {
       return;
     }

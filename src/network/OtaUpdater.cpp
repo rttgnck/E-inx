@@ -447,8 +447,7 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdateFromSd(const char* firmware
     file.close();
     return INTERNAL_UPDATE_ERROR;
   }
-  const uint16_t chipId =
-      static_cast<uint16_t>(imageHeader[12]) | (static_cast<uint16_t>(imageHeader[13]) << 8);
+  const uint16_t chipId = static_cast<uint16_t>(imageHeader[12]) | (static_cast<uint16_t>(imageHeader[13]) << 8);
   if (chipId != kEsp32C3ChipId || !file.seek(0)) {
     Serial.printf("[%lu] [OTA] SD firmware is not for ESP32-C3: %s\n", millis(), firmwarePath);
     file.close();

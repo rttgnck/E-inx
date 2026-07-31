@@ -87,7 +87,9 @@ class EInkDisplay {
   // Optional callback invoked periodically during display refresh waits.
   using WaitCallback = void (*)();
   static void setWaitCallback(WaitCallback cb) { waitCallback_ = cb; }
-  static void invokeWaitCallback() { if (waitCallback_) waitCallback_(); }
+  static void invokeWaitCallback() {
+    if (waitCallback_) waitCallback_();
+  }
 
   // Access to frame buffer
   uint8_t* getFrameBuffer() const { return frameBuffer; }

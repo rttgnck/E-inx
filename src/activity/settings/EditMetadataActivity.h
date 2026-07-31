@@ -18,8 +18,7 @@ class EditMetadataActivity final : public ActivityWithSubactivity {
  public:
   EditMetadataActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string bookPath,
                        std::string initialTitle, std::string initialAuthor, std::string initialLanguage,
-                       bool initialFavorite,
-                       const std::function<void()>& onBack)
+                       bool initialFavorite, const std::function<void()>& onBack)
       : ActivityWithSubactivity("EditMetadata", renderer, mappedInput),
         bookPath(std::move(bookPath)),
         title(std::move(initialTitle)),

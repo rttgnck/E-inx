@@ -24,7 +24,8 @@
 namespace {
 class ImageToneGuard {
  public:
-  explicit ImageToneGuard(GfxRenderer& renderer) : renderer_(renderer), previous_(renderer.setPreserveImageTone(true)) {}
+  explicit ImageToneGuard(GfxRenderer& renderer)
+      : renderer_(renderer), previous_(renderer.setPreserveImageTone(true)) {}
   ~ImageToneGuard() { renderer_.setPreserveImageTone(previous_); }
 
  private:
@@ -58,9 +59,8 @@ bool imageDrawRect(const int x, const int y, const int targetWidth, const int ta
     out.height = targetHeight;
     return true;
   }
-  const float scale =
-      std::min(static_cast<float>(targetWidth) / static_cast<float>(sourceWidth),
-               static_cast<float>(targetHeight) / static_cast<float>(sourceHeight));
+  const float scale = std::min(static_cast<float>(targetWidth) / static_cast<float>(sourceWidth),
+                               static_cast<float>(targetHeight) / static_cast<float>(sourceHeight));
   const int drawnW = std::max(1, static_cast<int>(std::lround(static_cast<float>(sourceWidth) * scale)));
   const int drawnH = std::max(1, static_cast<int>(std::lround(static_cast<float>(sourceHeight) * scale)));
   out.width = std::min(targetWidth, drawnW);
@@ -195,9 +195,9 @@ bool ImageRender::render(int x, int y, int width, int height, const Options& opt
     if (format_ == Format::Jpeg) {
       int sourceW = 0;
       int sourceH = 0;
-      haveContentRect = getDimensions(&sourceW, &sourceH) &&
-                        imageDrawRect(x, y, width, height, sourceW, sourceH, options.cropToFill,
-                                      /*centersContain=*/true, contentRect);
+      haveContentRect =
+          getDimensions(&sourceW, &sourceH) && imageDrawRect(x, y, width, height, sourceW, sourceH, options.cropToFill,
+                                                             /*centersContain=*/true, contentRect);
       JpegRender jpeg(renderer_);
       if (jpegCapture && jpegCapture->captured) {
         jpeg.replayCapture(*jpegCapture, options.mode);
@@ -208,9 +208,9 @@ bool ImageRender::render(int x, int y, int width, int height, const Options& opt
     } else if (format_ == Format::Png) {
       int sourceW = 0;
       int sourceH = 0;
-      haveContentRect = getDimensions(&sourceW, &sourceH) &&
-                        imageDrawRect(x, y, width, height, sourceW, sourceH, options.cropToFill,
-                                      /*centersContain=*/true, contentRect);
+      haveContentRect =
+          getDimensions(&sourceW, &sourceH) && imageDrawRect(x, y, width, height, sourceW, sourceH, options.cropToFill,
+                                                             /*centersContain=*/true, contentRect);
       PngRender png(renderer_);
       ok = png.fromPath(path_, x, y, width, height, options.cropToFill, options.mode);
     } else {

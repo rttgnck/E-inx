@@ -466,8 +466,7 @@ void HalGPIO::prepareDeepSleep(const uint32_t timerWakeupSeconds, const bool ret
   // The X3's GPIO13 drives its battery latch. Letting the pin float in deep sleep powers the MCU completely
   // off, including its RTC timer. Retain the latch only when an automatic wake is actually requested; timer-off
   // sleeps keep the stock full-power-off behavior and its lower battery drain.
-  const bool retainX3BatteryPower =
-      deviceIsX3() && (timerWakeupSeconds > 0 || retainPowerForButtonGesture);
+  const bool retainX3BatteryPower = deviceIsX3() && (timerWakeupSeconds > 0 || retainPowerForButtonGesture);
   if (deviceIsX3()) {
     constexpr gpio_num_t X3_BATTERY_LATCH_GPIO = GPIO_NUM_13;
     gpio_set_direction(X3_BATTERY_LATCH_GPIO, GPIO_MODE_OUTPUT);
@@ -519,9 +518,9 @@ void HalGPIO::prepareDeepSleep(const uint32_t timerWakeupSeconds, const bool ret
     rtcDeepSleepTimerDurationTicks = 0;
   }
 
-  appendSleepWakeTrace(SleepWakeTraceEvent::ArmResult, timerWakeupSeconds,
-                       (static_cast<uint32_t>(gpioWakeResult) << 16) |
-                           (static_cast<uint32_t>(rtcDeepSleepTimerSetupResult) & 0xFFFFUL));
+  appendSleepWakeTrace(
+      SleepWakeTraceEvent::ArmResult, timerWakeupSeconds,
+      (static_cast<uint32_t>(gpioWakeResult) << 16) | (static_cast<uint32_t>(rtcDeepSleepTimerSetupResult) & 0xFFFFUL));
   appendSleepWakeTrace(SleepWakeTraceEvent::SleepEnter, static_cast<uint32_t>(rtcDeepSleepTimerStartTicks),
                        static_cast<uint32_t>(rtcDeepSleepTimerDurationTicks));
 }
@@ -537,8 +536,8 @@ void HalGPIO::startDeepSleep(const uint32_t timerWakeupSeconds, const bool retai
 }
 
 HalGPIO::DeepSleepDiagnostics HalGPIO::getDeepSleepDiagnostics() const {
-  return {rtcDeepSleepRequestedTimerSeconds, rtcDeepSleepGpioSetupResult, rtcDeepSleepTimerSetupResult,
-          rtcDeepSleepWakeStubCount, rtcDeepSleepTimerWakeStubCount, rtcDeepSleepLastWakeStubCause};
+  return {rtcDeepSleepRequestedTimerSeconds, rtcDeepSleepGpioSetupResult,    rtcDeepSleepTimerSetupResult,
+          rtcDeepSleepWakeStubCount,         rtcDeepSleepTimerWakeStubCount, rtcDeepSleepLastWakeStubCause};
 }
 
 uint32_t HalGPIO::getLastWakeStubCause() { return rtcDeepSleepLastWakeStubCause; }
@@ -569,8 +568,7 @@ HalGPIO::SleepWakeTraceSnapshot HalGPIO::getSleepWakeTrace() {
   }
 
   snapshot.count = rtcSleepWakeTrace.count;
-  uint8_t index =
-      snapshot.count == SLEEP_WAKE_TRACE_CAPACITY ? rtcSleepWakeTrace.writeIndex : static_cast<uint8_t>(0);
+  uint8_t index = snapshot.count == SLEEP_WAKE_TRACE_CAPACITY ? rtcSleepWakeTrace.writeIndex : static_cast<uint8_t>(0);
   for (uint8_t i = 0; i < snapshot.count; ++i) {
     const volatile SleepWakeTraceEntry& source = rtcSleepWakeTrace.entries[index];
     SleepWakeTraceEntry& destination = snapshot.entries[i];
@@ -719,8 +717,7 @@ HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {
     return WakeupReason::SleepTimer;
   }
   if (wakeupCause == ESP_SLEEP_WAKEUP_GPIO && resetReason == ESP_RST_DEEPSLEEP) {
-    if (wakeupIncludedGpio(InputManager::POWER_BUTTON_PIN) ||
-        digitalRead(InputManager::POWER_BUTTON_PIN) == LOW) {
+    if (wakeupIncludedGpio(InputManager::POWER_BUTTON_PIN) || digitalRead(InputManager::POWER_BUTTON_PIN) == LOW) {
       return WakeupReason::PowerButton;
     }
     return WakeupReason::Button;
@@ -740,6 +737,4 @@ HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {
 
 uint64_t HalGPIO::getWakeupGpioMask() const { return esp_sleep_get_gpio_wakeup_status(); }
 
-bool HalGPIO::wakeupIncludedGpio(const uint8_t gpioPin) const {
-  return (getWakeupGpioMask() & (1ULL << gpioPin)) != 0;
-}
+bool HalGPIO::wakeupIncludedGpio(const uint8_t gpioPin) const { return (getWakeupGpioMask() & (1ULL << gpioPin)) != 0; }

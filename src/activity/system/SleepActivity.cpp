@@ -352,12 +352,12 @@ std::string pickSleepBmpPath(const bool ignoreFixed = false) {
   constexpr const char* fallbackPaths[] = {"/sleep.bmp", "/sleep.jpg", "/sleep.jpeg"};
   std::vector<std::string> fallbackImages;
   std::copy_if(std::begin(fallbackPaths), std::end(fallbackPaths), std::back_inserter(fallbackImages),
-      [](const char* path) { return SdMan.exists(path) && isSleepImageShuffleEnabled(path); });
+               [](const char* path) { return SdMan.exists(path) && isSleepImageShuffleEnabled(path); });
   if (!fallbackImages.empty()) {
     const size_t count = fallbackImages.size();
     beginNewSleepImageCycleIfNeeded(count);
-    std::string selected = fallbackImages[sleepImageIndexForPosition(
-        APP_STATE.sleepImageShuffleSeed, APP_STATE.lastSleepImage, count)];
+    std::string selected =
+        fallbackImages[sleepImageIndexForPosition(APP_STATE.sleepImageShuffleSeed, APP_STATE.lastSleepImage, count)];
     if (ignoreFixed && count > 1 && selected == APP_STATE.lastSleepImagePath) {
       for (size_t offset = 1; offset < count; ++offset) {
         const std::string& alternate = fallbackImages[sleepImageIndexForPosition(
@@ -421,10 +421,10 @@ bool SleepActivity::shouldScheduleImageRotation(const bool sleptFromReader) {
   if (!SETTINGS.sleepImageRotationEnabled) {
     return false;
   }
-  const bool showingCustomImage = SETTINGS.sleepScreen == SystemSetting::SLEEP_SCREEN_MODE::CUSTOM ||
-                                  SETTINGS.sleepScreen == SystemSetting::SLEEP_SCREEN_MODE::TRANSPARENT ||
-                                  (SETTINGS.sleepScreen == SystemSetting::SLEEP_SCREEN_MODE::HYBRID &&
-                                   !sleptFromReader);
+  const bool showingCustomImage =
+      SETTINGS.sleepScreen == SystemSetting::SLEEP_SCREEN_MODE::CUSTOM ||
+      SETTINGS.sleepScreen == SystemSetting::SLEEP_SCREEN_MODE::TRANSPARENT ||
+      (SETTINGS.sleepScreen == SystemSetting::SLEEP_SCREEN_MODE::HYBRID && !sleptFromReader);
   if (!showingCustomImage) {
     return false;
   }
@@ -432,10 +432,10 @@ bool SleepActivity::shouldScheduleImageRotation(const bool sleptFromReader) {
 }
 
 bool SleepActivity::shouldEnablePowerDoublePressImageAdvance(const bool sleptFromReader) {
-  const bool showingCustomImage = SETTINGS.sleepScreen == SystemSetting::SLEEP_SCREEN_MODE::CUSTOM ||
-                                  SETTINGS.sleepScreen == SystemSetting::SLEEP_SCREEN_MODE::TRANSPARENT ||
-                                  (SETTINGS.sleepScreen == SystemSetting::SLEEP_SCREEN_MODE::HYBRID &&
-                                   !sleptFromReader);
+  const bool showingCustomImage =
+      SETTINGS.sleepScreen == SystemSetting::SLEEP_SCREEN_MODE::CUSTOM ||
+      SETTINGS.sleepScreen == SystemSetting::SLEEP_SCREEN_MODE::TRANSPARENT ||
+      (SETTINGS.sleepScreen == SystemSetting::SLEEP_SCREEN_MODE::HYBRID && !sleptFromReader);
   return showingCustomImage && SETTINGS.sleepImagePowerDoublePress;
 }
 
@@ -456,8 +456,8 @@ bool SleepActivity::regenerateLastReadCoverForSleep(GfxRenderer* renderer) {
       removeCoverPath(renderer, book.getCoverBmpPath(cropped));
     }
     const bool generated = book.generateCoverBmp(/*cropped=*/false);
-    return generated && (SdMan.exists(book.getCoverJpegPath(false).c_str()) ||
-                         SdMan.exists(book.getCoverBmpPath(false).c_str()));
+    return generated &&
+           (SdMan.exists(book.getCoverJpegPath(false).c_str()) || SdMan.exists(book.getCoverBmpPath(false).c_str()));
   }
 
   if (StringUtils::checkFileExtension(path, ".xtc") || StringUtils::checkFileExtension(path, ".xtch")) {
@@ -539,8 +539,7 @@ void SleepActivity::onEnter() {
       renderDefaultSleepScreen();
       break;
   }
-  HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 111,
-                                sleepImageRenderSucceeded ? 1UL : 0UL);
+  HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 111, sleepImageRenderSucceeded ? 1UL : 0UL);
 }
 
 /**
@@ -552,8 +551,7 @@ void SleepActivity::onEnter() {
 bool SleepActivity::renderCustomSleepScreen() const {
   HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 200);
   const std::string imagePath = pickSleepBmpPath(forceSleepImageAdvance);
-  HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 201,
-                                static_cast<uint32_t>(imagePath.size()));
+  HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 201, static_cast<uint32_t>(imagePath.size()));
   if (forceSleepImageAdvance && !imagePath.empty() && imagePath == APP_STATE.lastSleepImagePath) {
     renderSleepImageDiagnostic(renderer, "No different sleep image");
     return false;
@@ -574,8 +572,7 @@ bool SleepActivity::renderCustomSleepScreen() const {
         }
         HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 204);
         const bool grayscaleRendered = runSleepImageTwoBitPasses(renderer, imagePath, options);
-        HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 205,
-                                      grayscaleRendered ? 1UL : 0UL);
+        HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 205, grayscaleRendered ? 1UL : 0UL);
         if (grayscaleRendered) {
           recordSleepImageUsed(imagePath);
           return true;
@@ -631,8 +628,7 @@ bool SleepActivity::renderCustomSleepScreen() const {
 bool SleepActivity::renderTransparentSleepScreen() const {
   HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 230);
   const std::string imagePath = pickSleepBmpPath(forceSleepImageAdvance);
-  HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 231,
-                                static_cast<uint32_t>(imagePath.size()));
+  HalGPIO::recordSleepWakeTrace(HalGPIO::SleepWakeTraceEvent::SleepStage, 231, static_cast<uint32_t>(imagePath.size()));
   if (forceSleepImageAdvance && !imagePath.empty() && imagePath == APP_STATE.lastSleepImagePath) {
     renderSleepImageDiagnostic(renderer, "No different sleep image");
     return false;

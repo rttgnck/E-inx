@@ -9,4 +9,3 @@
 
 bool isSleepImageShuffleEnabled(const std::string& path);
 void setSleepImageShuffleEnabled(const std::string& path, bool enabled);
-

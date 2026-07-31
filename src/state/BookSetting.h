@@ -108,11 +108,11 @@ struct BookSettings {
   uint8_t refreshFrequency = 15;  ///< Screen refresh frequency in pages
   uint8_t readerRefreshMode = SystemSetting::READER_REFRESH_AUTO;
 
-  StatusBarSectionConfig statusBarLeft;    ///< Left status bar section
-  StatusBarSectionConfig statusBarInnerLeft;  ///< Inner-left status bar section
-  StatusBarSectionConfig statusBarMiddle;  ///< Middle status bar section
+  StatusBarSectionConfig statusBarLeft;        ///< Left status bar section
+  StatusBarSectionConfig statusBarInnerLeft;   ///< Inner-left status bar section
+  StatusBarSectionConfig statusBarMiddle;      ///< Middle status bar section
   StatusBarSectionConfig statusBarInnerRight;  ///< Inner-right status bar section
-  StatusBarSectionConfig statusBarRight;   ///< Right status bar section
+  StatusBarSectionConfig statusBarRight;       ///< Right status bar section
 
   /**
    * @brief Page auto-turn interval in seconds
@@ -366,13 +366,15 @@ struct BookSettings {
 
     if (bytesAvailable >= offset + 1) {
       statusBarInnerLeft.fromBytes(data, offset);
-      if (statusBarInnerLeft.item >= StatusBarItem::STATUS_BAR_ITEM_COUNT) statusBarInnerLeft.item = StatusBarItem::NONE;
+      if (statusBarInnerLeft.item >= StatusBarItem::STATUS_BAR_ITEM_COUNT)
+        statusBarInnerLeft.item = StatusBarItem::NONE;
     } else {
       statusBarInnerLeft.item = StatusBarItem::NONE;
     }
     if (bytesAvailable >= offset + 1) {
       statusBarInnerRight.fromBytes(data, offset);
-      if (statusBarInnerRight.item >= StatusBarItem::STATUS_BAR_ITEM_COUNT) statusBarInnerRight.item = StatusBarItem::NONE;
+      if (statusBarInnerRight.item >= StatusBarItem::STATUS_BAR_ITEM_COUNT)
+        statusBarInnerRight.item = StatusBarItem::NONE;
     } else {
       statusBarInnerRight.item = StatusBarItem::NONE;
     }
@@ -587,11 +589,10 @@ struct BookSettings {
            hyphenationEnabled == other.hyphenationEnabled && bionicReadingEnabled == other.bionicReadingEnabled &&
            screenMargin == other.screenMargin && orientation == other.orientation &&
            longPressChapterSkip == other.longPressChapterSkip && refreshFrequency == other.refreshFrequency &&
-           readerRefreshMode == other.readerRefreshMode &&
-           pageAutoTurnSeconds == other.pageAutoTurnSeconds && statusBarLeft == other.statusBarLeft &&
-           statusBarInnerLeft == other.statusBarInnerLeft && statusBarMiddle == other.statusBarMiddle &&
-           statusBarInnerRight == other.statusBarInnerRight && statusBarRight == other.statusBarRight &&
-           readerImageGrayscale == other.readerImageGrayscale &&
+           readerRefreshMode == other.readerRefreshMode && pageAutoTurnSeconds == other.pageAutoTurnSeconds &&
+           statusBarLeft == other.statusBarLeft && statusBarInnerLeft == other.statusBarInnerLeft &&
+           statusBarMiddle == other.statusBarMiddle && statusBarInnerRight == other.statusBarInnerRight &&
+           statusBarRight == other.statusBarRight && readerImageGrayscale == other.readerImageGrayscale &&
            readerSmartRefreshOnImages == other.readerSmartRefreshOnImages;
   }
 

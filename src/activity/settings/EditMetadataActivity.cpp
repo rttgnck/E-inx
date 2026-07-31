@@ -31,9 +31,7 @@ bool isTxtBookPath(const std::string& bookPath) {
   return StringUtils::checkFileExtension(bookPath, ".txt") || StringUtils::checkFileExtension(bookPath, ".md");
 }
 
-std::string hashedBookPath(const std::string& bookPath) {
-  return std::to_string(std::hash<std::string>{}(bookPath));
-}
+std::string hashedBookPath(const std::string& bookPath) { return std::to_string(std::hash<std::string>{}(bookPath)); }
 
 std::string statsCachePathForBookPath(const std::string& bookPath) {
   const char* root = isXtcBookPath(bookPath) ? "/.metadata/xtc" : "/.metadata/epub";
@@ -279,7 +277,8 @@ void EditMetadataActivity::render() {
   }
 
   if (!statusMessage.empty()) {
-    renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, firstY + kRowCount * rowH + 20, statusMessage.c_str(), true);
+    renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, firstY + kRowCount * rowH + 20, statusMessage.c_str(),
+                           true);
   }
 
   const char* confirmLabel = "Edit";

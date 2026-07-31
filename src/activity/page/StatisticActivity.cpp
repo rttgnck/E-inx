@@ -20,8 +20,8 @@
 #include <vector>
 
 #include "state/BookState.h"
-#include "state/RecentBooks.h"
 #include "state/ReadingDailyStats.h"
+#include "state/RecentBooks.h"
 #include "state/SystemSetting.h"
 #include "system/Fonts.h"
 #include "system/MappedInputManager.h"
@@ -403,8 +403,8 @@ static int drawGlobalAllItemsSecondBand(const GfxRenderer& renderer, int innerLe
  *        rule above the bottom row sits lower (avoids overlap between the middle row labels and the pages row).
  */
 int drawFourColumnStatsNx2(const GfxRenderer& renderer, int innerLeft, int y, int innerW, const char* const* vals,
-                           const char* const* labs, int numRows, int cellH, int row0LiftPx,
-                           int gapBeforeLastRowPx = 0, int valueFont = FONT_SERIF_LG, int labelFont = FONT_SANS_SM) {
+                           const char* const* labs, int numRows, int cellH, int row0LiftPx, int gapBeforeLastRowPx = 0,
+                           int valueFont = FONT_SERIF_LG, int labelFont = FONT_SANS_SM) {
   if (numRows < 1) {
     return 0;
   }

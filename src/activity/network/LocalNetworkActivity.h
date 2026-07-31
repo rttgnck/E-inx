@@ -23,10 +23,10 @@
  */
 enum class LocalNetworkState {
   WIFI_AUTO_CONNECTING, /**< Connecting to the most recently saved network */
-  WIFI_SELECTION,  /**< Waiting for WiFi network selection */
-  SERVER_STARTING, /**< Web server initialization in progress */
-  SERVER_RUNNING,  /**< Web server active and accepting connections */
-  ERROR            /**< Error state, unable to proceed */
+  WIFI_SELECTION,       /**< Waiting for WiFi network selection */
+  SERVER_STARTING,      /**< Web server initialization in progress */
+  SERVER_RUNNING,       /**< Web server active and accepting connections */
+  ERROR                 /**< Error state, unable to proceed */
 };
 
 /**
@@ -136,12 +136,12 @@ class LocalNetworkActivity final : public ActivityWithSubactivity, public Menu {
   /** @brief Navigate to selected menu tab (not used in this activity) */
   void navigateToSelectedMenu() override {}
 
-  TaskHandle_t displayTaskHandle;   /**< Handle for display update task */
-  SemaphoreHandle_t renderingMutex; /**< Mutex for thread-safe rendering */
-  bool updateRequired;              /**< Flag indicating render update needed */
-  LocalNetworkState state;          /**< Current activity state */
-  bool wifiSelectionCompletionPending; /**< Deferred child completion callback */
-  bool wifiSelectionConnected;          /**< Result captured by the deferred callback */
+  TaskHandle_t displayTaskHandle;        /**< Handle for display update task */
+  SemaphoreHandle_t renderingMutex;      /**< Mutex for thread-safe rendering */
+  bool updateRequired;                   /**< Flag indicating render update needed */
+  LocalNetworkState state;               /**< Current activity state */
+  bool wifiSelectionCompletionPending;   /**< Deferred child completion callback */
+  bool wifiSelectionConnected;           /**< Result captured by the deferred callback */
   const bool autoConnectSaved;           /**< Try the newest saved credential before showing the picker */
   const bool updateLanding;              /**< Show the /update URL and update-specific device copy */
   unsigned long wifiConnectionStartTime; /**< Start time for saved-network connection timeout */

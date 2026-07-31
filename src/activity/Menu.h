@@ -124,8 +124,8 @@ class Menu {
       const std::string time = ScreenComponents::currentTimeText();
       if (!time.empty()) {
         const int width = renderer.text.getWidth(ATKINSON_HYPERLEGIBLE_8_FONT_ID, time.c_str());
-        renderer.text.render(ATKINSON_HYPERLEGIBLE_8_FONT_ID, batteryX - width - 12,
-                             renderer.getScreenHeight() - 30, time.c_str());
+        renderer.text.render(ATKINSON_HYPERLEGIBLE_8_FONT_ID, batteryX - width - 12, renderer.getScreenHeight() - 30,
+                             time.c_str());
       }
     }
     ScreenComponents::drawBattery(

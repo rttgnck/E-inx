@@ -40,8 +40,8 @@ bool writeSnapshot(FsFile& file, const HalGPIO::SleepWakeTraceSnapshot& snapshot
   for (uint8_t i = 0; i < snapshot.count; ++i) {
     const HalGPIO::SleepWakeTraceEntry& entry = snapshot.entries[i];
     const uint8_t event = static_cast<uint8_t>(entry.event);
-    if (!writeValue(file, entry.sequence) || !writeValue(file, entry.rtcTickLow) ||
-        !writeValue(file, entry.arg0) || !writeValue(file, entry.arg1) || !writeValue(file, event)) {
+    if (!writeValue(file, entry.sequence) || !writeValue(file, entry.rtcTickLow) || !writeValue(file, entry.arg0) ||
+        !writeValue(file, entry.arg1) || !writeValue(file, event)) {
       return false;
     }
   }
@@ -59,8 +59,8 @@ bool readSnapshot(const char* path, HalGPIO::SleepWakeTraceSnapshot& snapshot) {
   uint8_t count = 0;
   uint16_t reserved = 0;
   const bool headerValid = readValue(file, magic) && readValue(file, version) && readValue(file, count) &&
-                           readValue(file, reserved) && magic == TRACE_FILE_MAGIC &&
-                           version == TRACE_FILE_VERSION && count <= HalGPIO::SLEEP_WAKE_TRACE_CAPACITY;
+                           readValue(file, reserved) && magic == TRACE_FILE_MAGIC && version == TRACE_FILE_VERSION &&
+                           count <= HalGPIO::SLEEP_WAKE_TRACE_CAPACITY;
   if (!headerValid) {
     file.close();
     return false;
@@ -70,8 +70,8 @@ bool readSnapshot(const char* path, HalGPIO::SleepWakeTraceSnapshot& snapshot) {
   for (uint8_t i = 0; i < count; ++i) {
     HalGPIO::SleepWakeTraceEntry& entry = snapshot.entries[i];
     uint8_t event = 0;
-    if (!readValue(file, entry.sequence) || !readValue(file, entry.rtcTickLow) ||
-        !readValue(file, entry.arg0) || !readValue(file, entry.arg1) || !readValue(file, event) ||
+    if (!readValue(file, entry.sequence) || !readValue(file, entry.rtcTickLow) || !readValue(file, entry.arg0) ||
+        !readValue(file, entry.arg1) || !readValue(file, event) ||
         event < static_cast<uint8_t>(HalGPIO::SleepWakeTraceEvent::SleepPlan) ||
         event > static_cast<uint8_t>(HalGPIO::SleepWakeTraceEvent::PowerGesture)) {
       snapshot.count = 0;

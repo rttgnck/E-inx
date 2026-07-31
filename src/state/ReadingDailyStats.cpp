@@ -13,13 +13,10 @@ constexpr char DAILY_STATS_FILE[] = "/.metadata/reading_daily.bin";
 constexpr uint8_t DAILY_STATS_VERSION = 1;
 constexpr uint16_t MAX_DAILY_ENTRIES = 730;
 
-bool isLeapYear(const uint16_t year) {
-  return (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
-}
+bool isLeapYear(const uint16_t year) { return (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0); }
 
 uint16_t dayOfYear(const HalGPIO::DateTime& dt) {
-  static constexpr uint16_t daysBeforeMonth[] = {0,  0,  31, 59, 90, 120, 151,
-                                                 181, 212, 243, 273, 304, 334};
+  static constexpr uint16_t daysBeforeMonth[] = {0, 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334};
   uint16_t doy = daysBeforeMonth[dt.month] + dt.day;
   if (dt.month > 2 && isLeapYear(dt.year)) {
     ++doy;

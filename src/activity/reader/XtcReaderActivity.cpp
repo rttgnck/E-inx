@@ -21,8 +21,8 @@
 #include <string>
 
 #include "activity/reader/ReaderRefresh.h"
-#include "state/RecentBooks.h"
 #include "state/ReadingDailyStats.h"
+#include "state/RecentBooks.h"
 #include "state/Session.h"
 #include "state/SystemSetting.h"
 #include "system/Fonts.h"

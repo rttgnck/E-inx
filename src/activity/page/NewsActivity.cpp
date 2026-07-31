@@ -2,12 +2,11 @@
 
 #include <ArduinoJson.h>
 #include <GfxRenderer.h>
+#include <HalGPIO.h>
 #include <SDCardManager.h>
 
 #include <algorithm>
 #include <ctime>
-
-#include <HalGPIO.h>
 
 #include "network/HttpDownloader.h"
 #include "state/NetworkCredential.h"
@@ -61,8 +60,7 @@ std::string NewsActivity::todayFilename() {
     time(&now);
     struct tm ti;
     localtime_r(&now, &ti);
-    snprintf(buf, sizeof(buf), "%02d-%02d-%04d.epub", ti.tm_mon + 1, ti.tm_mday,
-             ti.tm_year + 1900);
+    snprintf(buf, sizeof(buf), "%02d-%02d-%04d.epub", ti.tm_mon + 1, ti.tm_mday, ti.tm_year + 1900);
   }
   return std::string(buf);
 }
@@ -275,10 +273,8 @@ void NewsActivity::render() const {
   renderTabBar(renderer);
 
   const int headerY = TAB_BAR_HEIGHT;
-  const int headerTextY =
-      headerY + (HEADER_HEIGHT - renderer.text.getLineHeight(ATKINSON_HYPERLEGIBLE_12_FONT_ID)) / 2;
-  renderer.text.render(ATKINSON_HYPERLEGIBLE_12_FONT_ID, 20, headerTextY, "Daily News", true,
-                       EpdFontFamily::BOLD);
+  const int headerTextY = headerY + (HEADER_HEIGHT - renderer.text.getLineHeight(ATKINSON_HYPERLEGIBLE_12_FONT_ID)) / 2;
+  renderer.text.render(ATKINSON_HYPERLEGIBLE_12_FONT_ID, 20, headerTextY, "Daily News", true, EpdFontFamily::BOLD);
 
   const int dividerY = headerY + HEADER_HEIGHT;
   renderer.line.render(0, dividerY, screenWidth, dividerY);
@@ -293,8 +289,7 @@ void NewsActivity::render() const {
 
   const char* backLabel = selectedIndex >= 0 ? "Actions" : "« Recent";
   const auto labels = mappedInput.mapLabels(backLabel, "Select", "", "");
-  renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3,
-                          labels.btn4);
+  renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
 }
@@ -309,26 +304,23 @@ void NewsActivity::renderList() const {
   const int btnH = LIST_ITEM_HEIGHT - 10;
 
   if (downloadSelected) {
-    renderer.rectangle.fill(10, btnY, screenWidth - 20, btnH,
-                            static_cast<int>(GfxRenderer::FillTone::Ink));
+    renderer.rectangle.fill(10, btnY, screenWidth - 20, btnH, static_cast<int>(GfxRenderer::FillTone::Ink));
   } else {
     renderer.rectangle.render(10, btnY, screenWidth - 20, btnH);
   }
 
-  const int btnTextY =
-      btnY + (btnH - renderer.text.getLineHeight(ATKINSON_HYPERLEGIBLE_10_FONT_ID)) / 2;
+  const int btnTextY = btnY + (btnH - renderer.text.getLineHeight(ATKINSON_HYPERLEGIBLE_10_FONT_ID)) / 2;
   const char* btnText = "Download Today's News";
   const int btnTextW = renderer.text.getWidth(ATKINSON_HYPERLEGIBLE_10_FONT_ID, btnText);
-  renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, (screenWidth - btnTextW) / 2, btnTextY,
-                       btnText, !downloadSelected);
+  renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, (screenWidth - btnTextW) / 2, btnTextY, btnText,
+                       !downloadSelected);
 
   const int itemStartY = listStartY + LIST_ITEM_HEIGHT + 5;
   renderer.line.render(0, itemStartY - 1, screenWidth, itemStartY - 1);
 
   if (entries.empty()) {
     const int emptyY = itemStartY + 30;
-    renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, 20, emptyY,
-                         "No news yet. Download to get started.");
+    renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, 20, emptyY, "No news yet. Download to get started.");
     return;
   }
 
@@ -339,12 +331,10 @@ void NewsActivity::renderList() const {
     const bool isSelected = (entryIndex == selectedIndex);
 
     if (isSelected) {
-      renderer.rectangle.fill(0, itemY, screenWidth, LIST_ITEM_HEIGHT,
-                              static_cast<int>(GfxRenderer::FillTone::Ink));
+      renderer.rectangle.fill(0, itemY, screenWidth, LIST_ITEM_HEIGHT, static_cast<int>(GfxRenderer::FillTone::Ink));
     }
 
-    const int textY =
-        itemY + (LIST_ITEM_HEIGHT - renderer.text.getLineHeight(ATKINSON_HYPERLEGIBLE_10_FONT_ID)) / 2;
+    const int textY = itemY + (LIST_ITEM_HEIGHT - renderer.text.getLineHeight(ATKINSON_HYPERLEGIBLE_10_FONT_ID)) / 2;
 
     std::string label;
     if (entry.bookmarked) {
@@ -355,8 +345,7 @@ void NewsActivity::renderList() const {
     renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, 20, textY, label.c_str(), !isSelected);
 
     if (i < visibleItems - 1 && (entryIndex + 1) < static_cast<int>(entries.size())) {
-      renderer.line.render(0, itemY + LIST_ITEM_HEIGHT - 1, screenWidth,
-                           itemY + LIST_ITEM_HEIGHT - 1);
+      renderer.line.render(0, itemY + LIST_ITEM_HEIGHT - 1, screenWidth, itemY + LIST_ITEM_HEIGHT - 1);
     }
   }
 }
@@ -387,8 +376,7 @@ void NewsActivity::renderDownloadStatus() const {
   }
 
   const int textW = renderer.text.getWidth(ATKINSON_HYPERLEGIBLE_10_FONT_ID, statusText);
-  renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, (screenWidth - textW) / 2, centerY,
-                       statusText);
+  renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, (screenWidth - textW) / 2, centerY, statusText);
 
   if (downloadState == DownloadState::DOWNLOADING) {
     const int barX = 40;
@@ -399,15 +387,13 @@ void NewsActivity::renderDownloadStatus() const {
     if (downloadTotal > 0) {
       int fillW = (downloadProgress * barW) / downloadTotal;
       if (fillW > 0) {
-        renderer.rectangle.fill(barX + 1, barY + 1, fillW - 2, barH - 2,
-                                 static_cast<int>(GfxRenderer::FillTone::Ink));
+        renderer.rectangle.fill(barX + 1, barY + 1, fillW - 2, barH - 2, static_cast<int>(GfxRenderer::FillTone::Ink));
       }
       int pct = (downloadProgress * 100) / downloadTotal;
       char pctText[32];
       snprintf(pctText, sizeof(pctText), "%d%%  (%d KB)", pct, downloadProgress / 1024);
       const int pctW = renderer.text.getWidth(ATKINSON_HYPERLEGIBLE_8_FONT_ID, pctText);
-      renderer.text.render(ATKINSON_HYPERLEGIBLE_8_FONT_ID, (screenWidth - pctW) / 2, barY + barH + 8,
-                           pctText);
+      renderer.text.render(ATKINSON_HYPERLEGIBLE_8_FONT_ID, (screenWidth - pctW) / 2, barY + barH + 8, pctText);
     }
   }
 
@@ -418,8 +404,7 @@ void NewsActivity::renderDownloadStatus() const {
     std::string remaining = downloadError;
     while (!remaining.empty() && y < renderer.getScreenHeight() - 60) {
       std::string line = remaining;
-      while (renderer.text.getWidth(ATKINSON_HYPERLEGIBLE_8_FONT_ID, line.c_str()) > maxW &&
-             line.size() > 1) {
+      while (renderer.text.getWidth(ATKINSON_HYPERLEGIBLE_8_FONT_ID, line.c_str()) > maxW && line.size() > 1) {
         line.pop_back();
       }
       renderer.text.render(ATKINSON_HYPERLEGIBLE_8_FONT_ID, 20, y, line.c_str());
@@ -432,8 +417,7 @@ void NewsActivity::renderDownloadStatus() const {
       downloadState == DownloadState::ALREADY_EXISTS) {
     const char* hint = "Press any button to continue";
     const int hintW = renderer.text.getWidth(ATKINSON_HYPERLEGIBLE_8_FONT_ID, hint);
-    renderer.text.render(ATKINSON_HYPERLEGIBLE_8_FONT_ID, (screenWidth - hintW) / 2, centerY + 100,
-                         hint);
+    renderer.text.render(ATKINSON_HYPERLEGIBLE_8_FONT_ID, (screenWidth - hintW) / 2, centerY + 100, hint);
   }
 }
 
@@ -454,12 +438,10 @@ void NewsActivity::renderActionMenu() const {
     const bool isSelected = (i == actionMenuIndex);
 
     if (isSelected) {
-      renderer.rectangle.fill(0, itemY, screenWidth, LIST_ITEM_HEIGHT,
-                              static_cast<int>(GfxRenderer::FillTone::Ink));
+      renderer.rectangle.fill(0, itemY, screenWidth, LIST_ITEM_HEIGHT, static_cast<int>(GfxRenderer::FillTone::Ink));
     }
 
-    const int textY =
-        itemY + (LIST_ITEM_HEIGHT - renderer.text.getLineHeight(ATKINSON_HYPERLEGIBLE_10_FONT_ID)) / 2;
+    const int textY = itemY + (LIST_ITEM_HEIGHT - renderer.text.getLineHeight(ATKINSON_HYPERLEGIBLE_10_FONT_ID)) / 2;
     renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, 40, textY, actions[i], !isSelected);
   }
 }
@@ -525,9 +507,8 @@ void NewsActivity::startDownload() {
   Serial.printf("[NEWS] Free heap: %u\n", ESP.getFreeHeap());
 
   unsigned long lastRenderMs = 0;
-  auto result = HttpDownloader::downloadToFile(
-      url, destPath, "", "",
-      [this, &lastRenderMs](size_t downloaded, size_t total) {
+  auto result =
+      HttpDownloader::downloadToFile(url, destPath, "", "", [this, &lastRenderMs](size_t downloaded, size_t total) {
         downloadProgress = static_cast<int>(downloaded);
         downloadTotal = static_cast<int>(total);
         unsigned long now = millis();

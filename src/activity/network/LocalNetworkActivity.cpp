@@ -314,8 +314,7 @@ void LocalNetworkActivity::render() const {
     const int contentStart = renderActivityHeader(renderer, startY, updateLanding ? "Update Server" : "Local Network");
     const int centerY = contentStart + (screenHeight - contentStart - BOTTOM_AREA_HEIGHT) / 2;
     renderer.text.centered(ATKINSON_HYPERLEGIBLE_10_FONT_ID, centerY - 16, "Connecting to saved WiFi...");
-    renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, centerY + 20,
-                           truncateString(connectedSSID, 30).c_str());
+    renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, centerY + 20, truncateString(connectedSSID, 30).c_str());
   } else if (state == LocalNetworkState::SERVER_STARTING) {
     const int contentStart = renderActivityHeader(renderer, startY, updateLanding ? "Update Server" : "Local Network");
 
@@ -366,7 +365,7 @@ void LocalNetworkActivity::renderServerRunning() const {
   renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, urlY + 64, hostnameUrl.c_str());
 
   const int hintY = renderer.getScreenHeight() - 92;
-  renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, hintY,
-                         updateLanding ? "Keep this screen open during the update"
-                                       : "Keep this screen open while transferring");
+  renderer.text.centered(
+      ATKINSON_HYPERLEGIBLE_8_FONT_ID, hintY,
+      updateLanding ? "Keep this screen open during the update" : "Keep this screen open while transferring");
 }

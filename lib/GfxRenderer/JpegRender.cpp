@@ -607,8 +607,7 @@ bool JpegRender::render(FsFile& jpegFile, int x, int y, int targetWidth, int tar
       break;
     }
 
-    for (int yInMcu = 0; yInMcu < mcuPixelH && (mcuY * mcuPixelH + yInMcu) < imgH;
-         yInMcu++) {
+    for (int yInMcu = 0; yInMcu < mcuPixelH && (mcuY * mcuPixelH + yInMcu) < imgH; yInMcu++) {
       const uint32_t tRowStart = millis();
       const int srcY = mcuY * mcuPixelH + yInMcu;
       if (srcY < srcOffsetY || srcY >= srcYEnd) continue;
@@ -692,8 +691,7 @@ bool JpegRender::render(FsFile& jpegFile, int x, int y, int targetWidth, int tar
       static_cast<int>(quality), capture ? 1 : 0, static_cast<unsigned long>(tAfterHeaderScan - tRenderStart),
       static_cast<unsigned long>(tAfterInit - tAfterHeaderScan), static_cast<unsigned long>(mcuDecodeMs),
       static_cast<unsigned long>(rowProcessMs), currentOutY, outHeight, decodeOk ? 1 : 0,
-      static_cast<unsigned long>(tEnd - tAfterInit),
-      static_cast<unsigned long>(tEnd - tRenderStart));
+      static_cast<unsigned long>(tEnd - tAfterInit), static_cast<unsigned long>(tEnd - tRenderStart));
   return decodeOk && currentOutY == outHeight;
 }
 

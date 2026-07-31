@@ -817,9 +817,8 @@ bool SystemSetting::loadFromFile() {
     if (settingsRead < fileSettingsCount) {
       uint8_t rawSleepImageAdvance = 0;
       serialization::readPod(inputFile, rawSleepImageAdvance);
-      sleepImagePowerDoublePress =
-          version < 34 ? (rawSleepImageAdvance == LEGACY_SLEEP_IMAGE_ADVANCE_POWER ? 1 : 0)
-                       : (rawSleepImageAdvance ? 1 : 0);
+      sleepImagePowerDoublePress = version < 34 ? (rawSleepImageAdvance == LEGACY_SLEEP_IMAGE_ADVANCE_POWER ? 1 : 0)
+                                                : (rawSleepImageAdvance ? 1 : 0);
       ++settingsRead;
     }
     if (settingsRead < fileSettingsCount) {

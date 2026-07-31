@@ -11,8 +11,8 @@
 #include <string>
 
 #include "Epub.h"
-#include "GfxRenderer.h"
 #include "EpubReadingStats.h"
+#include "GfxRenderer.h"
 #include "state/BookSetting.h"
 
 /**

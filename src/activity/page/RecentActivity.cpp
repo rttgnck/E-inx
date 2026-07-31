@@ -6,6 +6,7 @@
 #include "RecentActivity.h"
 
 #include <Bitmap.h>
+#include <Epub/BookMetadataCache.h>
 #include <GfxRenderer.h>
 #include <HalGPIO.h>
 #include <HardwareSerial.h>
@@ -28,11 +29,9 @@
 #include "Epub/Page.h"
 #include "Epub/Section.h"
 #include "components/recent/RecentLayouts.h"
-#include "images/Star.h"
 #include "images/Down.h"
+#include "images/Star.h"
 #include "images/Up.h"
-#include <Epub/BookMetadataCache.h>
-
 #include "state/BookProgress.h"
 #include "state/BookSetting.h"
 #include "state/BookState.h"
@@ -1350,8 +1349,8 @@ void RecentActivity::renderStatsDashboard() {
 
   snprintf(buf, sizeof(buf), "%u", hasStats ? st.totalChaptersRead : 0u);
   snprintf(cmpBuf, sizeof(cmpBuf), "%u", cmp.totalChaptersRead);
-  drawStatBlock(statsX, statColW, VALUE_FONT, 2, statSpacing, buf, true, st.totalChaptersRead, cmp.totalChaptersRead, cmpBuf,
-                "Chapters");
+  drawStatBlock(statsX, statColW, VALUE_FONT, 2, statSpacing, buf, true, st.totalChaptersRead, cmp.totalChaptersRead,
+                cmpBuf, "Chapters");
 
   snprintf(buf, sizeof(buf), "%u s", (hasStats ? st.avgPageTimeMs : 0u) / 1000);
   snprintf(cmpBuf, sizeof(cmpBuf), "%u s", cmp.avgPageTimeMs / 1000);
@@ -1370,9 +1369,8 @@ void RecentActivity::renderStatsDashboard() {
   const int barY = coverY + coverH + 10 + infoLh + 4;
   const int infoY = coverY + coverH + 10;
 
-  const float progFrac = (cur.progress >= 0.0f && cur.progress <= 1.0f)
-                             ? cur.progress
-                             : (hasStats ? st.progressPercent / 100.0f : -1.0f);
+  const float progFrac =
+      (cur.progress >= 0.0f && cur.progress <= 1.0f) ? cur.progress : (hasStats ? st.progressPercent / 100.0f : -1.0f);
 
   char pagesTxt[24];
   if (dashBookPage_ > 0 && dashBookPages_ > 0) {

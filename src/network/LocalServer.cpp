@@ -172,8 +172,7 @@ struct WallpaperInfo {
 
 bool stringEndsWith(const std::string& value, const char* suffix) {
   const size_t suffixLength = strlen(suffix);
-  return value.size() >= suffixLength &&
-         value.compare(value.size() - suffixLength, suffixLength, suffix) == 0;
+  return value.size() >= suffixLength && value.compare(value.size() - suffixLength, suffixLength, suffix) == 0;
 }
 
 bool hasSupportedWallpaperExtension(const String& value) {
@@ -753,8 +752,8 @@ void LocalServer::begin() {
 
   server->on("/upload", HTTP_POST, [this] { handleUploadPost(); }, [this] { handleUpload(); });
   server->on("/api/update/status", HTTP_GET, [this] { handleFirmwareStatus(); });
-  server->on("/api/update/upload", HTTP_POST, [this] { handleFirmwareUploadPost(); },
-             [this] { handleFirmwareUpload(); });
+  server->on(
+      "/api/update/upload", HTTP_POST, [this] { handleFirmwareUploadPost(); }, [this] { handleFirmwareUpload(); });
 
   server->on("/mkdir", HTTP_POST, [this] { handleCreateFolder(); });
 
@@ -1102,8 +1101,8 @@ void LocalServer::handleFirmwareUpload() {
     firmwareOtaPartition = updatePartition;
     firmwareOtaActive = true;
     firmwareUploadState = FirmwareUploadState::RECEIVING;
-    Serial.printf("[%lu] [WEB] [UPDATE] Receiving %s (%u bytes) into %s\n", millis(),
-                  firmwareUploadName.c_str(), static_cast<unsigned>(firmwareExpectedSize), updatePartition->label);
+    Serial.printf("[%lu] [WEB] [UPDATE] Receiving %s (%u bytes) into %s\n", millis(), firmwareUploadName.c_str(),
+                  static_cast<unsigned>(firmwareExpectedSize), updatePartition->label);
 #endif
     return;
   }
@@ -1124,8 +1123,7 @@ void LocalServer::handleFirmwareUpload() {
         abortFirmwareUpload("File is not an ESP32 application image");
         return;
       }
-      const uint16_t chipId = static_cast<uint16_t>(upload.buf[12]) |
-                              (static_cast<uint16_t>(upload.buf[13]) << 8);
+      const uint16_t chipId = static_cast<uint16_t>(upload.buf[12]) | (static_cast<uint16_t>(upload.buf[13]) << 8);
       if (chipId != ESP32_C3_CHIP_ID) {
         abortFirmwareUpload("Firmware target is not ESP32-C3");
         return;

@@ -18,11 +18,11 @@
 #include <time.h>
 
 #include <algorithm>
-#include <iterator>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <functional>
+#include <iterator>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -33,8 +33,8 @@
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
 #include "MenuDrawer.h"
-#include "activity/reader/ReaderRefresh.h"
 #include "SettingsDrawer.h"
+#include "activity/reader/ReaderRefresh.h"
 #include "state/BookProgress.h"
 #include "state/BookSetting.h"
 #include "state/BookState.h"
@@ -926,8 +926,7 @@ void EpubActivity::loop() {
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Power)) {
-    Serial.printf("[%lu] [DBG] EPUB power released, shortPwrBtn=%u\n",
-                  millis(), (unsigned)SETTINGS.readerShortPwrBtn);
+    Serial.printf("[%lu] [DBG] EPUB power released, shortPwrBtn=%u\n", millis(), (unsigned)SETTINGS.readerShortPwrBtn);
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Power) &&
@@ -1877,8 +1876,8 @@ void EpubActivity::renderContents(std::unique_ptr<Page> page, const int oriented
   if (!page) return;
   isDoingSomethingHeavy = true;
   const unsigned long rcStart = millis();
-  Serial.printf("[%lu] [DBG] renderContents start, hasImages=%d, heap=%lu\n",
-                rcStart, page->hasImages(), (unsigned long)esp_get_free_heap_size());
+  Serial.printf("[%lu] [DBG] renderContents start, hasImages=%d, heap=%lu\n", rcStart, page->hasImages(),
+                (unsigned long)esp_get_free_heap_size());
   const int fontId = bookSettings.getReaderFontId();
   FontManager::ensureReaderLayoutFonts(fontId, renderer);
   const int headerFontId = FontManager::getNextFont(fontId);
@@ -1971,8 +1970,8 @@ void EpubActivity::renderContents(std::unique_ptr<Page> page, const int oriented
   const bool smartRefreshAfterLargeImage = lastPageHadImages && lastPageHadLargeImage;
 
   const bool skipImagesInPageRender = needsImageGrayscale && highQuality;
-  Serial.printf("[%lu] [DBG] page->render start (skipImg=%d, gray=%d, highQ=%d, medQ=%d, aa=%d)\n",
-                millis(), skipImagesInPageRender, needsImageGrayscale, highQuality, mediumImageGrayscale, textAa);
+  Serial.printf("[%lu] [DBG] page->render start (skipImg=%d, gray=%d, highQ=%d, medQ=%d, aa=%d)\n", millis(),
+                skipImagesInPageRender, needsImageGrayscale, highQuality, mediumImageGrayscale, textAa);
   page->render(renderer, fontId, headerFontId, orientedMarginLeft, orientedMarginTop, skipImagesInPageRender, imageMode,
                /*skipOnlyGrayscaleImages=*/highQuality);
   Serial.printf("[%lu] [DBG] page->render done\n", millis());
@@ -2022,8 +2021,8 @@ void EpubActivity::renderContents(std::unique_ptr<Page> page, const int oriented
     pagesUntilFullRefresh--;
   }
 
-  Serial.printf("[%lu] [DBG] grayscale phase: highQ=%d bwStored=%d medGray=%d aaPass=%d\n",
-                millis(), highQuality, bwStored, mediumImageGrayscale, needsTextAntiAliasPass);
+  Serial.printf("[%lu] [DBG] grayscale phase: highQ=%d bwStored=%d medGray=%d aaPass=%d\n", millis(), highQuality,
+                bwStored, mediumImageGrayscale, needsTextAntiAliasPass);
   if (highQuality && bwStored) {
     ImageRender::displayGrayscale(
         renderer, /*quality=*/true, /*preserveText=*/true,
@@ -2068,8 +2067,8 @@ void EpubActivity::renderContents(std::unique_ptr<Page> page, const int oriented
   }
 
   isDoingSomethingHeavy = false;
-  Serial.printf("[%lu] [DBG] renderContents done, total=%lums, heap=%lu\n",
-                millis(), millis() - rcStart, (unsigned long)esp_get_free_heap_size());
+  Serial.printf("[%lu] [DBG] renderContents done, total=%lums, heap=%lu\n", millis(), millis() - rcStart,
+                (unsigned long)esp_get_free_heap_size());
 
   lastPageHadImages = pageHasImages;
   lastPageHadLargeImage = pageHasLargeImage;
