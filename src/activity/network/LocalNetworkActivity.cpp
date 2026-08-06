@@ -514,8 +514,20 @@ void LocalNetworkActivity::loop() {
  */
 void LocalNetworkActivity::displayTaskLoop() {
   while (true) {
-    if (updateRequired || (state == LocalNetworkState::GITHUB_INSTALLING && githubUpdater.getRender())) {
+    bool shouldRender = updateRequired;
+    int progressPercent = -1;
+    if (state == LocalNetworkState::GITHUB_INSTALLING) {
+      const size_t processed = githubUpdater.getProcessedSize();
+      const size_t total = githubUpdater.getTotalSize();
+      progressPercent = total > 0 ? std::min(100, static_cast<int>((processed * 100ULL) / total)) : 0;
+      shouldRender = shouldRender || githubDisplayedPercent < 0 || progressPercent >= githubDisplayedPercent + 5 ||
+                     (progressPercent == 100 && githubDisplayedPercent < 100);
+    } else {
+      githubDisplayedPercent = -1;
+    }
+    if (shouldRender) {
       updateRequired = false;
+      if (progressPercent >= 0) githubDisplayedPercent = progressPercent;
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       render();
       xSemaphoreGive(renderingMutex);
@@ -576,7 +588,7 @@ void LocalNetworkActivity::render() const {
     const size_t processed = githubUpdater.getProcessedSize();
     const size_t total = githubUpdater.getTotalSize();
     const int percent = total > 0 ? std::min(100, static_cast<int>((processed * 100) / total)) : 0;
-    renderer.text.centered(ATKINSON_HYPERLEGIBLE_14_FONT_ID, centerY - 70, "Installing firmware", true,
+    renderer.text.centered(ATKINSON_HYPERLEGIBLE_14_FONT_ID, centerY - 70, "Downloading + installing", true,
                            EpdFontFamily::BOLD);
     renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, centerY - 32,
                            "Keep the reader powered until it restarts.");
@@ -584,8 +596,11 @@ void LocalNetworkActivity::render() const {
     const int barX = (renderer.getScreenWidth() - barWidth) / 2;
     const int barY = centerY + 8;
     renderer.rectangle.render(barX, barY, barWidth, 6, true);
-    renderer.rectangle.fill(barX + 1, barY + 1, std::max(1, (barWidth - 2) * percent / 100), 4, true);
-    const std::string progress = formatBytes(processed) + " / " + formatBytes(total);
+    if (percent > 0) {
+      renderer.rectangle.fill(barX + 1, barY + 1, (barWidth - 2) * percent / 100, 4, true);
+    }
+    const std::string progress = std::to_string(percent) + "% - " + formatBytes(processed) + " / " +
+                                 formatBytes(total);
     renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, barY + 26, progress.c_str());
   } else if (state == LocalNetworkState::GITHUB_NO_UPDATE) {
     const int contentStart = renderActivityHeader(renderer, startY, "GitHub Update");
@@ -639,7 +654,11 @@ void LocalNetworkActivity::render() const {
   } else {
     labels = mappedInput.mapLabels("« Back", "", "", "");
   }
-  renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  if (state == LocalNetworkState::SERVER_RUNNING && updateLanding) {
+    renderer.ui.buttonHintsFit(ATKINSON_HYPERLEGIBLE_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  } else {
+    renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  }
 
   renderer.displayBuffer();
 }

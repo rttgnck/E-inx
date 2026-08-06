@@ -781,6 +781,8 @@ void LocalServer::begin() {
   server->on("/api/update/status", HTTP_GET, [this] { handleFirmwareStatus(); });
   server->on("/api/update/github", HTTP_GET, [this] { handleGithubFirmwareCheck(); });
   server->on("/api/update/github/install", HTTP_POST, [this] { handleGithubFirmwareInstall(); });
+  server->on("/api/update/github/install/status", HTTP_GET,
+             [this] { handleGithubFirmwareInstallStatus(); });
   server->on(
       "/api/update/upload", HTTP_POST, [this] { handleFirmwareUploadPost(); }, [this] { handleFirmwareUpload(); });
 
@@ -845,6 +847,16 @@ void LocalServer::begin() {
 }
 
 void LocalServer::stop() {
+#ifndef SIMULATOR
+  if (githubInstallState.load(std::memory_order_acquire) == GithubInstallState::RUNNING) {
+    Serial.printf("[%lu] [WEB] Waiting for active GitHub firmware install before stopping\n", millis());
+    while (githubInstallState.load(std::memory_order_acquire) == GithubInstallState::RUNNING) {
+      esp_task_wdt_reset();
+      delay(25);
+    }
+  }
+#endif
+
   if (!running || !server) {
     Serial.printf("[%lu] [WEB] stop() called but already stopped (running=%d, server=%p)\n", millis(), running,
                   server.get());
@@ -920,6 +932,16 @@ void LocalServer::handleClient() {
 #endif
   }
 
+  const unsigned long githubRestartAt = githubInstallRestartAt.load(std::memory_order_relaxed);
+  if (githubRestartAt != 0 && static_cast<long>(millis() - githubRestartAt) >= 0) {
+    githubInstallRestartAt.store(0, std::memory_order_relaxed);
+    Serial.printf("[%lu] [WEB] Rebooting into GitHub-installed firmware\n", millis());
+#ifndef SIMULATOR
+    delay(50);
+    ESP.restart();
+#endif
+  }
+
   if (wsServer) {
     wsServer->loop();
   }
@@ -984,11 +1006,19 @@ void LocalServer::handleStatus() const {
   doc["rssi"] = apMode ? 0 : WiFi.RSSI();
   doc["freeHeap"] = ESP.getFreeHeap();
   doc["uptime"] = millis() / 1000;
+#ifndef INX_SIMULATOR_WEB_ONLY
   doc["device"] = gpio.deviceIsX3() ? "X3" : "X4";
   doc["displayWidth"] = gpio.deviceIsX3() ? 792 : 800;
   doc["displayHeight"] = gpio.deviceIsX3() ? 528 : 480;
   doc["screenWidth"] = gpio.deviceIsX3() ? 528 : 480;
   doc["screenHeight"] = gpio.deviceIsX3() ? 792 : 800;
+#else
+  doc["device"] = "Simulator";
+  doc["displayWidth"] = 792;
+  doc["displayHeight"] = 528;
+  doc["screenWidth"] = 528;
+  doc["screenHeight"] = 792;
+#endif
 
   String json;
   serializeJson(doc, json);
@@ -1088,7 +1118,20 @@ void LocalServer::handleGithubFirmwareCheck() {
   serializeJson(doc, json);
   server->send(501, "application/json", json);
 #else
+  if (githubInstallState.load(std::memory_order_acquire) == GithubInstallState::RUNNING ||
+      githubInstallRestartAt.load(std::memory_order_relaxed) != 0) {
+    doc["ok"] = false;
+    doc["error"] = "A GitHub firmware installation is already in progress or restarting";
+    String json;
+    serializeJson(doc, json);
+    server->send(409, "application/json", json);
+    return;
+  }
   if (!githubUpdater) githubUpdater.reset(new OtaUpdater());
+  githubInstallState.store(GithubInstallState::IDLE, std::memory_order_release);
+  githubInstallRestartAt.store(0, std::memory_order_relaxed);
+  githubInstallVersion.clear();
+  githubInstallError.clear();
   Serial.printf("[%lu] [WEB] [UPDATE] Checking GitHub for the latest firmware release\n", millis());
   const auto result = githubUpdater->checkForUpdate();
   doc["ok"] = result == OtaUpdater::OK;
@@ -1131,7 +1174,16 @@ void LocalServer::handleGithubFirmwareInstall() {
     server->send(400, "application/json", json);
     return;
   }
-  if (firmwareRestartAt != 0) {
+  const GithubInstallState installState = githubInstallState.load(std::memory_order_acquire);
+  if (installState == GithubInstallState::RUNNING) {
+    doc["ok"] = false;
+    doc["error"] = "A GitHub firmware installation is already in progress";
+    String json;
+    serializeJson(doc, json);
+    server->send(409, "application/json", json);
+    return;
+  }
+  if (firmwareRestartAt != 0 || githubInstallRestartAt.load(std::memory_order_relaxed) != 0) {
     doc["ok"] = false;
     doc["error"] = "The reader is already restarting into an installed update";
     String json;
@@ -1157,29 +1209,97 @@ void LocalServer::handleGithubFirmwareInstall() {
     return;
   }
 
-  const std::string releaseVersion = githubUpdater->getLatestVersion();
-  Serial.printf("[%lu] [WEB] [UPDATE] Installing GitHub release %s\n", millis(), releaseVersion.c_str());
-  const auto result = githubUpdater->installUpdate();
-  if (result != OtaUpdater::OK) {
+  githubInstallVersion = githubUpdater->getLatestVersion();
+  githubInstallError.clear();
+  githubInstallState.store(GithubInstallState::RUNNING, std::memory_order_release);
+  Serial.printf("[%lu] [WEB] [UPDATE] Starting background install of GitHub release %s\n", millis(),
+                githubInstallVersion.c_str());
+
+  const BaseType_t created =
+      xTaskCreate(githubInstallTaskEntry, "WebGithubOta", 8192, this, 2, nullptr);
+  if (created != pdPASS) {
+    githubInstallError = "Could not start the background firmware installer";
+    githubInstallState.store(GithubInstallState::FAILED, std::memory_order_release);
     doc["ok"] = false;
-    doc["error"] = otaErrorMessage(result);
+    doc["error"] = githubInstallError;
     String json;
     serializeJson(doc, json);
-    server->send(502, "application/json", json);
+    server->send(500, "application/json", json);
     return;
   }
 
-  firmwareRestartAt = millis() + 2500;
   doc["ok"] = true;
-  doc["version"] = releaseVersion;
-  doc["rebootInMs"] = 2500;
+  doc["state"] = "running";
+  doc["version"] = githubInstallVersion;
+  doc["total"] = githubUpdater->getTotalSize();
   String json;
   serializeJson(doc, json);
   server->sendHeader("Cache-Control", "no-store");
-  server->sendHeader("Connection", "close");
-  server->send(200, "application/json", json);
+  server->send(202, "application/json", json);
 #endif
 }
+
+const char* LocalServer::githubInstallStateName() const {
+  switch (githubInstallState.load(std::memory_order_acquire)) {
+    case GithubInstallState::RUNNING:
+      return "running";
+    case GithubInstallState::SUCCEEDED:
+      return "succeeded";
+    case GithubInstallState::FAILED:
+      return "failed";
+    case GithubInstallState::IDLE:
+    default:
+      return "idle";
+  }
+}
+
+void LocalServer::handleGithubFirmwareInstallStatus() const {
+  JsonDocument doc;
+  const GithubInstallState state = githubInstallState.load(std::memory_order_acquire);
+  size_t processed = 0;
+  size_t total = 0;
+#ifndef SIMULATOR
+  if (githubUpdater) {
+    processed = githubUpdater->getProcessedSize();
+    total = githubUpdater->getTotalSize();
+  }
+#endif
+  const unsigned percent = total > 0 ? std::min<unsigned>(100, (processed * 100ULL) / total) : 0;
+
+  doc["ok"] = state != GithubInstallState::FAILED;
+  doc["state"] = githubInstallStateName();
+  doc["version"] = githubInstallVersion;
+  doc["processed"] = processed;
+  doc["total"] = total;
+  doc["percent"] = percent;
+  doc["error"] = state == GithubInstallState::FAILED ? githubInstallError : "";
+  doc["rebootPending"] = githubInstallRestartAt.load(std::memory_order_relaxed) != 0;
+
+  String json;
+  serializeJson(doc, json);
+  server->sendHeader("Cache-Control", "no-store");
+  server->send(200, "application/json", json);
+}
+
+#ifndef SIMULATOR
+void LocalServer::githubInstallTaskEntry(void* context) {
+  static_cast<LocalServer*>(context)->runGithubInstallTask();
+}
+
+void LocalServer::runGithubInstallTask() {
+  const auto result = githubUpdater ? githubUpdater->installUpdate() : OtaUpdater::INTERNAL_UPDATE_ERROR;
+  if (result == OtaUpdater::OK) {
+    githubInstallRestartAt.store(millis() + 5000, std::memory_order_relaxed);
+    githubInstallState.store(GithubInstallState::SUCCEEDED, std::memory_order_release);
+    Serial.printf("[%lu] [WEB] [UPDATE] GitHub firmware validated; reboot scheduled\n", millis());
+  } else {
+    githubInstallError = otaErrorMessage(result);
+    githubInstallState.store(GithubInstallState::FAILED, std::memory_order_release);
+    Serial.printf("[%lu] [WEB] [UPDATE] GitHub install failed: %s\n", millis(), githubInstallError.c_str());
+  }
+  vTaskDelete(nullptr);
+}
+#endif
 
 void LocalServer::handleFirmwareUpload() {
   HTTPUpload& upload = server->upload();
@@ -1187,6 +1307,12 @@ void LocalServer::handleFirmwareUpload() {
   if (upload.status == UPLOAD_FILE_START) {
     resetFirmwareUpload();
     firmwareUploadName = upload.filename.c_str();
+
+    if (githubInstallState.load(std::memory_order_acquire) == GithubInstallState::RUNNING ||
+        githubInstallRestartAt.load(std::memory_order_relaxed) != 0) {
+      abortFirmwareUpload("A GitHub firmware installation is already in progress or restarting");
+      return;
+    }
 
     if (firmwareUploadToken != server->arg("token").c_str()) {
       abortFirmwareUpload("Invalid update session token");

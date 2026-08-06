@@ -31,6 +31,57 @@ void UiRender::buttonHints(const int fontId, const char* btn1, const char* btn2,
   gfx.setOrientation(origOrientation);
 }
 
+void UiRender::buttonHintsFit(const int fontId, const char* btn1, const char* btn2, const char* btn3,
+                              const char* btn4) const {
+  const GfxRenderer::Orientation origOrientation = gfx.getOrientation();
+  gfx.setOrientation(GfxRenderer::Orientation::Portrait);
+
+  const int pageWidth = gfx.getScreenWidth();
+  const int pageHeight = gfx.getScreenHeight();
+  constexpr int minimumWidth = 106;
+  constexpr int buttonHeight = 40;
+  constexpr int buttonY = 40;
+  constexpr int textYOffset = 7;
+  constexpr int horizontalPadding = 22;
+  constexpr int minimumGap = 8;
+  constexpr int buttonPositions[] = {25, 130, 245, 350};
+  const char* labels[] = {btn1, btn2, btn3, btn4};
+  int xPositions[] = {25, 130, 245, 350};
+  int widths[] = {minimumWidth, minimumWidth, minimumWidth, minimumWidth};
+  int previousActive = -1;
+
+  for (int i = 0; i < 4; ++i) {
+    if (labels[i] == nullptr || labels[i][0] == '\0') continue;
+    widths[i] = std::max(minimumWidth, gfx.text.getWidth(fontId, labels[i]) + horizontalPadding);
+    xPositions[i] = buttonPositions[i];
+    if (previousActive >= 0) {
+      xPositions[i] = std::max(xPositions[i], xPositions[previousActive] + widths[previousActive] + minimumGap);
+    }
+    previousActive = i;
+  }
+
+  if (previousActive >= 0) {
+    const int overflow = xPositions[previousActive] + widths[previousActive] - pageWidth;
+    if (overflow > 0) {
+      for (int i = 0; i < 4; ++i) {
+        if (labels[i] != nullptr && labels[i][0] != '\0') xPositions[i] -= overflow;
+      }
+    }
+  }
+
+  for (int i = 0; i < 4; ++i) {
+    if (labels[i] == nullptr || labels[i][0] == '\0') continue;
+    const int x = std::max(0, xPositions[i]);
+    gfx.rectangle.fill(x, pageHeight - buttonY, widths[i], buttonHeight, false, true);
+    gfx.rectangle.render(x, pageHeight - buttonY, widths[i], buttonHeight, true, true);
+    const int textWidth = gfx.text.getWidth(fontId, labels[i]);
+    const int textX = x + (widths[i] - 1 - textWidth) / 2;
+    gfx.text.render(fontId, textX, pageHeight - buttonY + textYOffset, labels[i]);
+  }
+
+  gfx.setOrientation(origOrientation);
+}
+
 void UiRender::sideButtonHints(const int fontId, const char* powerBtn, const char* topBtn,
                                const char* bottomBtn) const {
   if (gfx.deviceIsX3()) {

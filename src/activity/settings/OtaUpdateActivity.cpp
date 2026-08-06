@@ -78,11 +78,13 @@ std::string formatBytes(const size_t bytes) {
 }
 
 void drawUpdateProgressCard(const GfxRenderer& renderer, const int pageWidth, const int bodyTop, const int screenHeight,
-                            const float progress, const size_t processedBytes, const size_t totalBytes) {
+                            const float progress, const size_t processedBytes, const size_t totalBytes,
+                            const bool downloadingFromGithub) {
   const int centerY = bodyTop + (screenHeight - bodyTop - 80) / 2;
 
   renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, centerY - 92, "INSTALLING UPDATE", true, EpdFontFamily::BOLD);
-  renderer.text.centered(ATKINSON_HYPERLEGIBLE_14_FONT_ID, centerY - 54, "Installing firmware", true,
+  renderer.text.centered(ATKINSON_HYPERLEGIBLE_14_FONT_ID, centerY - 54,
+                         downloadingFromGithub ? "Downloading + installing" : "Installing firmware", true,
                          EpdFontFamily::BOLD);
   renderer.text.centered(ATKINSON_HYPERLEGIBLE_10_FONT_ID, centerY - 10, "Please keep the device powered on.", true,
                          EpdFontFamily::REGULAR);
@@ -103,7 +105,7 @@ void drawUpdateProgressCard(const GfxRenderer& renderer, const int pageWidth, co
 
   std::string metaLine;
   if (totalBytes > 0) {
-    metaLine = formatBytes(processedBytes) + " / " + formatBytes(totalBytes);
+    metaLine = std::to_string(clamped) + "% - " + formatBytes(processedBytes) + " / " + formatBytes(totalBytes);
   } else {
     metaLine = "Preparing package";
   }
@@ -312,8 +314,20 @@ void OtaUpdateActivity::onExit() {
 
 void OtaUpdateActivity::displayTaskLoop() {
   while (true) {
-    if (updateRequired || updater.getRender()) {
+    bool shouldRender = updateRequired;
+    int progressPercent = -1;
+    if (state == UPDATE_IN_PROGRESS) {
+      const size_t processed = updater.getProcessedSize();
+      const size_t total = updater.getTotalSize();
+      progressPercent = total > 0 ? std::min(100, static_cast<int>((processed * 100ULL) / total)) : 0;
+      shouldRender = shouldRender || displayedProgressPercent < 0 || progressPercent >= displayedProgressPercent + 5 ||
+                     (progressPercent == 100 && displayedProgressPercent < 100);
+    } else {
+      displayedProgressPercent = -1;
+    }
+    if (shouldRender) {
       updateRequired = false;
+      if (progressPercent >= 0) displayedProgressPercent = progressPercent;
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       render();
       xSemaphoreGive(renderingMutex);
@@ -470,7 +484,7 @@ void OtaUpdateActivity::render() {
     }
   } else if (state == UPDATE_IN_PROGRESS) {
     drawUpdateProgressCard(renderer, pageWidth, bodyTop, screenHeight, updaterProgress, updater.getProcessedSize(),
-                           updater.getTotalSize());
+                           updater.getTotalSize(), installingFromGithub);
   } else if (state == NO_UPDATE) {
     const int centerY = dividerY + (screenHeight - dividerY - 80) / 2;
     renderer.text.centered(ATKINSON_HYPERLEGIBLE_10_FONT_ID, centerY, "No update available", true, EpdFontFamily::BOLD);
@@ -564,6 +578,7 @@ void OtaUpdateActivity::loop() {
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       Serial.printf("[%lu] [OTA] New update available, starting download...\n", millis());
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      installingFromGithub = true;
       state = UPDATE_IN_PROGRESS;
       xSemaphoreGive(renderingMutex);
       updateRequired = true;
@@ -643,6 +658,7 @@ void OtaUpdateActivity::loop() {
         SdMan.exists(firmwarePath.c_str())) {
       Serial.printf("[%lu] [OTA] Installing firmware from SD: %s\n", millis(), firmwarePath.c_str());
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      installingFromGithub = false;
       state = UPDATE_IN_PROGRESS;
       xSemaphoreGive(renderingMutex);
       updateRequired = true;

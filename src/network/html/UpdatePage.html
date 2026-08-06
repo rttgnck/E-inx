@@ -87,6 +87,10 @@
       </label>
       <button id="githubInstallButton" type="button" disabled>Download and install this release</button>
     </div>
+    <div class="progress" id="githubProgress">
+      <div class="progress-track"><div class="progress-fill" id="githubProgressFill"></div></div>
+      <div class="progress-text" id="githubProgressText">Preparing streamed install…</div>
+    </div>
     <div class="message" id="githubMessage"></div>
   </section>
 
@@ -116,6 +120,7 @@
   let updateStatus = null;
   let selectedFile = null;
   let githubRelease = null;
+  let githubProgressPolling = false;
   const fileInput = document.getElementById("firmwareFile");
   const dropzone = document.getElementById("dropzone");
   const confirmInstall = document.getElementById("confirmInstall");
@@ -146,6 +151,77 @@
   function updateGithubButton() {
     githubInstallButton.disabled = !githubRelease || !githubRelease.newer || !githubConfirmInstall.checked ||
       !updateStatus || !updateStatus.token;
+  }
+
+  function setGithubInstallControls(disabled) {
+    githubCheckButton.disabled = disabled;
+    githubConfirmInstall.disabled = disabled;
+    githubInstallButton.disabled = disabled || !githubRelease || !githubRelease.newer ||
+      !githubConfirmInstall.checked || !updateStatus || !updateStatus.token;
+  }
+
+  function renderGithubProgress(status) {
+    const progress = document.getElementById("githubProgress");
+    const fill = document.getElementById("githubProgressFill");
+    const text = document.getElementById("githubProgressText");
+    const percent = Math.max(0, Math.min(100, Number(status.percent) || 0));
+    progress.style.display = "block";
+    fill.style.width = percent + "%";
+    if (status.state === "succeeded") {
+      fill.style.width = "100%";
+      text.textContent = "100% — Validated. Rebooting…";
+    } else if (status.total) {
+      text.textContent = percent + "% — " + formatBytes(status.processed) + " / " + formatBytes(status.total);
+    } else {
+      text.textContent = "Preparing secure download…";
+    }
+  }
+
+  async function pollGithubInstallProgress() {
+    if (githubProgressPolling) return;
+    githubProgressPolling = true;
+    setGithubInstallControls(true);
+    try {
+      for (;;) {
+        const response = await fetch("/api/update/github/install/status", {cache: "no-store"});
+        const status = await response.json();
+        if (!response.ok) throw new Error(status.error || "Could not read GitHub install progress.");
+        renderGithubProgress(status);
+        if (status.state === "succeeded") {
+          showGithubMessage("Firmware " + (status.version || "update") +
+            " is validated. The reader is rebooting.", "success");
+          return;
+        }
+        if (status.state === "failed") {
+          throw new Error(status.error || "GitHub firmware installation failed.");
+        }
+        if (status.state !== "running") return;
+        showGithubMessage("Downloading and installing " + (status.version || "the update") +
+          ". Keep the reader powered; progress will continue here.", "info");
+        await new Promise(resolve => setTimeout(resolve, 600));
+      }
+    } catch (error) {
+      showGithubMessage(error.message ||
+        "The connection ended before installation was confirmed. Check the reader before retrying.", "error");
+      githubCheckButton.disabled = false;
+      githubConfirmInstall.disabled = false;
+      updateGithubButton();
+    } finally {
+      githubProgressPolling = false;
+    }
+  }
+
+  async function resumeGithubInstallProgress() {
+    const response = await fetch("/api/update/github/install/status", {cache: "no-store"});
+    if (!response.ok) return;
+    const status = await response.json();
+    if (status.state === "running" || status.state === "succeeded") {
+      renderGithubProgress(status);
+      await pollGithubInstallProgress();
+    } else if (status.state === "failed") {
+      renderGithubProgress(status);
+      showGithubMessage(status.error || "The previous GitHub update failed.", "error");
+    }
   }
 
   function updateButton() {
@@ -229,9 +305,8 @@
     const version = githubRelease.latestVersion || "the selected release";
     if (!window.confirm("Download and install " + version + " now? Keep the reader powered until it reboots.")) return;
 
-    githubInstallButton.disabled = true;
-    githubCheckButton.disabled = true;
-    githubConfirmInstall.disabled = true;
+    setGithubInstallControls(true);
+    renderGithubProgress({state: "running", percent: 0, processed: 0, total: githubRelease.size || 0});
     showGithubMessage("Downloading and installing " + version + ". Do not power off the reader or close this page.", "info");
     try {
       const response = await fetch("/api/update/github/install?token=" + encodeURIComponent(updateStatus.token), {
@@ -241,12 +316,10 @@
       });
       const result = await response.json();
       if (!response.ok || !result.ok) throw new Error(result.error || "GitHub firmware installation failed.");
-      showGithubMessage("Firmware " + (result.version || version) + " was installed. The reader is rebooting.", "success");
+      await pollGithubInstallProgress();
     } catch (error) {
       showGithubMessage(error.message || "The connection ended before installation was confirmed. Check the reader before retrying.", "error");
-      githubCheckButton.disabled = false;
-      githubConfirmInstall.disabled = false;
-      updateGithubButton();
+      setGithubInstallControls(false);
     }
   });
 
@@ -295,6 +368,8 @@
     xhr.send(form);
   });
 
-  loadStatus().catch(error => showMessage(error.message, "error"));
+  loadStatus()
+    .then(resumeGithubInstallProgress)
+    .catch(error => showMessage(error.message, "error"));
 </script>
 </html>
