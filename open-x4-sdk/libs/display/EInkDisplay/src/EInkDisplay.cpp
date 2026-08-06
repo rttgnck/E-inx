@@ -135,6 +135,33 @@ const uint8_t lut_x3_bb_full[] PROGMEM = {0x10, 0x06, 0x02, 0x06, 0x06, 0x01, 0x
                                           0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                                           0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
+// X3 OEM V5.6.33 "AA-pre-BW(mid)" differential reinforcement waveform.
+// Source/provenance: open-x4-epaper/community-sdk commit 198ad267 and the
+// FreeInk/YACP UC8253 X3 port. The OEM loader uses CDI 0xA9,0x07. With DTM1
+// holding the displayed frame and DTM2 the new frame, changed pixels receive
+// strong BW/WB transition drive while unchanged WW/BB pixels receive a gentle
+// settling drive. Keep these bytes verbatim.
+const uint8_t lut_x3_vcom_bw_reinforce[] PROGMEM = {0x00, 0x06, 0x03, 0x06, 0x06, 0x01, 0x00, 0x04, 0x01, 0x01, 0x00,
+                                                    0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+const uint8_t lut_x3_ww_bw_reinforce[] PROGMEM = {0x20, 0x06, 0x03, 0x06, 0x06, 0x01, 0x20, 0x04, 0x01, 0x01, 0x00,
+                                                  0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                                  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                                  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+const uint8_t lut_x3_bw_bw_reinforce[] PROGMEM = {0xAA, 0x06, 0x03, 0x06, 0x06, 0x01, 0xA8, 0x04, 0x01, 0x01, 0x00,
+                                                  0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                                  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                                  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+const uint8_t lut_x3_wb_bw_reinforce[] PROGMEM = {0x55, 0x06, 0x03, 0x06, 0x06, 0x01, 0x50, 0x04, 0x01, 0x01, 0x00,
+                                                  0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                                  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                                  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+const uint8_t lut_x3_bb_bw_reinforce[] PROGMEM = {0x10, 0x06, 0x03, 0x06, 0x06, 0x01, 0x14, 0x04, 0x01, 0x01, 0x00,
+                                                  0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                                  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                                  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+
 // X3 dedicated grayscale LUTs — tuned drive strengths for 4-level gray
 // All entries share the same single-phase timing so the controller scans
 // every row with consistent gate timing. Source voltages differ per transition:
@@ -296,6 +323,10 @@ void EInkDisplay::begin() {
   inGrayscaleMode = false;
   drawGrayscale = false;
   _x3RedRamSynced = false;
+  // One guarded full synchronization establishes the controller-RAM baseline
+  // after reset. displayBuffer() now follows it with a conditioned no-op
+  // differential pass, so a second full sync would only hard-flash the first
+  // real page turn after waking.
   _x3InitialFullSyncsRemaining = _x3Mode ? 1 : 0;
   _x3ForceFullSyncNext = false;
   _x3GrayState = {};
@@ -450,7 +481,7 @@ void EInkDisplay::initDisplayController() {
   if (_x3Mode) {
     sendCommand(0x00);
     sendData(0x3F);
-    sendData(0x08);
+    sendData(0x0A);
     sendCommand(0x61);
     sendData(0x03);
     sendData(0x18);
@@ -462,7 +493,7 @@ void EInkDisplay::initDisplayController() {
     sendData(0x00);
     sendData(0x00);
     sendCommand(0x03);
-    sendData(0x1D);
+    sendData(0x20);
     sendCommand(0x01);
     sendData(0x07);
     sendData(0x17);
@@ -470,7 +501,7 @@ void EInkDisplay::initDisplayController() {
     sendData(0x3F);
     sendData(0x17);
     sendCommand(0x82);
-    sendData(0x1D);
+    sendData(0x24);
     sendCommand(0x06);
     sendData(0x25);
     sendData(0x25);
@@ -490,6 +521,18 @@ void EInkDisplay::initDisplayController() {
     sendData(lut_x3_wb_full, 42);
     sendCommand(0x24);
     sendData(lut_x3_bb_full, 42);
+
+    // UC8253 does not provide the SSD1677 auto-clear commands. Seed both
+    // planes to a known white baseline so the first differential update
+    // cannot compare against stale pre-reset controller RAM.
+    sendCommand(0x10);
+    sendData(frameBuffer, static_cast<uint16_t>(bufferSize));
+    sendCommand(0x11);
+    sendCommand(0x13);
+    sendData(frameBuffer, static_cast<uint16_t>(bufferSize));
+    sendCommand(0x11);
+
+    _x3RedRamSynced = true;
     isScreenOn = false;
     return;
   }
@@ -779,6 +822,7 @@ void EInkDisplay::cleanupGrayscaleBuffers(const uint8_t* bwBuffer) {
     sendMirroredPlane(bwBuffer, false);
 
     _x3RedRamSynced = true;
+    _x3GrayState.lsbValid = false;
     _x3ForceFullSyncNext = false;
     return;
   }
@@ -899,6 +943,38 @@ void EInkDisplay::displayBuffer(RefreshMode mode, const bool turnOffScreen) {
     sendCommand(0x10);
     sendMirroredPlane(frameBuffer, false);
     _x3RedRamSynced = true;
+    _x3GrayState.lsbValid = false;
+
+    // The UC8253's first differential operation after a full synchronization
+    // is not reliable. Consume that slot with a no-op differential update of
+    // the just-displayed frame, matching the FreeInk/YACP X3 conditioning
+    // sequence. Both planes are normalized to the non-inverted BW frame here.
+    if (doFullSync) {
+      sendCommandDataX3(0x20, lut_x3_vcom_full, 42);
+      sendCommandDataX3(0x21, lut_x3_ww_full, 42);
+      sendCommandDataX3(0x22, lut_x3_bw_full, 42);
+      sendCommandDataX3(0x23, lut_x3_wb_full, 42);
+      sendCommandDataX3(0x24, lut_x3_bb_full, 42);
+      sendCommandDataByteX3(0x50, 0x29, 0x07);
+
+      sendCommand(0x13);
+      sendMirroredPlane(frameBuffer, false);
+      if (!isScreenOn) {
+        sendCommand(0x04);
+        waitForRefresh(" X3_CMD04(post-full-settle)");
+        isScreenOn = true;
+      }
+      sendCommand(0x12);
+      waitForRefresh(" X3_CMD12(post-full-settle)");
+      if (turnOffScreen) {
+        sendCommand(0x02);
+        waitForRefresh(" X3_CMD02_POWEROFF(post-full-settle)");
+        isScreenOn = false;
+      }
+
+      sendCommand(0x10);
+      sendMirroredPlane(frameBuffer, false);
+    }
 
     if (doFullSync && _x3InitialFullSyncsRemaining > 0) {
       _x3InitialFullSyncsRemaining--;
@@ -943,6 +1019,85 @@ void EInkDisplay::displayBuffer(RefreshMode mode, const bool turnOffScreen) {
   setRamArea(0, 0, displayWidth, displayHeight);
   writeRamBuffer(CMD_WRITE_RAM_RED, frameBuffer, bufferSize);
 #endif
+}
+
+void EInkDisplay::displayBwReinforced(const RefreshMode fallback, const bool turnOffScreen) {
+  if (!frameBuffer) return;
+  if (!_x3Mode) {
+    displayBuffer(fallback, turnOffScreen);
+    return;
+  }
+
+  // The differential bank is only safe when DTM1 mirrors the displayed B/W
+  // frame. Grayscale plane writes, boot-time controller reset, and explicit
+  // resync requests invalidate that baseline. Force the existing full-sync
+  // path first, then apply this bank as a no-op WW/BB settling pass.
+  const bool cleanBaseNeeded =
+      !_x3RedRamSynced || _x3GrayState.lsbValid || _x3ForceFullSyncNext || _x3InitialFullSyncsRemaining > 0;
+  if (cleanBaseNeeded) {
+    _x3ForceFullSyncNext = true;
+    displayBuffer(fallback, false);
+  }
+
+  uint8_t row[128];
+  auto sendCommandDataX3 = [&](uint8_t cmd, const uint8_t* data, uint16_t len) {
+    SPI.beginTransaction(spiSettings);
+    digitalWrite(_cs, LOW);
+    digitalWrite(_dc, LOW);
+    SPI.transfer(cmd);
+    if (len > 0 && data != nullptr) {
+      digitalWrite(_dc, HIGH);
+      SPI.writeBytes(data, len);
+    }
+    digitalWrite(_cs, HIGH);
+    SPI.endTransaction();
+  };
+  auto sendMirroredPlane = [&](const uint8_t* plane) {
+    for (uint16_t y = 0; y < displayHeight; y++) {
+      const uint16_t srcY = static_cast<uint16_t>(displayHeight - 1 - y);
+      const uint8_t* src = plane + static_cast<uint32_t>(srcY) * displayWidthBytes;
+      for (uint16_t x = 0; x < displayWidthBytes; x++) {
+        row[x] = src[x];
+      }
+      sendData(row, displayWidthBytes);
+    }
+  };
+
+  // Always normalize DTM2 to the current non-inverted frame. This is required
+  // after the legacy image-style full refresh, which historically left DTM2
+  // in its inverted transfer representation even after DTM1 was rebased.
+  sendCommand(0x13);
+  sendMirroredPlane(frameBuffer);
+
+  if (Serial) Serial.printf("[%lu]   X3_OEM_BW_REINFORCE\n", millis());
+  sendCommandDataX3(0x20, lut_x3_vcom_bw_reinforce, 42);
+  sendCommandDataX3(0x21, lut_x3_ww_bw_reinforce, 42);
+  sendCommandDataX3(0x22, lut_x3_bw_bw_reinforce, 42);
+  sendCommandDataX3(0x23, lut_x3_wb_bw_reinforce, 42);
+  sendCommandDataX3(0x24, lut_x3_bb_bw_reinforce, 42);
+  const uint8_t cdi[2] = {0xA9, 0x07};
+  sendCommandDataX3(0x50, cdi, 2);
+
+  if (!isScreenOn) {
+    sendCommand(0x04);
+    waitForRefresh(" X3_CMD04(reinforce)");
+    isScreenOn = true;
+  }
+  sendCommand(0x12);
+  waitForRefresh(" X3_CMD12(reinforce)");
+
+  if (turnOffScreen) {
+    sendCommand(0x02);
+    waitForRefresh(" X3_CMD02_POWEROFF(reinforce)");
+    isScreenOn = false;
+  }
+
+  // Preserve the driver invariant for the next differential update.
+  sendCommand(0x10);
+  sendMirroredPlane(frameBuffer);
+  _x3RedRamSynced = true;
+  _x3GrayState.lsbValid = false;
+  _x3ForceFullSyncNext = false;
 }
 
 // EXPERIMENTAL: Windowed update support

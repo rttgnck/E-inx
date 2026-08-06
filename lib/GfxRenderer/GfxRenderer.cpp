@@ -223,8 +223,68 @@ void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const
     nextRefreshOverridePending_ = false;
     mode = nextRefreshOverride_;
   }
+  if (mode == HalDisplay::FULL_REFRESH || mode == HalDisplay::HALF_REFRESH || mode == HalDisplay::MANUAL_REFRESH) {
+    x3ReinforcedRefreshCount_ = 0;
+    x3CleanupRequired_ = false;
+  }
   const bool turnOffScreen = SystemSetting::getInstance().sunlightFadingFix != 0;
   display.displayBuffer(mode, turnOffScreen);
+}
+
+bool GfxRenderer::reinforcementEnabled(const ReinforcementTarget target) const {
+  if (!deviceIsX3()) return false;
+  const SystemSetting& settings = SystemSetting::getInstance();
+  switch (target) {
+    case ReinforcementTarget::ReaderBw:
+      return settings.x3ReinforceReader != 0;
+    case ReinforcementTarget::MonochromeUi:
+      return settings.x3ReinforceUi != 0;
+    case ReinforcementTarget::DitheredThumbnail:
+      return settings.x3ReinforceThumbnails != 0;
+  }
+  return false;
+}
+
+void GfxRenderer::displayWithReinforcement(const ReinforcementTarget target,
+                                           const HalDisplay::RefreshMode fallback) const {
+  if (!reinforcementEnabled(target)) {
+    displayBuffer(fallback);
+    return;
+  }
+
+  // A one-shot full/half request always wins. The same strong cleanup is
+  // mandatory before reinforcement after a grayscale plane refresh.
+  if (nextRefreshOverridePending_ || x3CleanupRequired_) {
+    displayBuffer(HalDisplay::HALF_REFRESH);
+    return;
+  }
+
+  const SystemSetting& settings = SystemSetting::getInstance();
+  const uint16_t cleanInterval = static_cast<uint16_t>(settings.getX3ReinforceCleanInterval());
+  if (settings.x3ReinforcePeriodicClean != 0 && cleanInterval > 0 && x3ReinforcedRefreshCount_ + 1 >= cleanInterval) {
+    displayBuffer(HalDisplay::HALF_REFRESH);
+    return;
+  }
+
+  const bool turnOffScreen = settings.sunlightFadingFix != 0;
+  if (Serial) {
+    Serial.printf("[%lu] [GFX] X3 B/W reinforcement target=%u count=%u\n", millis(), static_cast<unsigned>(target),
+                  static_cast<unsigned>(x3ReinforcedRefreshCount_ + 1));
+  }
+#ifdef SIMULATOR
+  display.displayBuffer(fallback, turnOffScreen);
+#else
+  display.displayBwReinforced(fallback, turnOffScreen);
+#endif
+  x3ReinforcedRefreshCount_++;
+}
+
+void GfxRenderer::allowReinforcementAfterTextAntiAliasing() const {
+  if (!deviceIsX3()) return;
+  // Text-only AA restores the stored BW frame into both UC8253 RAM planes
+  // after the grayscale overlay. The next OEM differential base is therefore
+  // safe. Image and generic grayscale paths deliberately do not call this.
+  x3CleanupRequired_ = false;
 }
 
 bool GfxRenderer::deviceIsX3() const {
@@ -278,6 +338,7 @@ void GfxRenderer::displayGrayBuffer(const bool quality, const bool trackForRever
 #else
   display.displayGrayBuffer(quality, trackForRevert, SystemSetting::getInstance().sunlightFadingFix != 0);
 #endif
+  if (deviceIsX3()) x3CleanupRequired_ = true;
 }
 
 void GfxRenderer::displayGrayBufferFastQuality() const {
@@ -286,6 +347,7 @@ void GfxRenderer::displayGrayBufferFastQuality() const {
 #else
   display.displayGrayBufferFastQuality(SystemSetting::getInstance().sunlightFadingFix != 0);
 #endif
+  if (deviceIsX3()) x3CleanupRequired_ = true;
 }
 
 void GfxRenderer::prepareQualityGrayscale() const {

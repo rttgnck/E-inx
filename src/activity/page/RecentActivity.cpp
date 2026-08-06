@@ -687,7 +687,7 @@ void RecentActivity::renderRemoveConfirmation() {
                          true, EpdFontFamily::REGULAR);
   const auto labels = mappedInput.mapLabels("Cancel", "Remove", "", "");
   renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-  renderer.displayBuffer();
+  renderer.displayWithReinforcement(GfxRenderer::ReinforcementTarget::MonochromeUi);
   updateRequired = false;
 }
 
@@ -805,7 +805,7 @@ void RecentActivity::renderInitialLoadingFrame() {
   const int centerY = top + std::max(1, bottom - top) / 2 - 12;
   renderer.text.centered(ATKINSON_HYPERLEGIBLE_10_FONT_ID, centerY, "Loading recents");
 
-  renderer.displayBuffer();
+  renderer.displayWithReinforcement(GfxRenderer::ReinforcementTarget::MonochromeUi);
 }
 
 void RecentActivity::openHomeMenuDrawer() {
@@ -1119,7 +1119,9 @@ void RecentActivity::pumpDisplayFromLoop() {
   const bool canUseBuffer = canUseRecentPageBuffer();
   if (canUseBuffer && restoreRecentPageBuffer()) {
     drawBufferedSelectionOverlay();
-    renderer.displayBuffer();
+    const auto target = currentViewMode == ViewMode::Icons ? GfxRenderer::ReinforcementTarget::MonochromeUi
+                                                           : GfxRenderer::ReinforcementTarget::DitheredThumbnail;
+    renderer.displayWithReinforcement(target);
     if (!halfRefreshOnLoadApplied_) {
       halfRefreshOnLoadApplied_ = true;
       SETTINGS.runHalfRefreshOnLoadIfEnabled(renderer, SystemSetting::RefreshOnLoadPage::Recent);
@@ -1145,7 +1147,9 @@ void RecentActivity::pumpDisplayFromLoop() {
     drawBufferedSelectionOverlay();
   }
 
-  renderer.displayBuffer();
+  const auto target = currentViewMode == ViewMode::Icons ? GfxRenderer::ReinforcementTarget::MonochromeUi
+                                                         : GfxRenderer::ReinforcementTarget::DitheredThumbnail;
+  renderer.displayWithReinforcement(target);
   if (!halfRefreshOnLoadApplied_) {
     halfRefreshOnLoadApplied_ = true;
     SETTINGS.runHalfRefreshOnLoadIfEnabled(renderer, SystemSetting::RefreshOnLoadPage::Recent);

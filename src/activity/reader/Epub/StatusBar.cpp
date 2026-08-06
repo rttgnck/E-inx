@@ -7,8 +7,10 @@
 
 #include <HalGPIO.h>
 
+#include <algorithm>
 #include "system/Fonts.h"
 #include "system/ScreenComponents.h"
+#include "state/ReadingDailyStats.h"
 
 extern HalGPIO gpio;
 
@@ -49,10 +51,23 @@ void StatusBar::render(const Section* section, int currentSpineIndex, int orient
 
   const int availableWidth = screenWidth - orientedMarginLeft - orientedMarginRight;
   const int sectionWidth = availableWidth / STATUS_BAR_SECTION_COUNT;
+  const StatusBarItem statusItems[] = {m_settings.statusBarLeft.item, m_settings.statusBarInnerLeft.item,
+                                       m_settings.statusBarMiddle.item, m_settings.statusBarInnerRight.item,
+                                       m_settings.statusBarRight.item};
+  const bool needsDailySummary = std::any_of(std::begin(statusItems), std::end(statusItems), [](StatusBarItem item) {
+    return item == StatusBarItem::SESSION_DAILY_GOAL || item == StatusBarItem::SESSION_DAILY;
+  });
+  ReadingDailySummary dailySummary;
+  if (needsDailySummary) {
+    dailySummary = ReadingDailyStats::loadSummary();
+  } else {
+    dailySummary.goalReadingMs = ReadingDailyStats::getDailyGoalMs();
+  }
   for (int position = 0; position < STATUS_BAR_SECTION_COUNT; ++position) {
     const int sectionStart = orientedMarginLeft + position * sectionWidth;
     const int width = position == STATUS_BAR_RIGHT ? availableWidth - sectionWidth * position : sectionWidth;
-    renderSection(position, sectionStart, sectionStart + width / 2, width, textY, section, currentSpineIndex);
+    renderSection(position, sectionStart, sectionStart + width / 2, width, textY, section, currentSpineIndex,
+                  dailySummary);
   }
 }
 
@@ -67,7 +82,8 @@ void StatusBar::render(const Section* section, int currentSpineIndex, int orient
  * @param currentSpineIndex Current spine index
  */
 void StatusBar::renderSection(int position, int sectionStart, int sectionCenter, int sectionWidth, int textY,
-                              const Section* section, int currentSpineIndex) const {
+                              const Section* section, int currentSpineIndex,
+                              const ReadingDailySummary& dailySummary) const {
   StatusBarSectionConfig config = getConfig(position);
 
   if (config.item == StatusBarItem::NONE) {
@@ -242,6 +258,16 @@ void StatusBar::renderSection(int position, int sectionStart, int sectionCenter,
       break;
     }
 
+    case StatusBarItem::SESSION_MINUTES:
+    case StatusBarItem::SESSION_MINUTES_GOAL:
+    case StatusBarItem::SESSION_DAILY_GOAL:
+    case StatusBarItem::SESSION_DAILY: {
+      const std::string minutes = getReadingMinutesString(config.item, dailySummary);
+      const int xPos = getPositionX(minutes.c_str());
+      m_renderer.text.render(ATKINSON_HYPERLEGIBLE_8_FONT_ID, xPos, textY, minutes.c_str());
+      break;
+    }
+
     default:
       break;
   }
@@ -326,6 +352,30 @@ std::string StatusBar::getSessionTimeString() const {
              static_cast<unsigned>(totalMinutes % 60));
   } else {
     snprintf(buffer, sizeof(buffer), "%um", static_cast<unsigned>(totalMinutes));
+  }
+  return std::string(buffer);
+}
+
+std::string StatusBar::getReadingMinutesString(const StatusBarItem item,
+                                               const ReadingDailySummary& dailySummary) const {
+  const unsigned long sessionMinutes = m_readingStats.sessionElapsedMs() / 60000UL;
+  const unsigned long dailyMinutes = dailySummary.todayReadingMs / 60000UL;
+  const unsigned long goalMinutes = dailySummary.goalReadingMs / 60000UL;
+  char buffer[40];
+  switch (item) {
+    case StatusBarItem::SESSION_MINUTES_GOAL:
+      snprintf(buffer, sizeof(buffer), "%lum/%lum", sessionMinutes, goalMinutes);
+      break;
+    case StatusBarItem::SESSION_DAILY_GOAL:
+      snprintf(buffer, sizeof(buffer), "%lum/%lum/%lum", sessionMinutes, dailyMinutes, goalMinutes);
+      break;
+    case StatusBarItem::SESSION_DAILY:
+      snprintf(buffer, sizeof(buffer), "%lum/%lum", sessionMinutes, dailyMinutes);
+      break;
+    case StatusBarItem::SESSION_MINUTES:
+    default:
+      snprintf(buffer, sizeof(buffer), "%lum", sessionMinutes);
+      break;
   }
   return std::string(buffer);
 }

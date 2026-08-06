@@ -72,6 +72,52 @@ struct GlobalReadingStats {
         totalSessions(0) {}
 };
 
+namespace ReadingStats {
+
+/** Initial dwell time required before enough per-book history exists to learn a reading pace. */
+constexpr uint32_t PAGE_READ_BOOTSTRAP_MS = 8000;
+/** Bounds keep unusually fast or idle pages from making the adaptive threshold unreasonable. */
+constexpr uint32_t PAGE_READ_MIN_MS = 5000;
+constexpr uint32_t PAGE_READ_MAX_MS = 20000;
+constexpr uint32_t PAGE_READ_MIN_SAMPLES = 3;
+
+/**
+ * Returns the minimum time a page must remain visible before it counts as read.
+ *
+ * Once a book has enough history, 20% of its learned average is used. This rejects quick peeks and
+ * immediate backtracking without requiring every legitimately read page to match the full average.
+ */
+inline uint32_t pageReadThresholdMs(const BookReadingStats& stats) {
+  if (stats.totalPagesRead < PAGE_READ_MIN_SAMPLES || stats.avgPageTimeMs == 0) {
+    return PAGE_READ_BOOTSTRAP_MS;
+  }
+
+  const uint32_t adaptiveMs = stats.avgPageTimeMs / 5;
+  return adaptiveMs < PAGE_READ_MIN_MS ? PAGE_READ_MIN_MS
+                                       : (adaptiveMs > PAGE_READ_MAX_MS ? PAGE_READ_MAX_MS : adaptiveMs);
+}
+
+inline bool qualifiesAsPageRead(const uint32_t timeSpentMs, const BookReadingStats& stats) {
+  return timeSpentMs >= pageReadThresholdMs(stats);
+}
+
+/**
+ * Adds one qualifying sample to the learned page-reading average.
+ *
+ * totalReadingTimeMs deliberately remains independent: time spent browsing short pages still belongs
+ * to the reading session, while only genuine reads influence the pace used by the qualification rule.
+ */
+inline void recordQualifiedPage(const uint32_t timeSpentMs, BookReadingStats& stats) {
+  const uint32_t previousSamples = stats.avgPageTimeMs == 0 ? 0 : stats.totalPagesRead;
+  const uint64_t previousQualifiedTime =
+      static_cast<uint64_t>(stats.avgPageTimeMs) * static_cast<uint64_t>(previousSamples);
+  stats.totalPagesRead++;
+  stats.avgPageTimeMs =
+      static_cast<uint32_t>((previousQualifiedTime + timeSpentMs) / static_cast<uint64_t>(previousSamples + 1));
+}
+
+}  // namespace ReadingStats
+
 /**
  * Saves reading statistics for a book to its cache directory.
  *

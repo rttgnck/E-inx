@@ -2289,6 +2289,11 @@ void LocalServer::handleSettingsGet() const {
   doc["bitmapRoundedCorners"] = SETTINGS.bitmapRoundedCorners;
   doc["sunlightFadingFix"] = SETTINGS.sunlightFadingFix;
   doc["antiGhostingExperimental"] = SETTINGS.antiGhostingExperimental;
+  doc["x3ReinforceReader"] = SETTINGS.x3ReinforceReader;
+  doc["x3ReinforceUi"] = SETTINGS.x3ReinforceUi;
+  doc["x3ReinforceThumbnails"] = SETTINGS.x3ReinforceThumbnails;
+  doc["x3ReinforcePeriodicClean"] = SETTINGS.x3ReinforcePeriodicClean;
+  doc["x3ReinforceCleanInterval"] = SETTINGS.x3ReinforceCleanInterval;
   doc["opdsServerUrl"] = SETTINGS.opdsServerUrl;
   doc["opdsUsername"] = SETTINGS.opdsUsername;
   doc["opdsPasswordSet"] = strlen(SETTINGS.opdsPassword) > 0;
@@ -2600,6 +2605,26 @@ void LocalServer::handleSettingsUpdate() const {
       changed = true;
     } else if (strcmp(key, "antiGhostingExperimental") == 0) {
       SETTINGS.antiGhostingExperimental = (uint8_t)value ? 1 : 0;
+      changed = true;
+    } else if (strcmp(key, "x3ReinforceReader") == 0) {
+      SETTINGS.x3ReinforceReader = (uint8_t)value ? 1 : 0;
+      changed = true;
+    } else if (strcmp(key, "x3ReinforceUi") == 0) {
+      SETTINGS.x3ReinforceUi = (uint8_t)value ? 1 : 0;
+      changed = true;
+    } else if (strcmp(key, "x3ReinforceThumbnails") == 0) {
+      SETTINGS.x3ReinforceThumbnails = (uint8_t)value ? 1 : 0;
+      changed = true;
+    } else if (strcmp(key, "x3ReinforcePeriodicClean") == 0) {
+      SETTINGS.x3ReinforcePeriodicClean = (uint8_t)value ? 1 : 0;
+      changed = true;
+    } else if (strcmp(key, "x3ReinforceCleanInterval") == 0) {
+      int interval = static_cast<int>(value);
+      if (interval < 0) interval = 0;
+      if (interval >= SystemSetting::X3_REINFORCE_CLEAN_INTERVAL_COUNT) {
+        interval = SystemSetting::X3_REINFORCE_CLEAN_30;
+      }
+      SETTINGS.x3ReinforceCleanInterval = static_cast<uint8_t>(interval);
       changed = true;
     } else if (strcmp(key, "opdsServerUrl") == 0) {
       copySettingString(SETTINGS.opdsServerUrl, sizeof(SETTINGS.opdsServerUrl), kv.value().as<const char*>());

@@ -146,6 +146,10 @@ class SystemSetting {
     STATUS_ITEM_PAGE_NUMBERS_WITH_PERCENT = 12,  ///< Page numbers and percentage combined (e.g., "12/340 45%")
     STATUS_ITEM_TIME = 13,                       ///< Current device time
     STATUS_ITEM_SESSION_TIME = 14,               ///< Elapsed time in the current reading session
+    STATUS_ITEM_SESSION_MINUTES = 15,            ///< Minutes read in the current session
+    STATUS_ITEM_SESSION_MINUTES_GOAL = 16,       ///< Session minutes / daily goal minutes
+    STATUS_ITEM_SESSION_DAILY_GOAL = 17,         ///< Session minutes / today's minutes / daily goal minutes
+    STATUS_ITEM_SESSION_DAILY = 18,              ///< Session minutes / today's minutes
     STATUS_BAR_ITEM_COUNT
   };
 
@@ -308,6 +312,14 @@ class SystemSetting {
     READER_REFRESH_HALF = 2,  ///< Force half refresh for reader page turns
     READER_REFRESH_FULL = 3,  ///< Force full refresh for reader page turns
     READER_REFRESH_MODE_COUNT
+  };
+
+  enum X3_REINFORCE_CLEAN_INTERVAL {
+    X3_REINFORCE_CLEAN_10 = 0,
+    X3_REINFORCE_CLEAN_15 = 1,
+    X3_REINFORCE_CLEAN_30 = 2,
+    X3_REINFORCE_CLEAN_60 = 3,
+    X3_REINFORCE_CLEAN_INTERVAL_COUNT
   };
 
   /**
@@ -548,6 +560,13 @@ class SystemSetting {
   uint8_t sunlightFadingFix = 0;
   /** Experimental: request an extra half-refresh cleanup on activity transitions. */
   uint8_t antiGhostingExperimental = 0;
+  /** X3 experimental OEM B/W reinforcement waveform policies. */
+  uint8_t x3ReinforceReader = 0;
+  uint8_t x3ReinforceUi = 0;
+  uint8_t x3ReinforceThumbnails = 0;
+  /** Safety default: when any reinforcement target is enabled, periodically force an X3 full resync. */
+  uint8_t x3ReinforcePeriodicClean = 1;
+  uint8_t x3ReinforceCleanInterval = X3_REINFORCE_CLEAN_30;
   /** X3 only: 0=off, 1=normal direction, 2=inverted direction. */
   uint8_t shakePageTurn = 0;
   /** X3 gyro threshold: 0=low, 1=normal, 2=high sensitivity. */
@@ -643,6 +662,7 @@ class SystemSetting {
    * @return Number of pages between refreshes
    */
   int getRefreshFrequency() const;
+  int getX3ReinforceCleanInterval() const;
 
   int getTimeZoneOffsetMinutes() const;
   void formatTimeZone(char* out, size_t outSize) const;

@@ -10,6 +10,30 @@ E-inx is a community firmware for Xteink e-paper readers, forked from [Inx](http
 
 ![](./docs/images/cover.jpg)
 
+## What's New in E-inx 1.3.17-w2
+
+- **Smooth first page turn after wake** — X3 wake initialization now performs one guarded full synchronization plus
+  the conditioned differential settling pass, avoiding a redundant hard-flash refresh on the first page turn.
+- **Reading-minutes status items** — four new status-bar choices show session minutes; session/goal;
+  session/today/goal; or session/today.
+
+- **More accurate pages-read statistics** — quick page peeks and immediate backtracking no longer inflate the page
+  count. EPUB and XTC readers now use a bounded, per-book adaptive dwell-time check, and page/chapter jumps count
+  only pages actually read.
+
+- **Experimental X3 OEM B/W reinforcement waveform** — opt-in, no-flash differential page transitions using the
+  X3 OEM V5.6.33 `AA-pre-BW(mid)` waveform.
+- **Independent targets** — separately enable reinforcement for image-free reader pages (including the B/W base
+  beneath text anti-aliasing), explicitly marked monochrome UI transitions, and dithered
+  Recent/Shelf/Statistics thumbnails. Reader `Auto` and forced `Fast` can use reinforcement; explicitly forced
+  `Half` and `Full` remain strong cleanup requests.
+- **Cleanup safeguards** — boot/reset, sleep, grayscale, dense-image, explicit refresh, and unknown-controller-state
+  paths retain full/resync fallbacks. A separately configurable periodic full clean defaults to every 30 reinforced
+  updates; `Full clean now` in Experimental settings and manual Page Refresh remain available.
+- **Waveform provenance** — LUT bytes and controller-state behavior are adapted from
+  [`open-x4-epaper/community-sdk` commit `198ad267`](https://github.com/open-x4-epaper/community-sdk/commit/198ad267219c25c8ab84418b806c66f1fb5216a3)
+  and the MIT-licensed FreeInk/YACP X3 port.
+
 ## What's New in E-inx 1.2.17
 
 E-inx 1.2.17 builds on Inx 1.0.17 with the following additions and improvements.

@@ -326,6 +326,11 @@ void CategorySettingsActivity::setupMenu() {
               }
               return;
             }
+            if (strcmp(settingPtr->name, "Full clean now") == 0) {
+              renderer.displayBuffer(HalDisplay::FULL_REFRESH);
+              updateRequired = true;
+              return;
+            }
             if (strcmp(settingPtr->name, "Generate thumbnails") == 0) {
               exitActivity();
               enterNewActivity(new ThumbnailGeneratorActivity(renderer, mappedInput, [this] {
@@ -1055,6 +1060,6 @@ void CategorySettingsActivity::render() {
     forceFullRefreshNext_ = false;
     renderer.displayBuffer(HalDisplay::FULL_REFRESH);
   } else {
-    renderer.displayBuffer();
+    renderer.displayWithReinforcement(GfxRenderer::ReinforcementTarget::MonochromeUi);
   }
 }

@@ -32,6 +32,10 @@ enum class StatusBarItem {
   PAGE_NUMBERS_WITH_PERCENT,  ///< Page numbers and percentage combined (e.g., "12/340 45%")
   TIME,                       ///< Current device time
   SESSION_TIME,               ///< Elapsed time in the current reading session
+  SESSION_MINUTES,            ///< Minutes read in the current session
+  SESSION_MINUTES_GOAL,       ///< Session minutes / daily goal minutes
+  SESSION_DAILY_GOAL,         ///< Session minutes / today's minutes / daily goal minutes
+  SESSION_DAILY,              ///< Session minutes / today's minutes
   STATUS_BAR_ITEM_COUNT
 };
 
