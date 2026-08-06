@@ -10,6 +10,16 @@ E-inx is a community firmware for Xteink e-paper readers, forked from [Inx](http
 
 ![](./docs/images/cover.jpg)
 
+## What's New in E-inx 1.3.17-4_update
+
+- **GitHub Update on the Update Server screen** — the existing Update Server continues to start normally, while
+  the second bottom button beside `« Back` now reads `GitHub Update`.
+- **Direct device update flow** — pressing the new button uses the active Wi-Fi connection to check the latest
+  E-inx release, show its version and scrollable changelog, request confirmation, download, validate, install, and
+  restart the reader.
+- **Safe return to the server** — cancelling, finding no newer release, or backing out after an error restores the
+  existing Update Server without changing its browser-based upload options.
+
 ## What's New in E-inx 1.3.17-3_update
 
 - **GitHub firmware updates on the reader** — the Firmware Update screen now has an explicit GitHub update action

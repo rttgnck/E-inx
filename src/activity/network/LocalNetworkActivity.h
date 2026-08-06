@@ -12,11 +12,13 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "WifiSelectionActivity.h"
 #include "activity/ActivityWithSubactivity.h"
 #include "activity/Menu.h"
 #include "network/LocalServer.h"
+#include "network/OtaUpdater.h"
 
 /**
  * @brief Represents the operational states of the local network activity
@@ -26,6 +28,12 @@ enum class LocalNetworkState {
   WIFI_SELECTION,       /**< Waiting for WiFi network selection */
   SERVER_STARTING,      /**< Web server initialization in progress */
   SERVER_RUNNING,       /**< Web server active and accepting connections */
+  GITHUB_CHECKING,      /**< Checking the latest GitHub release */
+  GITHUB_CONFIRMATION,  /**< Showing release details before installation */
+  GITHUB_INSTALLING,    /**< Downloading and installing GitHub firmware */
+  GITHUB_NO_UPDATE,     /**< Latest GitHub release is already installed */
+  GITHUB_FAILED,        /**< GitHub check or installation failed */
+  GITHUB_FINISHED,      /**< GitHub firmware installed; reboot pending */
   ERROR                 /**< Error state, unable to proceed */
 };
 
@@ -88,7 +96,11 @@ class LocalNetworkActivity final : public ActivityWithSubactivity, public Menu {
    * @brief Prevents auto sleep during active connections
    * @return true when server is running to maintain connection
    */
-  bool preventAutoSleep() override { return state == LocalNetworkState::SERVER_RUNNING; }
+  bool preventAutoSleep() override {
+    return state == LocalNetworkState::SERVER_RUNNING || state == LocalNetworkState::GITHUB_CHECKING ||
+           state == LocalNetworkState::GITHUB_CONFIRMATION || state == LocalNetworkState::GITHUB_INSTALLING ||
+           state == LocalNetworkState::GITHUB_FINISHED;
+  }
 
  private:
   /**
@@ -133,6 +145,18 @@ class LocalNetworkActivity final : public ActivityWithSubactivity, public Menu {
   /** @brief Stops the web server and cleans up resources */
   void stopWebServer();
 
+  /** @brief Stops the update server and checks GitHub using the active WiFi connection */
+  void startGithubUpdateCheck();
+
+  /** @brief Downloads and installs the release selected by the GitHub check */
+  void installGithubUpdate();
+
+  /** @brief Restarts the normal update server after cancelling or completing a check */
+  void returnToUpdateServer();
+
+  /** @brief Wraps the GitHub release changelog for the device display */
+  void prepareGithubReleaseNotes();
+
   /** @brief Navigate to selected menu tab (not used in this activity) */
   void navigateToSelectedMenu() override {}
 
@@ -149,6 +173,11 @@ class LocalNetworkActivity final : public ActivityWithSubactivity, public Menu {
   std::string connectedIP;                /**< IP address of connected WiFi */
   std::string connectedSSID;              /**< SSID of connected WiFi network */
   std::unique_ptr<LocalServer> webServer; /**< Web server instance */
+  OtaUpdater githubUpdater;               /**< Shared OTA implementation used by the Web UI and device button */
+  std::vector<std::string> githubReleaseNoteLines; /**< Wrapped GitHub release changelog */
+  int githubReleaseNotesScrollOffset = 0;          /**< First visible changelog line */
+  std::string githubUpdateError;                    /**< Last device-side GitHub update error */
+  unsigned long githubRestartAt = 0;               /**< Reboot deadline after a successful install */
   unsigned long lastHandleClientTime;     /**< Timestamp of last client handling */
 
   const std::function<void()> onGoBack; /**< Callback invoked when going back */
