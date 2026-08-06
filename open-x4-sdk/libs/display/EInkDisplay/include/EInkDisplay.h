@@ -61,6 +61,12 @@ class EInkDisplay {
 #endif
 
   void displayBuffer(RefreshMode mode = FAST_REFRESH, bool turnOffScreen = false);
+  /**
+   * X3-only differential B/W update using the OEM V5.6.33 AA-pre-BW(mid)
+   * reinforcement waveform. Falls back to displayBuffer() when the controller
+   * RAM does not contain a safe previous-frame baseline.
+   */
+  void displayBwReinforced(RefreshMode fallback = FAST_REFRESH, bool turnOffScreen = false);
   // EXPERIMENTAL: Windowed update - display only a rectangular region
   void displayWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h, bool turnOffScreen = false);
   void displayGrayBuffer(bool turnOffScreen = false, const unsigned char* lutData = nullptr, bool quality = false,

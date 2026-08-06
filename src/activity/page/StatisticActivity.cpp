@@ -1026,7 +1026,7 @@ void StatisticActivity::render() {
   const auto labels = mappedInput.mapLabels("\xC2\xAB Recent", "Refresh", "", "");
   renderButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
-  renderer.displayBuffer();
+  renderer.displayWithReinforcement(GfxRenderer::ReinforcementTarget::DitheredThumbnail);
 }
 
 void StatisticActivity::loop() {

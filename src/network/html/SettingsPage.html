@@ -301,6 +301,30 @@
         <div class="setting-control"><label class="toggle-switch"><input id="antiGhostingExperimental" type="checkbox"><span class="toggle-slider"></span></label></div>
       </div>
     </div>
+
+    <div class="settings-section">
+      <div class="section-header"><h3>Experimental X3 Waveform</h3></div>
+      <div class="setting-item">
+        <div><div class="setting-label">Reinforce B/W reader</div><div class="setting-description">OEM no-flash B/W base on image-free reader pages, including text anti-aliasing. Applies to Auto and Fast; forced Half/Full remain cleanup modes.</div></div>
+        <div class="setting-control"><label class="toggle-switch"><input id="x3ReinforceReader" type="checkbox"><span class="toggle-slider"></span></label></div>
+      </div>
+      <div class="setting-item">
+        <div><div class="setting-label">Reinforce monochrome UI</div><div class="setting-description">Use on explicitly marked text and icon screens.</div></div>
+        <div class="setting-control"><label class="toggle-switch"><input id="x3ReinforceUi" type="checkbox"><span class="toggle-slider"></span></label></div>
+      </div>
+      <div class="setting-item">
+        <div><div class="setting-label">Reinforce thumbnails</div><div class="setting-description">Experimental use on dithered Recent, Shelf, and Statistics covers.</div></div>
+        <div class="setting-control"><label class="toggle-switch"><input id="x3ReinforceThumbnails" type="checkbox"><span class="toggle-slider"></span></label></div>
+      </div>
+      <div class="setting-item">
+        <div><div class="setting-label">Periodic full clean</div><div class="setting-description">Force a normal X3 resync after a number of reinforced updates.</div></div>
+        <div class="setting-control"><label class="toggle-switch"><input id="x3ReinforcePeriodicClean" type="checkbox"><span class="toggle-slider"></span></label></div>
+      </div>
+      <div class="setting-item">
+        <div><div class="setting-label">Full clean interval</div></div>
+        <div class="setting-control"><select id="x3ReinforceCleanInterval"></select></div>
+      </div>
+    </div>
     <p class="hint">Actions such as Index library, reset, updates, and About are available on the device.</p>
 
     <div class="settings-section">
@@ -563,21 +587,23 @@ const options = {
   shakePageTurnSensitivity: ["Low", "Normal", "High"],
   refreshFrequency: ["1 page", "5 pages", "10 pages", "15 pages", "30 pages"],
   readerRefreshMode: ["Auto", "Fast", "Half", "Full"],
+  x3ReinforceCleanInterval: ["10 updates", "15 updates", "30 updates", "60 updates"],
   statusBar: ["None", "No Progress", "Full w/ Percentage", "Full w/ Progress Bar", "Progress Bar", "Battery %", "Percentage", "Page Bars"],
   sleepImagePowerGestureWindow: ["Auto", "600 ms", "700 ms", "800 ms", "900 ms", "1000 ms", "1100 ms", "1200 ms", "1300 ms", "1400 ms", "1500 ms", "1600 ms", "1700 ms", "1800 ms", "1900 ms", "2000 ms", "2100 ms", "2200 ms"],
   sleepImagePowerFirstPressMin: ["Auto", "100 ms", "200 ms", "300 ms", "400 ms", "500 ms", "600 ms", "700 ms", "800 ms", "900 ms", "1000 ms", "1100 ms", "1200 ms", "1300 ms", "1400 ms", "1500 ms"],
   sleepImagePowerSecondPressMax: ["100 ms", "200 ms", "300 ms", "400 ms", "500 ms", "600 ms", "700 ms", "800 ms", "900 ms", "1000 ms"],
-  statusBarLeft: ["None", "Page Numbers", "Percentage", "Chapter Title", "Battery Icon", "Battery %", "Battery Icon+%", "Progress Bar", "Progress Bar+%", "Page Bars", "Book Title", "Author Name", "Page Num+%", "Time", "Session Time"],
-  statusBarInnerLeft: ["None", "Page Numbers", "Percentage", "Chapter Title", "Battery Icon", "Battery %", "Battery Icon+%", "Progress Bar", "Progress Bar+%", "Page Bars", "Book Title", "Author Name", "Page Num+%", "Time", "Session Time"],
-  statusBarMiddle: ["None", "Page Numbers", "Percentage", "Chapter Title", "Battery Icon", "Battery %", "Battery Icon+%", "Progress Bar", "Progress Bar+%", "Page Bars", "Book Title", "Author Name", "Page Num+%", "Time", "Session Time"],
-  statusBarInnerRight: ["None", "Page Numbers", "Percentage", "Chapter Title", "Battery Icon", "Battery %", "Battery Icon+%", "Progress Bar", "Progress Bar+%", "Page Bars", "Book Title", "Author Name", "Page Num+%", "Time", "Session Time"],
-  statusBarRight: ["None", "Page Numbers", "Percentage", "Chapter Title", "Battery Icon", "Battery %", "Battery Icon+%", "Progress Bar", "Progress Bar+%", "Page Bars", "Book Title", "Author Name", "Page Num+%", "Time", "Session Time"]
+  statusBarLeft: ["None", "Page Numbers", "Percentage", "Chapter Title", "Battery Icon", "Battery %", "Battery Icon+%", "Progress Bar", "Progress Bar+%", "Page Bars", "Book Title", "Author Name", "Page Num+%", "Time", "Session Time", "Session Minutes", "Session / Goal", "Session / Day / Goal", "Session / Day"],
+  statusBarInnerLeft: ["None", "Page Numbers", "Percentage", "Chapter Title", "Battery Icon", "Battery %", "Battery Icon+%", "Progress Bar", "Progress Bar+%", "Page Bars", "Book Title", "Author Name", "Page Num+%", "Time", "Session Time", "Session Minutes", "Session / Goal", "Session / Day / Goal", "Session / Day"],
+  statusBarMiddle: ["None", "Page Numbers", "Percentage", "Chapter Title", "Battery Icon", "Battery %", "Battery Icon+%", "Progress Bar", "Progress Bar+%", "Page Bars", "Book Title", "Author Name", "Page Num+%", "Time", "Session Time", "Session Minutes", "Session / Goal", "Session / Day / Goal", "Session / Day"],
+  statusBarInnerRight: ["None", "Page Numbers", "Percentage", "Chapter Title", "Battery Icon", "Battery %", "Battery Icon+%", "Progress Bar", "Progress Bar+%", "Page Bars", "Book Title", "Author Name", "Page Num+%", "Time", "Session Time", "Session Minutes", "Session / Goal", "Session / Day / Goal", "Session / Day"],
+  statusBarRight: ["None", "Page Numbers", "Percentage", "Chapter Title", "Battery Icon", "Battery %", "Battery Icon+%", "Progress Bar", "Progress Bar+%", "Page Bars", "Book Title", "Author Name", "Page Num+%", "Time", "Session Time", "Session Minutes", "Session / Goal", "Session / Day / Goal", "Session / Day"]
 };
 const boolSettings = [
   "useLibraryIndex", "librarySortEnabled", "mainMenuNav",
   "refreshOnLoadRecent", "refreshOnLoadLibrary", "refreshOnLoadSettings", "refreshOnLoadSync", "refreshOnLoadStatistics",
   "extraParagraphSpacing", "paragraphCssIndentEnabled", "hyphenationEnabled", "bionicReadingEnabled",
   "textAntiAliasing", "readerSmartRefreshOnImages", "sunlightFadingFix", "antiGhostingExperimental",
+  "x3ReinforceReader", "x3ReinforceUi", "x3ReinforceThumbnails", "x3ReinforcePeriodicClean",
   "sleepImageRotationEnabled", "sleepImagePowerDoublePress", "persistentSleepLogs", "showBottomBarClock",
   "newsAutoDownload"
 ];

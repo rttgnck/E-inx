@@ -145,6 +145,22 @@ std::vector<SettingInfo> buildSystemPageSettings(const bool x3) {
   settings.push_back(
       SettingInfo::Toggle("Persistent sleep logs", &SystemSetting::persistentSleepLogs, GroupType::DEVICE_ADVANCED));
 
+  if (x3) {
+    settings.push_back(SettingInfo::Separator("Experimental X3 waveform", GroupType::EXPERIMENTAL));
+    settings.push_back(
+        SettingInfo::Toggle("Reinforce B/W reader", &SystemSetting::x3ReinforceReader, GroupType::EXPERIMENTAL));
+    settings.push_back(
+        SettingInfo::Toggle("Reinforce monochrome UI", &SystemSetting::x3ReinforceUi, GroupType::EXPERIMENTAL));
+    settings.push_back(
+        SettingInfo::Toggle("Reinforce thumbnails", &SystemSetting::x3ReinforceThumbnails, GroupType::EXPERIMENTAL));
+    settings.push_back(
+        SettingInfo::Toggle("Periodic full clean", &SystemSetting::x3ReinforcePeriodicClean, GroupType::EXPERIMENTAL));
+    settings.push_back(SettingInfo::Enum("Full clean interval", &SystemSetting::x3ReinforceCleanInterval,
+                                         {"10 updates", "15 updates", "30 updates", "60 updates"},
+                                         GroupType::EXPERIMENTAL));
+    settings.push_back(SettingInfo::Action("Full clean now", GroupType::EXPERIMENTAL));
+  }
+
   settings.push_back(SettingInfo::Separator("If Found", GroupType::IF_FOUND));
   settings.push_back(SettingInfo::Action("View if_found.txt", GroupType::IF_FOUND));
 
@@ -418,5 +434,5 @@ void SettingsActivity::showIndexingProgress() {
   }
   renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, popupX + 20, progressBarY + 50, countMsg);
 
-  renderer.displayBuffer();
+  renderer.displayWithReinforcement(GfxRenderer::ReinforcementTarget::MonochromeUi);
 }

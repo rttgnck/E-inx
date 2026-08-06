@@ -15,6 +15,8 @@
 #include "GfxRenderer.h"
 #include "state/BookSetting.h"
 
+struct ReadingDailySummary;
+
 /**
  * @brief Manages the status bar rendering for the EPUB reader
  */
@@ -64,7 +66,7 @@ class StatusBar {
    * @param currentSpineIndex Current spine index
    */
   void renderSection(int position, int sectionStart, int sectionCenter, int sectionWidth, int textY,
-                     const Section* section, int currentSpineIndex) const;
+                     const Section* section, int currentSpineIndex, const ReadingDailySummary& dailySummary) const;
 
   /**
    * @brief Renders page position bars within a section
@@ -103,6 +105,7 @@ class StatusBar {
    */
   std::string getBatteryPercentString() const;
   std::string getSessionTimeString() const;
+  std::string getReadingMinutesString(StatusBarItem item, const ReadingDailySummary& dailySummary) const;
 
   /**
    * @brief Gets the current chapter title

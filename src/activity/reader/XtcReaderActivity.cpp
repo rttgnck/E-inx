@@ -748,7 +748,7 @@ void XtcReaderActivity::renderPage() {
     if (imageQuality == SystemSetting::READER_IMAGE_LOW) {
       renderBwPreview();
       ReaderRefresh::displayWithCycle(renderer, pagesUntilFullRefresh, SETTINGS.xtcRefreshFrequency,
-                                      SETTINGS.readerRefreshMode);
+                                      SETTINGS.readerRefreshMode, false);
 
       free(pageBuffer);
       Serial.printf("[%lu] [XTR] Rendered page %lu/%lu (2-bit low/BW)\n", millis(), currentPage + 1,
@@ -783,7 +783,7 @@ void XtcReaderActivity::renderPage() {
 
     renderBwPreview();
     ReaderRefresh::displayWithCycle(renderer, pagesUntilFullRefresh, SETTINGS.xtcRefreshFrequency,
-                                    SETTINGS.readerRefreshMode);
+                                    SETTINGS.readerRefreshMode, false);
 
     renderer.clearScreen(0x00);
     for (uint16_t y = 0; y < pageHeight; y++) {
@@ -845,7 +845,7 @@ void XtcReaderActivity::renderPage() {
   free(pageBuffer);
 
   ReaderRefresh::displayWithCycle(renderer, pagesUntilFullRefresh, SETTINGS.xtcRefreshFrequency,
-                                  SETTINGS.readerRefreshMode);
+                                  SETTINGS.readerRefreshMode, bitDepth == 1);
 
   Serial.printf("[%lu] [XTR] Rendered page %lu/%lu (%u-bit)\n", millis(), currentPage + 1, xtc->getPageCount(),
                 bitDepth);
@@ -936,14 +936,13 @@ void XtcReaderActivity::endPageTimer() {
   if (pageCount > 0 && currentPage < pageCount) {
     bookStats.totalReadingTimeMs += timeSpent;
     ReadingDailyStats::recordReadingMs(timeSpent);
-    bookStats.totalPagesRead++;
     bookStats.lastReadTimeMs = now;
     bookStats.lastPageNumber = static_cast<uint16_t>(std::min<uint32_t>(currentPage, UINT16_MAX));
     bookStats.lastSpineIndex = static_cast<uint16_t>(chapterIndexForPage(*xtc, currentPage));
     bookStats.progressPercent = (static_cast<float>(currentPage) + 1.f) / static_cast<float>(pageCount) * 100.f;
 
-    if (bookStats.totalPagesRead > 0) {
-      bookStats.avgPageTimeMs = bookStats.totalReadingTimeMs / bookStats.totalPagesRead;
+    if (ReadingStats::qualifiesAsPageRead(timeSpent, bookStats)) {
+      ReadingStats::recordQualifiedPage(timeSpent, bookStats);
     }
 
     if (now - lastSaveTime >= STATS_SAVE_INTERVAL_MS) {

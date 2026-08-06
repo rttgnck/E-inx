@@ -49,6 +49,10 @@ void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen)
   einkDisplay.displayBuffer(convertRefreshMode(mode), turnOffScreen);
 }
 
+void HalDisplay::displayBwReinforced(const HalDisplay::RefreshMode fallback, const bool turnOffScreen) {
+  einkDisplay.displayBwReinforced(convertRefreshMode(fallback), turnOffScreen);
+}
+
 void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen) {
   if (gpio.deviceIsX3() && (mode == HalDisplay::HALF_REFRESH || mode == HalDisplay::MANUAL_REFRESH)) {
     einkDisplay.requestResync();

@@ -24,9 +24,35 @@ inline bool forcedMode(const uint8_t configuredMode, HalDisplay::RefreshMode& mo
 }
 
 inline void displayWithCycle(const GfxRenderer& renderer, int& pagesUntilFullRefresh, const uint8_t cadence,
-                             const uint8_t configuredMode) {
+                             const uint8_t configuredMode, const bool reinforcementEligible = true) {
   HalDisplay::RefreshMode mode = HalDisplay::FAST_REFRESH;
-  if (forcedMode(configuredMode, mode)) {
+  const bool forced = forcedMode(configuredMode, mode);
+  const bool forcedStrong = forced && mode != HalDisplay::FAST_REFRESH;
+  if (forcedStrong) {
+    if (Serial && renderer.reinforcementEnabled(GfxRenderer::ReinforcementTarget::ReaderBw)) {
+      Serial.printf("[%lu] [GFX] X3 reader reinforcement bypass: forced mode=%u\n", millis(),
+                    static_cast<unsigned>(configuredMode));
+    }
+    renderer.displayBuffer(mode);
+    pagesUntilFullRefresh = cadence;
+    return;
+  }
+
+  if (reinforcementEligible && renderer.reinforcementEnabled(GfxRenderer::ReinforcementTarget::ReaderBw)) {
+    renderer.displayWithReinforcement(GfxRenderer::ReinforcementTarget::ReaderBw);
+    if (pagesUntilFullRefresh <= 1) {
+      pagesUntilFullRefresh = cadence;
+    } else {
+      pagesUntilFullRefresh--;
+    }
+    return;
+  }
+
+  if (!reinforcementEligible && renderer.reinforcementEnabled(GfxRenderer::ReinforcementTarget::ReaderBw) && Serial) {
+    Serial.printf("[%lu] [GFX] X3 reader reinforcement bypass: image/grayscale page\n", millis());
+  }
+
+  if (forced) {
     renderer.displayBuffer(mode);
     pagesUntilFullRefresh = cadence;
     return;

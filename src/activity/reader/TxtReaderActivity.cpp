@@ -419,11 +419,15 @@ void TxtReaderActivity::renderPage() {
   renderLines();
   renderStatusBar(orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
 
+  const bool textAa = SETTINGS.textAntiAliasing && renderer.text.supportsAntiAliasing(cachedFontId);
   ReaderRefresh::displayWithCycle(renderer, pagesUntilFullRefresh, SETTINGS.getRefreshFrequency(),
-                                  SETTINGS.readerRefreshMode);
+                                  SETTINGS.readerRefreshMode, true);
 
-  if (SETTINGS.textAntiAliasing && renderer.text.supportsAntiAliasing(cachedFontId)) {
-    renderer.storeBwBuffer();
+  if (textAa) {
+    if (!renderer.storeBwBuffer()) {
+      Serial.printf("[%lu] [TXT] Skipping text AA: failed to store BW reinforcement baseline\n", millis());
+      return;
+    }
 
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
@@ -439,6 +443,7 @@ void TxtReaderActivity::renderPage() {
     renderer.setRenderMode(GfxRenderer::BW);
 
     renderer.restoreBwBuffer();
+    renderer.allowReinforcementAfterTextAntiAliasing();
   }
 }
 

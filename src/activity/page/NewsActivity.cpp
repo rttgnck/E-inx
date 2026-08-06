@@ -51,17 +51,19 @@ void NewsActivity::onEnter() {
 void NewsActivity::onExit() { Activity::onExit(); }
 
 std::string NewsActivity::todayFilename() {
-  HalGPIO::DateTime dt;
   char buf[16];
+#ifndef SIMULATOR
+  HalGPIO::DateTime dt;
   if (gpio.readDateTime(dt) && dt.year >= 2024) {
     snprintf(buf, sizeof(buf), "%02u-%02u-%04u.epub", dt.month, dt.day, dt.year);
-  } else {
-    time_t now;
-    time(&now);
-    struct tm ti;
-    localtime_r(&now, &ti);
-    snprintf(buf, sizeof(buf), "%02d-%02d-%04d.epub", ti.tm_mon + 1, ti.tm_mday, ti.tm_year + 1900);
+    return std::string(buf);
   }
+#endif
+  time_t now;
+  time(&now);
+  struct tm ti;
+  localtime_r(&now, &ti);
+  snprintf(buf, sizeof(buf), "%02d-%02d-%04d.epub", ti.tm_mon + 1, ti.tm_mday, ti.tm_year + 1900);
   return std::string(buf);
 }
 
@@ -525,11 +527,15 @@ void NewsActivity::startDownload() {
   {
     FsFile log;
     if (SdMan.openFileForWrite("NEWS", "/News/.download.log", log)) {
-      log.printf("url: %s\n", url.c_str());
-      log.printf("dest: %s\n", destPath.c_str());
-      log.printf("result: %d\n", static_cast<int>(result));
-      log.printf("heap_free: %u\n", ESP.getFreeHeap());
-      log.printf("downloaded: %d / %d\n", downloadProgress, downloadTotal);
+      char logBuffer[1024];
+      const int length = snprintf(logBuffer, sizeof(logBuffer),
+                                  "url: %s\ndest: %s\nresult: %d\nheap_free: %u\ndownloaded: %d / %d\n",
+                                  url.c_str(), destPath.c_str(), static_cast<int>(result), ESP.getFreeHeap(),
+                                  downloadProgress, downloadTotal);
+      if (length > 0) {
+        const size_t bytes = std::min(static_cast<size_t>(length), sizeof(logBuffer) - 1);
+        log.write(reinterpret_cast<const uint8_t*>(logBuffer), bytes);
+      }
       log.close();
     }
   }
@@ -547,6 +553,9 @@ void NewsActivity::startDownload() {
 bool NewsActivity::tryAutoDownload() {
   if (!SETTINGS.newsAutoDownload) return false;
 
+#ifdef SIMULATOR
+  return false;
+#else
   HalGPIO::DateTime dt;
   if (!gpio.readDateTime(dt) || dt.year < 2024) return false;
   if (dt.hour < SETTINGS.newsDownloadHour) return false;
@@ -557,7 +566,6 @@ bool NewsActivity::tryAutoDownload() {
 
   if (SdMan.exists(destPath.c_str()) || SdMan.exists(bookmarkPath.c_str())) return false;
 
-#ifndef SIMULATOR
   WIFI_STORE.loadFromFile();
   const WifiCredential* cred = WIFI_STORE.getLastCredential();
   if (!cred) return false;
@@ -581,8 +589,6 @@ bool NewsActivity::tryAutoDownload() {
 
   WiFi.disconnect(true);
   return result == HttpDownloader::OK;
-#else
-  return false;
 #endif
 }
 

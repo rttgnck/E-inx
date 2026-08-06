@@ -112,7 +112,6 @@ void EpubReadingStats::endPageTimer(const Epub& epub, const Section* section, co
   if (section) {
     stats_.totalReadingTimeMs += timeSpent;
     ReadingDailyStats::recordReadingMs(timeSpent);
-    stats_.totalPagesRead++;
     stats_.lastReadTimeMs = currentTime;
     stats_.lastSpineIndex = currentSpineIndex;
     stats_.lastPageNumber = section->currentPage;
@@ -122,8 +121,8 @@ void EpubReadingStats::endPageTimer(const Epub& epub, const Section* section, co
       stats_.progressPercent = epub.calculateProgress(currentSpineIndex, spineProgress) * 100.0f;
     }
 
-    if (stats_.totalPagesRead > 0) {
-      stats_.avgPageTimeMs = stats_.totalReadingTimeMs / stats_.totalPagesRead;
+    if (ReadingStats::qualifiesAsPageRead(timeSpent, stats_)) {
+      ReadingStats::recordQualifiedPage(timeSpent, stats_);
     }
 
     const uint32_t now = millis();

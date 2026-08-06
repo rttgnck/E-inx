@@ -68,6 +68,14 @@ const char* statusPlaceholder(StatusBarItem item) {
       return "14:35";
     case StatusBarItem::SESSION_TIME:
       return "27m";
+    case StatusBarItem::SESSION_MINUTES:
+      return "27m";
+    case StatusBarItem::SESSION_MINUTES_GOAL:
+      return "27m/30m";
+    case StatusBarItem::SESSION_DAILY_GOAL:
+      return "27m/52m/30m";
+    case StatusBarItem::SESSION_DAILY:
+      return "27m/52m";
     case StatusBarItem::NONE:
     default:
       return "";

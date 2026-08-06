@@ -31,6 +31,8 @@ class GfxRenderer {
 
   enum ImageOrientation { None, Rotate90CW, Rotate180, Rotate270CW };
 
+  enum class ReinforcementTarget : uint8_t { ReaderBw, MonochromeUi, DitheredThumbnail };
+
  private:
   static constexpr size_t BW_BUFFER_CHUNK_SIZE = 8000;
 
@@ -41,6 +43,8 @@ class GfxRenderer {
   bool preservingImageTone_ = false;
   mutable bool nextRefreshOverridePending_ = false;  ///< One-shot: force next displayBuffer() refresh mode.
   mutable HalDisplay::RefreshMode nextRefreshOverride_ = HalDisplay::FULL_REFRESH;
+  mutable uint16_t x3ReinforcedRefreshCount_ = 0;
+  mutable bool x3CleanupRequired_ = false;
   Orientation orientation;
   uint16_t panelWidth = HalDisplay::DISPLAY_WIDTH;
   uint16_t panelHeight = HalDisplay::DISPLAY_HEIGHT;
@@ -90,6 +94,10 @@ class GfxRenderer {
   int getScreenWidth() const;
   int getScreenHeight() const;
   void displayBuffer(const HalDisplay::RefreshMode refreshMode = HalDisplay::FAST_REFRESH) const;
+  bool reinforcementEnabled(ReinforcementTarget target) const;
+  void displayWithReinforcement(ReinforcementTarget target,
+                                HalDisplay::RefreshMode fallback = HalDisplay::FAST_REFRESH) const;
+  void allowReinforcementAfterTextAntiAliasing() const;
   void invertScreen() const;
   void clearScreen(uint8_t color = 0xFF) const;
   void begin();

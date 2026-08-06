@@ -1428,7 +1428,7 @@ void LibraryActivity::render() const {
     if (letterPickerVisible_) {
       renderLetterFilterPicker();
     }
-    renderer.displayBuffer();
+    renderer.displayWithReinforcement(GfxRenderer::ReinforcementTarget::DitheredThumbnail);
     return;
   }
 
@@ -1484,7 +1484,9 @@ void LibraryActivity::render() const {
     renderLetterFilterPicker();
   }
 
-  renderer.displayBuffer();
+  const auto target = currentViewMode == ViewMode::SHELF_VIEW ? GfxRenderer::ReinforcementTarget::DitheredThumbnail
+                                                              : GfxRenderer::ReinforcementTarget::MonochromeUi;
+  renderer.displayWithReinforcement(target);
 
   if (pendingShelfExitHalfRefresh_) {
     // Shelf mode's dithered cover thumbnails can leave ghosting a normal refresh doesn't fully clear -

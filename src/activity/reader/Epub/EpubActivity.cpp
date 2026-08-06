@@ -1877,7 +1877,7 @@ void EpubActivity::renderContents(std::unique_ptr<Page> page, const int oriented
   isDoingSomethingHeavy = true;
   const unsigned long rcStart = millis();
   Serial.printf("[%lu] [DBG] renderContents start, hasImages=%d, heap=%lu\n", rcStart, page->hasImages(),
-                (unsigned long)esp_get_free_heap_size());
+                (unsigned long)ESP.getFreeHeap());
   const int fontId = bookSettings.getReaderFontId();
   FontManager::ensureReaderLayoutFonts(fontId, renderer);
   const int headerFontId = FontManager::getNextFont(fontId);
@@ -1994,13 +1994,14 @@ void EpubActivity::renderContents(std::unique_ptr<Page> page, const int oriented
                         renderer.storeBwBuffer();
   const bool displayWithQualityPass = highQuality && bwStored;
   const bool smartRefreshThisPageAfterLargeImage = smartImageRefreshEnabled && smartRefreshAfterLargeImage;
-  auto displayPageBuffer = [this, smartRefreshThisPageAfterLargeImage]() {
+  const bool reinforcementEligiblePage = !pageHasImages && !needsImageGrayscale;
+  auto displayPageBuffer = [this, smartRefreshThisPageAfterLargeImage, reinforcementEligiblePage]() {
     if (smartRefreshThisPageAfterLargeImage) {
       renderer.displayBuffer(HalDisplay::HALF_REFRESH);
       pagesUntilFullRefresh = bookSettings.refreshFrequency;
     } else {
       ReaderRefresh::displayWithCycle(renderer, pagesUntilFullRefresh, bookSettings.refreshFrequency,
-                                      bookSettings.readerRefreshMode);
+                                      bookSettings.readerRefreshMode, reinforcementEligiblePage);
     }
   };
 
@@ -2066,9 +2067,13 @@ void EpubActivity::renderContents(std::unique_ptr<Page> page, const int oriented
     renderer.restoreBwBuffer();
   }
 
+  if (needsTextAntiAliasPass && !pageHasImages && !needsImageGrayscale) {
+    renderer.allowReinforcementAfterTextAntiAliasing();
+  }
+
   isDoingSomethingHeavy = false;
   Serial.printf("[%lu] [DBG] renderContents done, total=%lums, heap=%lu\n", millis(), millis() - rcStart,
-                (unsigned long)esp_get_free_heap_size());
+                (unsigned long)ESP.getFreeHeap());
 
   lastPageHadImages = pageHasImages;
   lastPageHadLargeImage = pageHasLargeImage;
