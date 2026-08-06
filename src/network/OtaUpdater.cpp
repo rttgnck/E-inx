@@ -25,7 +25,7 @@
 #include "esp_wifi.h"
 
 namespace {
-constexpr char latestReleaseUrl[] = "https://api.github.com/repos/obijuankenobiii/inx/releases/latest";
+constexpr char latestReleaseUrl[] = "https://api.github.com/repos/rttgnck/E-inx/releases/latest";
 
 constexpr size_t kMaxReleaseJsonBytes = 12288;
 
@@ -39,8 +39,24 @@ struct ParsedVersion {
   int major = 0;
   int minor = 0;
   int patch = 0;
-  bool prerelease = false;
+  int revision = 0;
+  bool beta = false;
 };
+
+bool containsCaseInsensitive(const char* text, const char* needle) {
+  if (text == nullptr || needle == nullptr || *needle == '\0') return false;
+  for (const char* start = text; *start; ++start) {
+    const char* a = start;
+    const char* b = needle;
+    while (*a && *b && std::tolower(static_cast<unsigned char>(*a)) ==
+                           std::tolower(static_cast<unsigned char>(*b))) {
+      ++a;
+      ++b;
+    }
+    if (*b == '\0') return true;
+  }
+  return false;
+}
 
 bool parseVersion(const char* text, ParsedVersion& out) {
   if (text == nullptr) {
@@ -72,8 +88,38 @@ bool parseVersion(const char* text, ParsedVersion& out) {
   out.major = static_cast<int>(major);
   out.minor = static_cast<int>(minor);
   out.patch = static_cast<int>(patch);
-  out.prerelease = *end == '-';
+  out.revision = 0;
+  out.beta = containsCaseInsensitive(end, "beta");
+
+  // E-inx releases use suffixes such as -w2 and -3_update. Treat the
+  // first numeric suffix component as an ordered release revision.
+  for (const char* p = end; *p; ++p) {
+    if (std::isdigit(static_cast<unsigned char>(*p))) {
+      char* revisionEnd = nullptr;
+      const long revision = strtol(p, &revisionEnd, 10);
+      if (revisionEnd != p && revision >= 0) {
+        out.revision = static_cast<int>(revision);
+      }
+      break;
+    }
+  }
   return true;
+}
+
+bool hasBinExtension(const std::string& name) {
+  if (name.size() < 4) return false;
+  const size_t dot = name.size() - 4;
+  return name[dot] == '.' && std::tolower(static_cast<unsigned char>(name[dot + 1])) == 'b' &&
+         std::tolower(static_cast<unsigned char>(name[dot + 2])) == 'i' &&
+         std::tolower(static_cast<unsigned char>(name[dot + 3])) == 'n';
+}
+
+bool isFirmwareAssetName(const std::string& name) {
+  if (!hasBinExtension(name)) return false;
+  std::string lower = name;
+  std::transform(lower.begin(), lower.end(), lower.begin(),
+                 [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  return lower == "firmware.bin" || lower.find("firmware") != std::string::npos || lower.rfind("e-inx", 0) == 0;
 }
 
 char* local_buf = nullptr;
@@ -227,6 +273,7 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdateWorker() {
   local_buf_cap = 0;
   updateAvailable = false;
   latestVersion.clear();
+  releaseNotes.clear();
   otaUrl.clear();
   otaSize = 0;
   processedSize = 0;
@@ -283,6 +330,7 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdateWorker() {
   }
 
   filter["tag_name"] = true;
+  filter["body"] = true;
   filter["assets"][0]["name"] = true;
   filter["assets"][0]["browser_download_url"] = true;
   filter["assets"][0]["size"] = true;
@@ -308,22 +356,29 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdateWorker() {
   }
 
   latestVersion = doc["tag_name"].as<std::string>();
+  if (doc["body"].is<std::string>()) {
+    releaseNotes = doc["body"].as<std::string>();
+  }
 
+  int selectedAsset = -1;
   for (int i = 0; i < doc["assets"].size(); i++) {
-    if (doc["assets"][i]["name"] == "firmware.bin") {
-      otaUrl = doc["assets"][i]["browser_download_url"].as<std::string>();
-      otaSize = doc["assets"][i]["size"].as<size_t>();
-      if (otaUrl.empty() || otaSize == 0) {
-        continue;
-      }
+    const std::string name = doc["assets"][i]["name"].as<std::string>();
+    if (!isFirmwareAssetName(name)) continue;
+    if (selectedAsset < 0 || name == "firmware.bin") selectedAsset = i;
+    if (name == "firmware.bin") break;
+  }
+
+  if (selectedAsset >= 0) {
+    otaUrl = doc["assets"][selectedAsset]["browser_download_url"].as<std::string>();
+    otaSize = doc["assets"][selectedAsset]["size"].as<size_t>();
+    if (!otaUrl.empty() && otaSize > 0) {
       totalSize = otaSize;
       updateAvailable = true;
-      break;
     }
   }
 
   if (!updateAvailable) {
-    Serial.printf("[%lu] [OTA] No firmware.bin asset found\n", millis());
+    Serial.printf("[%lu] [OTA] No firmware .bin asset found\n", millis());
     return NO_UPDATE;
   }
 
@@ -349,11 +404,19 @@ bool OtaUpdater::isUpdateNewer() const {
   if (latest.minor != current.minor) return latest.minor > current.minor;
   if (latest.patch != current.patch) return latest.patch > current.patch;
 
-  return current.prerelease && !latest.prerelease;
+  if (latest.revision != current.revision) return latest.revision > current.revision;
+  if (latest.beta != current.beta) return current.beta && !latest.beta;
+
+  // GitHub's /releases/latest endpoint is authoritative for two distinct
+  // same-base release labels that do not carry an ordered numeric revision.
+  return latestVersion != INX_VERSION;
 }
 
 /** Return the version string of the latest release found. */
 const std::string& OtaUpdater::getLatestVersion() const { return latestVersion; }
+
+/** Return the changelog body supplied with the latest GitHub release. */
+const std::string& OtaUpdater::getReleaseNotes() const { return releaseNotes; }
 
 /** Download and install the latest update over HTTPS. */
 OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate() {
@@ -392,6 +455,7 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate() {
     processedSize = esp_https_ota_get_image_len_read(ota_handle);
 
     render = true;
+    esp_task_wdt_reset();
     vTaskDelay(10 / portTICK_PERIOD_MS);
   } while (esp_err == ESP_ERR_HTTPS_OTA_IN_PROGRESS);
 

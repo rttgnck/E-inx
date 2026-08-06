@@ -19,6 +19,7 @@
 #ifndef SIMULATOR
 #include <esp_ota_ops.h>
 #include <esp_system.h>
+#include "OtaUpdater.h"
 #endif
 
 #include <algorithm>
@@ -74,6 +75,28 @@ constexpr uint16_t LOCAL_UDP_PORT = 8134;
 constexpr size_t MIN_FIRMWARE_SIZE = 64 * 1024;
 constexpr uint8_t ESP_IMAGE_MAGIC = 0xE9;
 constexpr uint16_t ESP32_C3_CHIP_ID = 5;
+
+#ifndef SIMULATOR
+const char* otaErrorMessage(const OtaUpdater::OtaUpdaterError error) {
+  switch (error) {
+    case OtaUpdater::OK:
+      return "";
+    case OtaUpdater::NO_UPDATE:
+      return "The latest release does not contain a compatible firmware image";
+    case OtaUpdater::HTTP_ERROR:
+      return "Could not reach GitHub or download the firmware";
+    case OtaUpdater::JSON_PARSE_ERROR:
+      return "GitHub returned release information the reader could not understand";
+    case OtaUpdater::UPDATE_OLDER_ERROR:
+      return "The selected release is not newer than the installed firmware";
+    case OtaUpdater::OOM_ERROR:
+      return "The reader does not have enough free memory to check for this update";
+    case OtaUpdater::INTERNAL_UPDATE_ERROR:
+    default:
+      return "The firmware update process could not be completed";
+  }
+}
+#endif
 
 LocalServer* wsInstance = nullptr;
 
@@ -680,7 +703,11 @@ void webLibraryIndexTask(void*) {
 #endif
 }  // namespace
 
-LocalServer::LocalServer() {}
+LocalServer::LocalServer() {
+#ifndef SIMULATOR
+  githubUpdater.reset(new OtaUpdater());
+#endif
+}
 
 LocalServer::~LocalServer() { stop(); }
 
@@ -752,6 +779,8 @@ void LocalServer::begin() {
 
   server->on("/upload", HTTP_POST, [this] { handleUploadPost(); }, [this] { handleUpload(); });
   server->on("/api/update/status", HTTP_GET, [this] { handleFirmwareStatus(); });
+  server->on("/api/update/github", HTTP_GET, [this] { handleGithubFirmwareCheck(); });
+  server->on("/api/update/github/install", HTTP_POST, [this] { handleGithubFirmwareInstall(); });
   server->on(
       "/api/update/upload", HTTP_POST, [this] { handleFirmwareUploadPost(); }, [this] { handleFirmwareUpload(); });
 
@@ -884,7 +913,7 @@ void LocalServer::handleClient() {
 
   if (firmwareRestartAt != 0 && static_cast<long>(millis() - firmwareRestartAt) >= 0) {
     firmwareRestartAt = 0;
-    Serial.printf("[%lu] [WEB] Rebooting into uploaded firmware\n", millis());
+    Serial.printf("[%lu] [WEB] Rebooting into installed firmware\n", millis());
 #ifndef SIMULATOR
     delay(50);
     ESP.restart();
@@ -1046,6 +1075,110 @@ void LocalServer::handleFirmwareStatus() const {
   serializeJson(doc, json);
   server->sendHeader("Cache-Control", "no-store");
   server->send(200, "application/json", json);
+}
+
+void LocalServer::handleGithubFirmwareCheck() {
+  JsonDocument doc;
+  doc["currentVersion"] = INX_VERSION;
+
+#ifdef SIMULATOR
+  doc["ok"] = false;
+  doc["error"] = "GitHub firmware checks are unavailable in the simulator";
+  String json;
+  serializeJson(doc, json);
+  server->send(501, "application/json", json);
+#else
+  if (!githubUpdater) githubUpdater.reset(new OtaUpdater());
+  Serial.printf("[%lu] [WEB] [UPDATE] Checking GitHub for the latest firmware release\n", millis());
+  const auto result = githubUpdater->checkForUpdate();
+  doc["ok"] = result == OtaUpdater::OK;
+  doc["latestVersion"] = githubUpdater->getLatestVersion();
+  doc["newer"] = result == OtaUpdater::OK && githubUpdater->isUpdateNewer();
+  doc["notes"] = githubUpdater->getReleaseNotes();
+  doc["size"] = githubUpdater->getOtaSize();
+  if (result != OtaUpdater::OK) doc["error"] = otaErrorMessage(result);
+
+  String json;
+  serializeJson(doc, json);
+  server->sendHeader("Cache-Control", "no-store");
+  server->send(result == OtaUpdater::OK ? 200 : 502, "application/json", json);
+#endif
+}
+
+void LocalServer::handleGithubFirmwareInstall() {
+  JsonDocument doc;
+
+#ifdef SIMULATOR
+  doc["ok"] = false;
+  doc["error"] = "GitHub firmware installation is unavailable in the simulator";
+  String json;
+  serializeJson(doc, json);
+  server->send(501, "application/json", json);
+#else
+  if (firmwareUploadToken != server->arg("token").c_str()) {
+    doc["ok"] = false;
+    doc["error"] = "Invalid update session token";
+    String json;
+    serializeJson(doc, json);
+    server->send(403, "application/json", json);
+    return;
+  }
+  if (server->arg("confirm") != "1") {
+    doc["ok"] = false;
+    doc["error"] = "Installation confirmation is required";
+    String json;
+    serializeJson(doc, json);
+    server->send(400, "application/json", json);
+    return;
+  }
+  if (firmwareRestartAt != 0) {
+    doc["ok"] = false;
+    doc["error"] = "The reader is already restarting into an installed update";
+    String json;
+    serializeJson(doc, json);
+    server->send(409, "application/json", json);
+    return;
+  }
+  if (firmwareUploadState == FirmwareUploadState::RECEIVING ||
+      firmwareUploadState == FirmwareUploadState::READY_TO_REBOOT) {
+    doc["ok"] = false;
+    doc["error"] = "A local firmware update is already in progress";
+    String json;
+    serializeJson(doc, json);
+    server->send(409, "application/json", json);
+    return;
+  }
+  if (!githubUpdater || !githubUpdater->isUpdateNewer()) {
+    doc["ok"] = false;
+    doc["error"] = "Check GitHub and confirm a newer release before installing";
+    String json;
+    serializeJson(doc, json);
+    server->send(409, "application/json", json);
+    return;
+  }
+
+  const std::string releaseVersion = githubUpdater->getLatestVersion();
+  Serial.printf("[%lu] [WEB] [UPDATE] Installing GitHub release %s\n", millis(), releaseVersion.c_str());
+  const auto result = githubUpdater->installUpdate();
+  if (result != OtaUpdater::OK) {
+    doc["ok"] = false;
+    doc["error"] = otaErrorMessage(result);
+    String json;
+    serializeJson(doc, json);
+    server->send(502, "application/json", json);
+    return;
+  }
+
+  firmwareRestartAt = millis() + 2500;
+  doc["ok"] = true;
+  doc["version"] = releaseVersion;
+  doc["rebootInMs"] = 2500;
+  String json;
+  serializeJson(doc, json);
+  server->sendHeader("Cache-Control", "no-store");
+  server->sendHeader("Connection", "close");
+  server->send(200, "application/json", json);
+#endif
 }
 
 void LocalServer::handleFirmwareUpload() {

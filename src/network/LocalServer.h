@@ -21,6 +21,8 @@ struct FileInfo {
   bool isDirectory;
 };
 
+class OtaUpdater;
+
 class LocalServer {
  public:
   struct WsUploadStatus {
@@ -75,6 +77,9 @@ class LocalServer {
   std::string firmwareUploadVersion;
   std::string firmwareUploadToken;
   unsigned long firmwareRestartAt = 0;
+#ifndef SIMULATOR
+  std::unique_ptr<OtaUpdater> githubUpdater;
+#endif
 
   void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length);
   static void wsEventCallback(uint8_t num, WStype_t type, uint8_t* payload, size_t length);
@@ -134,6 +139,8 @@ class LocalServer {
   void handleBookTagsPost() const;
 
   void handleFirmwareStatus() const;
+  void handleGithubFirmwareCheck();
+  void handleGithubFirmwareInstall();
   void handleFirmwareUpload();
   void handleFirmwareUploadPost();
   void abortFirmwareUpload(const char* error);

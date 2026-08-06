@@ -38,6 +38,8 @@ class OtaUpdateActivity : public ActivityWithSubactivity, public Menu {
   int sdFirmwareSelectedIndex = 0;
   int sdFirmwareScrollOffset = 0;
   std::vector<std::string> sdFirmwareFiles;
+  int releaseNotesScrollOffset = 0;
+  std::vector<std::string> releaseNoteLines;
   const std::function<void()> goBack;
   State state = SOURCE_SELECTION;
   OtaUpdater updater;
@@ -46,6 +48,7 @@ class OtaUpdateActivity : public ActivityWithSubactivity, public Menu {
   static void taskTrampoline(void* param);
   [[noreturn]] void displayTaskLoop();
   void render();
+  void prepareReleaseNotes();
   void scanSdFirmwareFiles();
   const std::string& selectedSdFirmwarePath() const;
 
@@ -60,5 +63,7 @@ class OtaUpdateActivity : public ActivityWithSubactivity, public Menu {
   void onEnter() override;
   void onExit() override;
   void loop() override;
-  bool preventAutoSleep() override { return state == CHECKING_FOR_UPDATE || state == UPDATE_IN_PROGRESS; }
+  bool preventAutoSleep() override {
+    return state == CHECKING_FOR_UPDATE || state == WAITING_CONFIRMATION || state == UPDATE_IN_PROGRESS;
+  }
 };
