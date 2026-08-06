@@ -38,6 +38,12 @@
   .message.success { display: block; background: #e9f9ee; color: #166b34; }
   .message.error { display: block; background: #fdecec; color: #9c1c1c; }
   .warning { margin-top: 14px; padding: 12px 14px; background: #fff8e6; color: #745200; border-radius: 10px; font-size: 12.5px; }
+  .release-details { display: none; margin-top: 16px; }
+  .release-details.visible { display: block; }
+  .release-version { margin-bottom: 10px; color: #111; font-size: 15px; font-weight: 700; }
+  .release-notes { max-height: 240px; overflow: auto; padding: 14px; background: #f5f5f7; border: 1px solid #e5e5e7; border-radius: 10px; color: #333; font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-word; }
+  .button-secondary { background: #f0f0f2; color: #111; }
+  .button-secondary:hover:not(:disabled) { background: #e2e2e5; }
   code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
   @media (max-width: 560px) {
     .container { padding: 24px 14px 40px; }
@@ -69,6 +75,22 @@
   </section>
 
   <section class="card">
+    <h2>GitHub firmware update</h2>
+    <p class="muted">Check the latest published E-inx release, review its changelog, then download and install it directly.</p>
+    <button class="button-secondary" id="githubCheckButton" type="button">Check GitHub for updates</button>
+    <div class="release-details" id="githubReleaseDetails">
+      <div class="release-version" id="githubReleaseVersion"></div>
+      <div class="release-notes" id="githubReleaseNotes" tabindex="0"></div>
+      <label class="confirm">
+        <input id="githubConfirmInstall" type="checkbox">
+        <span>I reviewed this release and will keep the reader powered while it downloads and installs.</span>
+      </label>
+      <button id="githubInstallButton" type="button" disabled>Download and install this release</button>
+    </div>
+    <div class="message" id="githubMessage"></div>
+  </section>
+
+  <section class="card">
     <h2>Install a local build</h2>
     <p class="muted">Choose the app <code>firmware.bin</code> produced by the Inx release build.</p>
     <label class="dropzone" id="dropzone" for="firmwareFile">
@@ -89,18 +111,18 @@
     <div class="warning">Only flash firmware intended for the Xteink ESP32-C3 and this partition layout. If the new image cannot reach core startup, the bootloader falls back to the previous slot.</div>
   </section>
 
-  <section class="card">
-    <h2>Online OTA</h2>
-    <p class="muted">Published v1.1.0 and later releases include a <code>firmware.bin</code> asset. On the reader, open <strong>Settings → Device Actions → Check for updates</strong> to check GitHub and install it over Wi‑Fi.</p>
-  </section>
 </div>
 <script>
   let updateStatus = null;
   let selectedFile = null;
+  let githubRelease = null;
   const fileInput = document.getElementById("firmwareFile");
   const dropzone = document.getElementById("dropzone");
   const confirmInstall = document.getElementById("confirmInstall");
   const installButton = document.getElementById("installButton");
+  const githubCheckButton = document.getElementById("githubCheckButton");
+  const githubConfirmInstall = document.getElementById("githubConfirmInstall");
+  const githubInstallButton = document.getElementById("githubInstallButton");
 
   function formatBytes(bytes) {
     if (!bytes) return "—";
@@ -113,6 +135,17 @@
     const box = document.getElementById("message");
     box.textContent = text;
     box.className = "message " + kind;
+  }
+
+  function showGithubMessage(text, kind) {
+    const box = document.getElementById("githubMessage");
+    box.textContent = text;
+    box.className = "message " + kind;
+  }
+
+  function updateGithubButton() {
+    githubInstallButton.disabled = !githubRelease || !githubRelease.newer || !githubConfirmInstall.checked ||
+      !updateStatus || !updateStatus.token;
   }
 
   function updateButton() {
@@ -129,6 +162,7 @@
     document.getElementById("targetPartition").textContent = updateStatus.targetPartition || "—";
     document.getElementById("maxSize").textContent = formatBytes(updateStatus.maxSize);
     updateButton();
+    updateGithubButton();
   }
 
   function selectFile(file) {
@@ -148,6 +182,7 @@
 
   fileInput.addEventListener("change", () => selectFile(fileInput.files[0]));
   confirmInstall.addEventListener("change", updateButton);
+  githubConfirmInstall.addEventListener("change", updateGithubButton);
   ["dragenter", "dragover"].forEach(name => dropzone.addEventListener(name, event => {
     event.preventDefault();
     dropzone.classList.add("dragover");
@@ -157,6 +192,63 @@
     dropzone.classList.remove("dragover");
   }));
   dropzone.addEventListener("drop", event => selectFile(event.dataTransfer.files[0]));
+
+  githubCheckButton.addEventListener("click", async () => {
+    githubCheckButton.disabled = true;
+    githubRelease = null;
+    githubConfirmInstall.checked = false;
+    document.getElementById("githubReleaseDetails").className = "release-details";
+    updateGithubButton();
+    showGithubMessage("Checking the latest release on GitHub…", "info");
+    try {
+      const response = await fetch("/api/update/github", {cache: "no-store"});
+      const result = await response.json();
+      if (!response.ok || !result.ok) throw new Error(result.error || "GitHub update check failed.");
+      githubRelease = result;
+      const size = result.size ? " — " + formatBytes(result.size) : "";
+      document.getElementById("githubReleaseVersion").textContent =
+        "Latest release: " + (result.latestVersion || "Unknown") + size;
+      document.getElementById("githubReleaseNotes").textContent =
+        result.notes || "No changelog was supplied with this release.";
+      document.getElementById("githubReleaseDetails").className = "release-details visible";
+      if (result.newer) {
+        showGithubMessage("A newer firmware release is available. Review the changelog before installing.", "success");
+      } else {
+        showGithubMessage("This reader is already running the latest published firmware.", "info");
+      }
+      updateGithubButton();
+    } catch (error) {
+      showGithubMessage(error.message || "GitHub update check failed.", "error");
+    } finally {
+      githubCheckButton.disabled = false;
+    }
+  });
+
+  githubInstallButton.addEventListener("click", async () => {
+    if (!githubRelease || !githubRelease.newer || !updateStatus || !updateStatus.token) return;
+    const version = githubRelease.latestVersion || "the selected release";
+    if (!window.confirm("Download and install " + version + " now? Keep the reader powered until it reboots.")) return;
+
+    githubInstallButton.disabled = true;
+    githubCheckButton.disabled = true;
+    githubConfirmInstall.disabled = true;
+    showGithubMessage("Downloading and installing " + version + ". Do not power off the reader or close this page.", "info");
+    try {
+      const response = await fetch("/api/update/github/install?token=" + encodeURIComponent(updateStatus.token), {
+        method: "POST",
+        headers: {"Content-Type": "application/x-www-form-urlencoded"},
+        body: "confirm=1"
+      });
+      const result = await response.json();
+      if (!response.ok || !result.ok) throw new Error(result.error || "GitHub firmware installation failed.");
+      showGithubMessage("Firmware " + (result.version || version) + " was installed. The reader is rebooting.", "success");
+    } catch (error) {
+      showGithubMessage(error.message || "The connection ended before installation was confirmed. Check the reader before retrying.", "error");
+      githubCheckButton.disabled = false;
+      githubConfirmInstall.disabled = false;
+      updateGithubButton();
+    }
+  });
 
   installButton.addEventListener("click", () => {
     if (!selectedFile || !updateStatus || !updateStatus.token) return;

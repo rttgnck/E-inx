@@ -27,6 +27,7 @@
 namespace {
 constexpr int kSourceItemHeight = UiTheme::DRAWER_LIST_ITEM_HEIGHT;
 constexpr int kFirmwareItemHeight = UiTheme::DRAWER_LIST_ITEM_HEIGHT;
+constexpr int kReleaseNotesFont = ATKINSON_HYPERLEGIBLE_8_FONT_ID;
 const std::string kEmptyPath;
 
 bool hasBinExtension(const std::string& path) {
@@ -153,6 +154,7 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
     return;
   }
 
+  prepareReleaseNotes();
   xSemaphoreTake(renderingMutex, portMAX_DELAY);
   state = WAITING_CONFIRMATION;
   xSemaphoreGive(renderingMutex);
@@ -170,6 +172,83 @@ void OtaUpdateActivity::onEnter() {
   xTaskCreate(&OtaUpdateActivity::taskTrampoline, "OtaUpdateActivityTask", 4096, this, 1, &displayTaskHandle);
 
   Serial.printf("[%lu] [OTA] Waiting for update source selection\n", millis());
+}
+
+void OtaUpdateActivity::prepareReleaseNotes() {
+  releaseNoteLines.clear();
+  releaseNotesScrollOffset = 0;
+
+  std::string text = updater.getReleaseNotes();
+  if (text.empty()) {
+    releaseNoteLines.push_back("No changelog was supplied with this release.");
+    return;
+  }
+  if (text.size() > 8192) {
+    text.resize(8192);
+    text += "\n[Changelog truncated on device]";
+  }
+
+  // Simplify common Markdown markers for the reader's plain-text display.
+  std::string plain;
+  plain.reserve(text.size());
+  bool atLineStart = true;
+  for (size_t i = 0; i < text.size(); ++i) {
+    const char c = text[i];
+    if (c == '\r') continue;
+    if (atLineStart) {
+      if (c == '#') continue;
+      if ((c == '-' || c == '*') && i + 1 < text.size() && text[i + 1] == ' ') {
+        plain += "•";
+        atLineStart = false;
+        continue;
+      }
+      if (c == ' ') continue;
+    }
+    plain += c;
+    atLineStart = c == '\n';
+  }
+
+  const int maxWidth = renderer.getScreenWidth() - 36;
+  std::string current;
+  std::string word;
+  const auto flushCurrent = [&]() {
+    if (!current.empty()) {
+      releaseNoteLines.push_back(current);
+      current.clear();
+    }
+  };
+  const auto addWord = [&]() {
+    if (word.empty()) return;
+    const std::string candidate = current.empty() ? word : current + " " + word;
+    if (!current.empty() && renderer.text.getWidth(kReleaseNotesFont, candidate.c_str()) > maxWidth) {
+      flushCurrent();
+    }
+    if (renderer.text.getWidth(kReleaseNotesFont, word.c_str()) > maxWidth) {
+      releaseNoteLines.push_back(renderer.text.truncate(kReleaseNotesFont, word.c_str(), maxWidth));
+    } else {
+      current = current.empty() ? word : current + " " + word;
+    }
+    word.clear();
+  };
+
+  for (size_t i = 0; i <= plain.size(); ++i) {
+    const char c = i < plain.size() ? plain[i] : '\n';
+    if (c == '\n') {
+      addWord();
+      if (current.empty()) {
+        if (releaseNoteLines.empty() || !releaseNoteLines.back().empty()) releaseNoteLines.push_back("");
+      } else {
+        flushCurrent();
+      }
+    } else if (c == ' ' || c == '\t') {
+      addWord();
+    } else {
+      word.push_back(c);
+    }
+  }
+
+  while (!releaseNoteLines.empty() && releaseNoteLines.back().empty()) releaseNoteLines.pop_back();
+  if (releaseNoteLines.empty()) releaseNoteLines.push_back("No changelog was supplied with this release.");
 }
 
 void OtaUpdateActivity::scanSdFirmwareFiles() {
@@ -263,7 +342,7 @@ void OtaUpdateActivity::render() {
   const int bodyTop = dividerY;
 
   if (state == SOURCE_SELECTION) {
-    constexpr const char* items[] = {"Online update", "SD card firmware"};
+    constexpr const char* items[] = {"GitHub firmware update", "SD card firmware"};
     for (int i = 0; i < 2; ++i) {
       const int itemY = bodyTop + i * kSourceItemHeight;
       const bool selected = sourceSelectedIndex == i;
@@ -285,15 +364,39 @@ void OtaUpdateActivity::render() {
     renderButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else if (state == CHECKING_FOR_UPDATE) {
     const int centerY = dividerY + (screenHeight - dividerY - 80) / 2;
-    renderer.text.centered(ATKINSON_HYPERLEGIBLE_10_FONT_ID, centerY, "This may take a moment.", true,
+    renderer.text.centered(ATKINSON_HYPERLEGIBLE_10_FONT_ID, centerY, "Checking GitHub releases...", true,
                            EpdFontFamily::REGULAR);
   } else if (state == WAITING_CONFIRMATION) {
-    renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, 20, bodyTop, "Current Version: " INX_VERSION, true,
+    renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, 18, bodyTop + 2, "Current: " INX_VERSION, true,
                          EpdFontFamily::REGULAR);
-    const std::string newVer = "New Version: " + updater.getLatestVersion();
-    renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, 20, bodyTop + 28, newVer.c_str(), true,
-                         EpdFontFamily::REGULAR);
-    const auto labels = mappedInput.mapLabels("Cancel", "Update", "", "");
+    const std::string newVer = "Available: " + updater.getLatestVersion();
+    renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, 18, bodyTop + 29, newVer.c_str(), true,
+                         EpdFontFamily::BOLD);
+    renderer.line.render(18, bodyTop + 57, pageWidth - 18, bodyTop + 57, true, LineRender::Style::Dotted);
+
+    const int firstLineY = bodyTop + 67;
+    const int notesBottom = screenHeight - 44;
+    const int lineHeight = renderer.text.getLineHeight(kReleaseNotesFont) + 4;
+    const int visibleLines = std::max(1, (notesBottom - firstLineY) / lineHeight);
+    const int maxScroll = std::max(0, static_cast<int>(releaseNoteLines.size()) - visibleLines);
+    releaseNotesScrollOffset = std::max(0, std::min(releaseNotesScrollOffset, maxScroll));
+    for (int i = 0; i < visibleLines && releaseNotesScrollOffset + i < static_cast<int>(releaseNoteLines.size());
+         ++i) {
+      const std::string& line = releaseNoteLines[static_cast<size_t>(releaseNotesScrollOffset + i)];
+      if (!line.empty()) {
+        renderer.text.render(kReleaseNotesFont, 18, firstLineY + i * lineHeight, line.c_str(), true,
+                             EpdFontFamily::REGULAR);
+      }
+    }
+    if (maxScroll > 0) {
+      char position[20] = {};
+      snprintf(position, sizeof(position), "%d/%d", releaseNotesScrollOffset + 1, maxScroll + 1);
+      const int positionWidth = renderer.text.getWidth(kReleaseNotesFont, position);
+      renderer.text.render(kReleaseNotesFont, pageWidth - positionWidth - 18, bodyTop + 59, position, true,
+                           EpdFontFamily::REGULAR);
+    }
+
+    const auto labels = mappedInput.mapLabels("Cancel", "Install", "Up", "Down");
     renderButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else if (state == WAITING_SD_SELECTION) {
     const int totalFiles = static_cast<int>(sdFirmwareFiles.size());
@@ -444,6 +547,20 @@ void OtaUpdateActivity::loop() {
   }
 
   if (state == WAITING_CONFIRMATION) {
+    const int lineHeight = renderer.text.getLineHeight(kReleaseNotesFont) + 4;
+    const int visibleLines =
+        std::max(1, (renderer.getScreenHeight() - 44 - (UiTheme::DRAWER_PAGE_HEADER_HEIGHT + 67)) / lineHeight);
+    const int maxScroll = std::max(0, static_cast<int>(releaseNoteLines.size()) - visibleLines);
+    if (mappedInput.wasPressed(MenuNav::itemPrev())) {
+      releaseNotesScrollOffset = std::max(0, releaseNotesScrollOffset - 1);
+      updateRequired = true;
+      return;
+    }
+    if (mappedInput.wasPressed(MenuNav::itemNext())) {
+      releaseNotesScrollOffset = std::min(maxScroll, releaseNotesScrollOffset + 1);
+      updateRequired = true;
+      return;
+    }
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       Serial.printf("[%lu] [OTA] New update available, starting download...\n", millis());
       xSemaphoreTake(renderingMutex, portMAX_DELAY);

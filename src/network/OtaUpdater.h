@@ -11,6 +11,7 @@
 class OtaUpdater {
   bool updateAvailable = false;
   std::string latestVersion;
+  std::string releaseNotes;
   std::string otaUrl;
   size_t otaSize = 0;
   size_t processedSize = 0;
@@ -53,6 +54,8 @@ class OtaUpdater {
   bool isUpdateNewer() const;
   /** Return the version string of the latest release found. */
   const std::string& getLatestVersion() const;
+  /** Return the changelog body supplied with the latest GitHub release. */
+  const std::string& getReleaseNotes() const;
   /** Check GitHub for the latest release, running the request on a background task. */
   OtaUpdaterError checkForUpdate();
   /** Download and install the latest update over HTTPS. */

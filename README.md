@@ -10,6 +10,18 @@ E-inx is a community firmware for Xteink e-paper readers, forked from [Inx](http
 
 ![](./docs/images/cover.jpg)
 
+## What's New in E-inx 1.3.17-3_update
+
+- **GitHub firmware updates on the reader** — the Firmware Update screen now has an explicit GitHub update action
+  that checks the latest E-inx release, shows its version and changelog, and asks for confirmation before download
+  and installation. Long changelogs scroll with the side buttons.
+- **The same GitHub updater in the Web UI** — the browser Firmware Update page can run the same release check and
+  validated OTA installation, with a scrollable changelog and confirmation controls. Existing local firmware upload
+  and on-device SD-card installation remain available.
+- **Release-aware version and asset selection** — numbered E-inx suffixes such as `w2` and `3_update` compare in
+  release order, and the updater prefers the release workflow's `firmware.bin` while accepting named E-inx firmware
+  assets.
+
 ## What's New in E-inx 1.3.17-w2
 
 - **Smooth first page turn after wake** — X3 wake initialization now performs one guarded full synchronization plus
