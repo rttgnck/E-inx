@@ -10,6 +10,18 @@ E-inx is a community firmware for Xteink e-paper readers, forked from [Inx](http
 
 ![](./docs/images/cover.jpg)
 
+## What's New in E-inx 1.3.17-5_update
+
+- **Live GitHub update progress in the Web UI** — GitHub firmware installation now runs in the background while
+  the page polls a dedicated status endpoint and shows percentage, transferred bytes, validation, errors, and the
+  pending reboot. Reloading the page reconnects to an update already in progress.
+- **Visible device download/install progress** — both on-device GitHub update paths show a combined streamed
+  download-and-install bar with percentage and byte counts.
+- **E-ink-friendly progress refreshes** — progress counters are thread-safe and device screens redraw at useful
+  five-percent intervals, avoiding a frozen-looking bar without needlessly flashing on every network chunk.
+- **Wider Update Server action** — the bottom hint automatically expands and reflows so `GitHub Update` fits inside
+  its button for every supported front-button mapping.
+
 ## What's New in E-inx 1.3.17-4_update
 
 - **GitHub Update on the Update Server screen** — the existing Update Server continues to start normally, while

@@ -43,6 +43,8 @@ class OtaUpdateActivity : public ActivityWithSubactivity, public Menu {
   const std::function<void()> goBack;
   State state = SOURCE_SELECTION;
   OtaUpdater updater;
+  int displayedProgressPercent = -1;
+  bool installingFromGithub = false;
 
   void onWifiSelectionComplete(bool success);
   static void taskTrampoline(void* param);

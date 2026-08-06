@@ -427,6 +427,8 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate() {
   esp_https_ota_handle_t ota_handle = NULL;
   esp_err_t esp_err;
 
+  processedSize.store(0, std::memory_order_relaxed);
+  totalSize.store(otaSize, std::memory_order_relaxed);
   render = false;
 
   esp_http_client_config_t client_config = {};
@@ -464,6 +466,7 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate() {
   if (esp_err != ESP_OK) {
     Serial.printf("[%lu] [OTA] esp_https_ota_perform Failed: %s\n", millis(), esp_err_to_name(esp_err));
     esp_https_ota_finish(ota_handle);
+    render = false;
     return HTTP_ERROR;
   }
 
@@ -471,15 +474,19 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate() {
     Serial.printf("[%lu] [OTA] esp_https_ota_is_complete_data_received Failed: %s\n", millis(),
                   esp_err_to_name(esp_err));
     esp_https_ota_finish(ota_handle);
+    render = false;
     return INTERNAL_UPDATE_ERROR;
   }
 
   esp_err = esp_https_ota_finish(ota_handle);
   if (esp_err != ESP_OK) {
     Serial.printf("[%lu] [OTA] esp_https_ota_finish Failed: %s\n", millis(), esp_err_to_name(esp_err));
+    render = false;
     return INTERNAL_UPDATE_ERROR;
   }
 
+  processedSize.store(totalSize.load(std::memory_order_relaxed), std::memory_order_relaxed);
+  render = true;
   Serial.printf("[%lu] [OTA] Update completed\n", millis());
   return OK;
 }
@@ -547,11 +554,12 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdateFromSd(const char* firmware
   totalSize = firmwareSize;
   render = false;
 
-  while (processedSize < firmwareSize) {
-    const size_t toRead = std::min(sizeof(buffer), firmwareSize - processedSize);
+  while (processedSize.load(std::memory_order_relaxed) < firmwareSize) {
+    const size_t currentSize = processedSize.load(std::memory_order_relaxed);
+    const size_t toRead = std::min(sizeof(buffer), firmwareSize - currentSize);
     const int readBytes = file.read(buffer, toRead);
     if (readBytes <= 0) {
-      Serial.printf("[%lu] [OTA] SD read failed at %u / %u\n", millis(), static_cast<unsigned>(processedSize),
+      Serial.printf("[%lu] [OTA] SD read failed at %u / %u\n", millis(), static_cast<unsigned>(currentSize),
                     static_cast<unsigned>(firmwareSize));
       esp_ota_abort(otaHandle);
       file.close();
@@ -566,7 +574,7 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdateFromSd(const char* firmware
       return INTERNAL_UPDATE_ERROR;
     }
 
-    processedSize += static_cast<size_t>(readBytes);
+    processedSize.fetch_add(static_cast<size_t>(readBytes), std::memory_order_relaxed);
     render = true;
     esp_task_wdt_reset();
     vTaskDelay(1);

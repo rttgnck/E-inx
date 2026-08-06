@@ -178,6 +178,7 @@ class LocalNetworkActivity final : public ActivityWithSubactivity, public Menu {
   int githubReleaseNotesScrollOffset = 0;          /**< First visible changelog line */
   std::string githubUpdateError;                    /**< Last device-side GitHub update error */
   unsigned long githubRestartAt = 0;               /**< Reboot deadline after a successful install */
+  int githubDisplayedPercent = -1;                 /**< Last e-ink progress percentage rendered */
   unsigned long lastHandleClientTime;     /**< Timestamp of last client handling */
 
   const std::function<void()> onGoBack; /**< Callback invoked when going back */

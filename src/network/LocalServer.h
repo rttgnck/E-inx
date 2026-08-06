@@ -9,6 +9,7 @@
 #include <WebSocketsServer.h>
 #include <WiFiUdp.h>
 
+#include <atomic>
 #include <memory>
 #include <string>
 #include <utility>
@@ -58,6 +59,13 @@ class LocalServer {
     FAILED,
   };
 
+  enum class GithubInstallState {
+    IDLE,
+    RUNNING,
+    SUCCEEDED,
+    FAILED,
+  };
+
   std::unique_ptr<WebServer> server = nullptr;
   std::unique_ptr<WebSocketsServer> wsServer = nullptr;
   bool running = false;
@@ -80,6 +88,10 @@ class LocalServer {
 #ifndef SIMULATOR
   std::unique_ptr<OtaUpdater> githubUpdater;
 #endif
+  std::atomic<GithubInstallState> githubInstallState{GithubInstallState::IDLE};
+  std::atomic<unsigned long> githubInstallRestartAt{0};
+  std::string githubInstallVersion;
+  std::string githubInstallError;
 
   void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length);
   static void wsEventCallback(uint8_t num, WStype_t type, uint8_t* payload, size_t length);
@@ -141,9 +153,15 @@ class LocalServer {
   void handleFirmwareStatus() const;
   void handleGithubFirmwareCheck();
   void handleGithubFirmwareInstall();
+  void handleGithubFirmwareInstallStatus() const;
+#ifndef SIMULATOR
+  static void githubInstallTaskEntry(void* context);
+  void runGithubInstallTask();
+#endif
   void handleFirmwareUpload();
   void handleFirmwareUploadPost();
   void abortFirmwareUpload(const char* error);
   void resetFirmwareUpload();
   const char* firmwareUploadStateName() const;
+  const char* githubInstallStateName() const;
 };

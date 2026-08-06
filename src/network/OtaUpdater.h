@@ -5,6 +5,7 @@
  * @brief Public interface and types for OtaUpdater.
  */
 
+#include <atomic>
 #include <functional>
 #include <string>
 
@@ -14,9 +15,9 @@ class OtaUpdater {
   std::string releaseNotes;
   std::string otaUrl;
   size_t otaSize = 0;
-  size_t processedSize = 0;
-  size_t totalSize = 0;
-  bool render = false;
+  std::atomic<size_t> processedSize{0};
+  std::atomic<size_t> totalSize{0};
+  std::atomic<bool> render{false};
 
  public:
   enum OtaUpdaterError {
@@ -40,13 +41,13 @@ class OtaUpdater {
   size_t getOtaSize() const { return otaSize; }
 
   /** Return the number of bytes processed so far during an in-progress update. */
-  size_t getProcessedSize() const { return processedSize; }
+  size_t getProcessedSize() const { return processedSize.load(std::memory_order_relaxed); }
 
   /** Return the total size in bytes of the update currently being installed. */
-  size_t getTotalSize() const { return totalSize; }
+  size_t getTotalSize() const { return totalSize.load(std::memory_order_relaxed); }
 
   /** Return whether progress should currently be rendered to the screen. */
-  bool getRender() const { return render; }
+  bool getRender() const { return render.load(std::memory_order_relaxed); }
 
   /** Construct an OtaUpdater with no update state. */
   OtaUpdater() = default;
