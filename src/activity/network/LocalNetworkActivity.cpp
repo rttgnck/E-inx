@@ -10,10 +10,13 @@
 #include <WiFi.h>
 #include <esp_task_wdt.h>
 
+#include <algorithm>
+
 #include "WifiSelectionActivity.h"
 #include "state/NetworkCredential.h"
 #include "system/Fonts.h"
 #include "system/MappedInputManager.h"
+#include "system/MenuNav.h"
 #include "system/ScreenComponents.h"
 #include "system/UiTheme.h"
 
@@ -26,6 +29,8 @@ constexpr int SMALL_SPACING = 25;
 constexpr int SECTION_SPACING = 40;
 constexpr int BOTTOM_AREA_HEIGHT = 80;
 constexpr unsigned long SAVED_WIFI_TIMEOUT_MS = 15000;
+constexpr int GITHUB_NOTES_FONT = ATKINSON_HYPERLEGIBLE_8_FONT_ID;
+constexpr int GITHUB_NOTES_FIRST_OFFSET = 67;
 
 /**
  * @brief Renders the header section for the activity
@@ -49,6 +54,36 @@ std::string truncateString(const std::string& str, int maxLength) {
   std::string result = str;
   result.replace(maxLength - 3, result.length() - (maxLength - 3), "...");
   return result;
+}
+
+std::string formatBytes(const size_t bytes) {
+  char buffer[24] = {};
+  if (bytes >= 1024 * 1024) {
+    snprintf(buffer, sizeof(buffer), "%.1f MB", static_cast<double>(bytes) / (1024.0 * 1024.0));
+  } else if (bytes >= 1024) {
+    snprintf(buffer, sizeof(buffer), "%.1f KB", static_cast<double>(bytes) / 1024.0);
+  } else {
+    snprintf(buffer, sizeof(buffer), "%u B", static_cast<unsigned>(bytes));
+  }
+  return std::string(buffer);
+}
+
+const char* githubUpdateErrorMessage(const OtaUpdater::OtaUpdaterError error) {
+  switch (error) {
+    case OtaUpdater::NO_UPDATE:
+      return "Release has no compatible firmware image";
+    case OtaUpdater::HTTP_ERROR:
+      return "Could not reach GitHub or download firmware";
+    case OtaUpdater::JSON_PARSE_ERROR:
+      return "Could not read the GitHub release details";
+    case OtaUpdater::UPDATE_OLDER_ERROR:
+      return "The published release is not newer";
+    case OtaUpdater::OOM_ERROR:
+      return "Not enough memory to complete the update";
+    case OtaUpdater::INTERNAL_UPDATE_ERROR:
+    default:
+      return "The firmware update could not be completed";
+  }
 }
 }  // namespace
 
@@ -212,6 +247,142 @@ void LocalNetworkActivity::stopWebServer() {
   webServer.reset();
 }
 
+void LocalNetworkActivity::prepareGithubReleaseNotes() {
+  githubReleaseNoteLines.clear();
+  githubReleaseNotesScrollOffset = 0;
+
+  std::string text = githubUpdater.getReleaseNotes();
+  if (text.empty()) {
+    githubReleaseNoteLines.push_back("No changelog was supplied with this release.");
+    return;
+  }
+  if (text.size() > 8192) {
+    text.resize(8192);
+    text += "\n[Changelog truncated on device]";
+  }
+
+  std::string plain;
+  plain.reserve(text.size());
+  bool atLineStart = true;
+  for (size_t i = 0; i < text.size(); ++i) {
+    const char c = text[i];
+    if (c == '\r') continue;
+    if (atLineStart) {
+      if (c == '#') continue;
+      if ((c == '-' || c == '*') && i + 1 < text.size() && text[i + 1] == ' ') {
+        plain += "•";
+        atLineStart = false;
+        continue;
+      }
+      if (c == ' ') continue;
+    }
+    plain += c;
+    atLineStart = c == '\n';
+  }
+
+  const int maxWidth = renderer.getScreenWidth() - 36;
+  std::string current;
+  std::string word;
+  const auto flushCurrent = [&]() {
+    if (!current.empty()) {
+      githubReleaseNoteLines.push_back(current);
+      current.clear();
+    }
+  };
+  const auto addWord = [&]() {
+    if (word.empty()) return;
+    const std::string candidate = current.empty() ? word : current + " " + word;
+    if (!current.empty() && renderer.text.getWidth(GITHUB_NOTES_FONT, candidate.c_str()) > maxWidth) {
+      flushCurrent();
+    }
+    if (renderer.text.getWidth(GITHUB_NOTES_FONT, word.c_str()) > maxWidth) {
+      githubReleaseNoteLines.push_back(renderer.text.truncate(GITHUB_NOTES_FONT, word.c_str(), maxWidth));
+    } else {
+      current = current.empty() ? word : current + " " + word;
+    }
+    word.clear();
+  };
+
+  for (size_t i = 0; i <= plain.size(); ++i) {
+    const char c = i < plain.size() ? plain[i] : '\n';
+    if (c == '\n') {
+      addWord();
+      if (current.empty()) {
+        if (githubReleaseNoteLines.empty() || !githubReleaseNoteLines.back().empty()) {
+          githubReleaseNoteLines.push_back("");
+        }
+      } else {
+        flushCurrent();
+      }
+    } else if (c == ' ' || c == '\t') {
+      addWord();
+    } else {
+      word.push_back(c);
+    }
+  }
+
+  while (!githubReleaseNoteLines.empty() && githubReleaseNoteLines.back().empty()) {
+    githubReleaseNoteLines.pop_back();
+  }
+  if (githubReleaseNoteLines.empty()) {
+    githubReleaseNoteLines.push_back("No changelog was supplied with this release.");
+  }
+}
+
+void LocalNetworkActivity::startGithubUpdateCheck() {
+  if (!updateLanding || WiFi.status() != WL_CONNECTED) return;
+
+  stopWebServer();
+  state = LocalNetworkState::GITHUB_CHECKING;
+  githubUpdateError.clear();
+  updateRequired = true;
+  vTaskDelay(pdMS_TO_TICKS(350));
+
+  Serial.printf("[%lu] [LOCALNET] Checking GitHub firmware from Update Server screen\n", millis());
+  const auto result = githubUpdater.checkForUpdate();
+  if (result != OtaUpdater::OK) {
+    githubUpdateError = githubUpdateErrorMessage(result);
+    state = LocalNetworkState::GITHUB_FAILED;
+  } else if (!githubUpdater.isUpdateNewer()) {
+    state = LocalNetworkState::GITHUB_NO_UPDATE;
+  } else {
+    prepareGithubReleaseNotes();
+    state = LocalNetworkState::GITHUB_CONFIRMATION;
+  }
+  updateRequired = true;
+}
+
+void LocalNetworkActivity::installGithubUpdate() {
+  state = LocalNetworkState::GITHUB_INSTALLING;
+  updateRequired = true;
+  vTaskDelay(pdMS_TO_TICKS(50));
+
+  Serial.printf("[%lu] [LOCALNET] Installing GitHub firmware %s\n", millis(),
+                githubUpdater.getLatestVersion().c_str());
+  const auto result = githubUpdater.installUpdate();
+  if (result != OtaUpdater::OK) {
+    githubUpdateError = githubUpdateErrorMessage(result);
+    state = LocalNetworkState::GITHUB_FAILED;
+    updateRequired = true;
+    return;
+  }
+
+  state = LocalNetworkState::GITHUB_FINISHED;
+  githubRestartAt = millis() + 2500;
+  updateRequired = true;
+}
+
+void LocalNetworkActivity::returnToUpdateServer() {
+  githubRestartAt = 0;
+  if (WiFi.status() != WL_CONNECTED) {
+    startSavedWifiConnection();
+    return;
+  }
+  state = LocalNetworkState::SERVER_STARTING;
+  updateRequired = true;
+  startWebServer();
+}
+
 /**
  * @brief Main loop processing WiFi monitoring and web server requests
  */
@@ -220,6 +391,54 @@ void LocalNetworkActivity::loop() {
     subActivity->loop();
     if (wifiSelectionCompletionPending) {
       finishWifiSelection();
+    }
+    return;
+  }
+
+  if (state == LocalNetworkState::GITHUB_FINISHED) {
+    if (githubRestartAt != 0 && static_cast<long>(millis() - githubRestartAt) >= 0) {
+      githubRestartAt = 0;
+#ifndef SIMULATOR
+      ESP.restart();
+#endif
+    }
+    return;
+  }
+
+  if (state == LocalNetworkState::GITHUB_CONFIRMATION) {
+    const int lineHeight = renderer.text.getLineHeight(GITHUB_NOTES_FONT) + 4;
+    const int visibleLines =
+        std::max(1, (renderer.getScreenHeight() - 44 -
+                     (UiTheme::DRAWER_PAGE_HEADER_HEIGHT + GITHUB_NOTES_FIRST_OFFSET)) /
+                        lineHeight);
+    const int maxScroll = std::max(0, static_cast<int>(githubReleaseNoteLines.size()) - visibleLines);
+    if (mappedInput.wasPressed(MenuNav::itemPrev())) {
+      githubReleaseNotesScrollOffset = std::max(0, githubReleaseNotesScrollOffset - 1);
+      updateRequired = true;
+      return;
+    }
+    if (mappedInput.wasPressed(MenuNav::itemNext())) {
+      githubReleaseNotesScrollOffset = std::min(maxScroll, githubReleaseNotesScrollOffset + 1);
+      updateRequired = true;
+      return;
+    }
+    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+      installGithubUpdate();
+      return;
+    }
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+      returnToUpdateServer();
+    }
+    return;
+  }
+
+  if (state == LocalNetworkState::GITHUB_NO_UPDATE || state == LocalNetworkState::GITHUB_FAILED) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+      startGithubUpdateCheck();
+      return;
+    }
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+      returnToUpdateServer();
     }
     return;
   }
@@ -278,6 +497,12 @@ void LocalNetworkActivity::loop() {
     }
   }
 
+  if (state == LocalNetworkState::SERVER_RUNNING && updateLanding &&
+      mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    startGithubUpdateCheck();
+    return;
+  }
+
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     Serial.printf("[%lu] [LOCALNET] Back button pressed\n", millis());
     if (onGoBack) onGoBack();
@@ -289,7 +514,7 @@ void LocalNetworkActivity::loop() {
  */
 void LocalNetworkActivity::displayTaskLoop() {
   while (true) {
-    if (updateRequired) {
+    if (updateRequired || (state == LocalNetworkState::GITHUB_INSTALLING && githubUpdater.getRender())) {
       updateRequired = false;
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       render();
@@ -310,6 +535,77 @@ void LocalNetworkActivity::render() const {
 
   if (state == LocalNetworkState::SERVER_RUNNING) {
     renderServerRunning();
+  } else if (state == LocalNetworkState::GITHUB_CHECKING) {
+    const int contentStart = renderActivityHeader(renderer, startY, "GitHub Update");
+    const int centerY = contentStart + (screenHeight - contentStart - BOTTOM_AREA_HEIGHT) / 2;
+    renderer.text.centered(ATKINSON_HYPERLEGIBLE_10_FONT_ID, centerY - 12, "Checking GitHub releases...", true,
+                           EpdFontFamily::BOLD);
+    renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, centerY + 24, "This may take a moment.");
+  } else if (state == LocalNetworkState::GITHUB_CONFIRMATION) {
+    const int bodyTop = renderActivityHeader(renderer, startY, "GitHub Update");
+    renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, 18, bodyTop + 2, "Current: " INX_VERSION, true);
+    const std::string available = "Available: " + githubUpdater.getLatestVersion();
+    renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, 18, bodyTop + 29, available.c_str(), true,
+                         EpdFontFamily::BOLD);
+    renderer.line.render(18, bodyTop + 57, renderer.getScreenWidth() - 18, bodyTop + 57, true,
+                         LineRender::Style::Dotted);
+
+    const int firstLineY = bodyTop + GITHUB_NOTES_FIRST_OFFSET;
+    const int notesBottom = screenHeight - 44;
+    const int lineHeight = renderer.text.getLineHeight(GITHUB_NOTES_FONT) + 4;
+    const int visibleLines = std::max(1, (notesBottom - firstLineY) / lineHeight);
+    const int maxScroll = std::max(0, static_cast<int>(githubReleaseNoteLines.size()) - visibleLines);
+    for (int i = 0;
+         i < visibleLines && githubReleaseNotesScrollOffset + i < static_cast<int>(githubReleaseNoteLines.size());
+         ++i) {
+      const std::string& line = githubReleaseNoteLines[static_cast<size_t>(githubReleaseNotesScrollOffset + i)];
+      if (!line.empty()) {
+        renderer.text.render(GITHUB_NOTES_FONT, 18, firstLineY + i * lineHeight, line.c_str(), true);
+      }
+    }
+    if (maxScroll > 0) {
+      char position[20] = {};
+      snprintf(position, sizeof(position), "%d/%d", githubReleaseNotesScrollOffset + 1, maxScroll + 1);
+      const int positionWidth = renderer.text.getWidth(GITHUB_NOTES_FONT, position);
+      renderer.text.render(GITHUB_NOTES_FONT, renderer.getScreenWidth() - positionWidth - 18, bodyTop + 59, position,
+                           true);
+    }
+  } else if (state == LocalNetworkState::GITHUB_INSTALLING) {
+    const int contentStart = renderActivityHeader(renderer, startY, "GitHub Update");
+    const int centerY = contentStart + (screenHeight - contentStart - BOTTOM_AREA_HEIGHT) / 2;
+    const size_t processed = githubUpdater.getProcessedSize();
+    const size_t total = githubUpdater.getTotalSize();
+    const int percent = total > 0 ? std::min(100, static_cast<int>((processed * 100) / total)) : 0;
+    renderer.text.centered(ATKINSON_HYPERLEGIBLE_14_FONT_ID, centerY - 70, "Installing firmware", true,
+                           EpdFontFamily::BOLD);
+    renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, centerY - 32,
+                           "Keep the reader powered until it restarts.");
+    const int barWidth = std::min(300, renderer.getScreenWidth() - 72);
+    const int barX = (renderer.getScreenWidth() - barWidth) / 2;
+    const int barY = centerY + 8;
+    renderer.rectangle.render(barX, barY, barWidth, 6, true);
+    renderer.rectangle.fill(barX + 1, barY + 1, std::max(1, (barWidth - 2) * percent / 100), 4, true);
+    const std::string progress = formatBytes(processed) + " / " + formatBytes(total);
+    renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, barY + 26, progress.c_str());
+  } else if (state == LocalNetworkState::GITHUB_NO_UPDATE) {
+    const int contentStart = renderActivityHeader(renderer, startY, "GitHub Update");
+    const int centerY = contentStart + (screenHeight - contentStart - BOTTOM_AREA_HEIGHT) / 2;
+    renderer.text.centered(ATKINSON_HYPERLEGIBLE_14_FONT_ID, centerY - 24, "Already up to date", true,
+                           EpdFontFamily::BOLD);
+    const std::string latest = "Latest release: " + githubUpdater.getLatestVersion();
+    renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, centerY + 20, latest.c_str());
+  } else if (state == LocalNetworkState::GITHUB_FAILED) {
+    const int contentStart = renderActivityHeader(renderer, startY, "GitHub Update");
+    const int centerY = contentStart + (screenHeight - contentStart - BOTTOM_AREA_HEIGHT) / 2;
+    renderer.text.centered(ATKINSON_HYPERLEGIBLE_14_FONT_ID, centerY - 24, "Update failed", true,
+                           EpdFontFamily::BOLD);
+    renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, centerY + 20, githubUpdateError.c_str());
+  } else if (state == LocalNetworkState::GITHUB_FINISHED) {
+    const int contentStart = renderActivityHeader(renderer, startY, "GitHub Update");
+    const int centerY = contentStart + (screenHeight - contentStart - BOTTOM_AREA_HEIGHT) / 2;
+    renderer.text.centered(ATKINSON_HYPERLEGIBLE_14_FONT_ID, centerY - 22, "Update installed", true,
+                           EpdFontFamily::BOLD);
+    renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, centerY + 20, "Restarting the reader...");
   } else if (state == LocalNetworkState::WIFI_AUTO_CONNECTING) {
     const int contentStart = renderActivityHeader(renderer, startY, updateLanding ? "Update Server" : "Local Network");
     const int centerY = contentStart + (screenHeight - contentStart - BOTTOM_AREA_HEIGHT) / 2;
@@ -330,7 +626,19 @@ void LocalNetworkActivity::render() const {
     renderer.text.centered(ATKINSON_HYPERLEGIBLE_10_FONT_ID, centerY + 10, "Press Back to try again");
   }
 
-  auto labels = mappedInput.mapLabels("« Back", "", "", "");
+  MappedInputManager::Labels labels;
+  if (state == LocalNetworkState::SERVER_RUNNING && updateLanding) {
+    labels = mappedInput.mapLabels("« Back", "GitHub Update", "", "");
+  } else if (state == LocalNetworkState::GITHUB_CONFIRMATION) {
+    labels = mappedInput.mapLabels("Cancel", "Install", "Up", "Down");
+  } else if (state == LocalNetworkState::GITHUB_NO_UPDATE || state == LocalNetworkState::GITHUB_FAILED) {
+    labels = mappedInput.mapLabels("« Server", "Retry", "", "");
+  } else if (state == LocalNetworkState::GITHUB_CHECKING || state == LocalNetworkState::GITHUB_INSTALLING ||
+             state == LocalNetworkState::GITHUB_FINISHED) {
+    labels = mappedInput.mapLabels("", "", "", "");
+  } else {
+    labels = mappedInput.mapLabels("« Back", "", "", "");
+  }
   renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
