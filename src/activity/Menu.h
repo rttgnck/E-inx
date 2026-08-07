@@ -8,6 +8,8 @@
 
 #include <GfxRenderer.h>
 
+#include "images/Apps.h"
+#include "images/Games.h"
 #include "images/Library.h"
 #include "images/News.h"
 #include "images/Recent.h"
@@ -76,7 +78,17 @@ class Menu {
           renderer.bitmap.icon(Recent, iconX, iconY, ICON_SIZE, ICON_SIZE);
           break;
         case 1:
-          renderer.bitmap.icon(News, iconX, iconY, ICON_SIZE, ICON_SIZE);
+          switch (SETTINGS.tab2Content) {
+            case SystemSetting::TAB2_GAMES:
+              renderer.bitmap.icon(Games, iconX, iconY, ICON_SIZE, ICON_SIZE);
+              break;
+            case SystemSetting::TAB2_APPS:
+              renderer.bitmap.icon(Apps, iconX, iconY, ICON_SIZE, ICON_SIZE);
+              break;
+            default:
+              renderer.bitmap.icon(News, iconX, iconY, ICON_SIZE, ICON_SIZE);
+              break;
+          }
           break;
         case 2:
           renderer.bitmap.icon(Library, iconX, iconY, ICON_SIZE, ICON_SIZE);

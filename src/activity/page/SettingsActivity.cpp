@@ -73,6 +73,8 @@ std::vector<SettingInfo> buildSystemPageSettings(const bool x3) {
   settings.push_back(
       SettingInfo::Enum("Library Mode", &SystemSetting::libraryMode, {"List", "Grid"}, GroupType::DEVICE_DISPLAY));
   settings.push_back(SettingInfo::Toggle("Shelf mode", &SystemSetting::libraryShelfEnabled, GroupType::DEVICE_DISPLAY));
+  settings.push_back(SettingInfo::Enum("Tab 2 Content", &SystemSetting::tab2Content, {"News", "Games", "Apps"},
+                                       GroupType::DEVICE_DISPLAY));
   settings.push_back(SettingInfo::Enum("Files default page", &SystemSetting::libraryViewMode,
                                        {"Folders", "Books", "Tags", "Shelf"}, GroupType::DEVICE_DISPLAY));
   settings.push_back(SettingInfo::Value("Recent books shown", &SystemSetting::recentVisibleCount, {1, 8, 1},

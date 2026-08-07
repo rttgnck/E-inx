@@ -398,6 +398,13 @@ class SystemSetting {
     BOOT_SETTING_COUNT
   };
 
+  enum TAB2_CONTENT {
+    TAB2_NEWS = 0,   ///< News reader (default)
+    TAB2_GAMES = 1,  ///< Game selection hub
+    TAB2_APPS = 2,   ///< Unified apps drawer
+    TAB2_CONTENT_COUNT
+  };
+
   /**
    * @brief Legacy image-dither values kept only for settings-file compatibility; rendering always uses Floyd.
    */
@@ -523,6 +530,7 @@ class SystemSetting {
   uint8_t librarySortMode = 0;
 
   uint8_t bootSetting = RECENT_PAGE;  ///< Boot destination setting
+  uint8_t tab2Content = TAB2_NEWS;    ///< Tab 2 slot content (News / Games / Apps)
 
   /**
    * @brief Page auto-turn interval in seconds
