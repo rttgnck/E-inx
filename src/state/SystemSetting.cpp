@@ -41,7 +41,7 @@ void readAndValidate(FsFile& file, uint8_t& member, const uint8_t maxValue) {
 
 namespace {
 constexpr uint8_t SETTINGS_FILE_VERSION = 41;
-constexpr uint8_t SETTINGS_COUNT = 92;
+constexpr uint8_t SETTINGS_COUNT = 93;
 /** Last field index in v9 (1-based count of persisted pods through displayImageDither). */
 constexpr uint8_t SETTINGS_COUNT_V9 = 40;
 constexpr uint8_t LEGACY_SLEEP_IMAGE_ADVANCE_POWER = 7;
@@ -263,6 +263,7 @@ uint32_t settingsHash(const SystemSetting& settings, const uint8_t fontFamilyToS
   hashPod(hash, settings.x3ReinforceThumbnails);
   hashPod(hash, settings.x3ReinforcePeriodicClean);
   hashPod(hash, settings.x3ReinforceCleanInterval);
+  hashPod(hash, settings.tab2Content);
   return hash;
 }
 }  // namespace
@@ -324,6 +325,7 @@ bool SystemSetting::saveToFile() const {
     if (mut->x3ReinforcePeriodicClean > 1) mut->x3ReinforcePeriodicClean = 1;
     if (mut->x3ReinforceCleanInterval >= X3_REINFORCE_CLEAN_INTERVAL_COUNT)
       mut->x3ReinforceCleanInterval = X3_REINFORCE_CLEAN_30;
+    if (mut->tab2Content >= TAB2_CONTENT_COUNT) mut->tab2Content = TAB2_NEWS;
     mut->sleepImageRotationMinutes = normalizeSleepImageRotationMinutes(mut->sleepImageRotationMinutes);
     if (mut->sleepImageRotationEnabled > 1) mut->sleepImageRotationEnabled = 1;
     if (mut->sleepImagePowerDoublePress > 1) {
@@ -447,6 +449,7 @@ bool SystemSetting::saveToFile() const {
   serialization::writePod(outputFile, x3ReinforceThumbnails);
   serialization::writePod(outputFile, x3ReinforcePeriodicClean);
   serialization::writePod(outputFile, x3ReinforceCleanInterval);
+  serialization::writePod(outputFile, tab2Content);
 
   outputFile.close();
   saveUiThemeSetting(uiTheme);
@@ -926,6 +929,10 @@ bool SystemSetting::loadFromFile() {
       readAndValidate(inputFile, x3ReinforceCleanInterval, X3_REINFORCE_CLEAN_INTERVAL_COUNT);
       ++settingsRead;
     }
+    if (settingsRead < fileSettingsCount) {
+      readAndValidate(inputFile, tab2Content, TAB2_CONTENT_COUNT);
+      ++settingsRead;
+    }
 
   } while (false);
 
@@ -1025,6 +1032,9 @@ bool SystemSetting::loadFromFile() {
   if (settingsRead < 92) {
     x3ReinforceCleanInterval = X3_REINFORCE_CLEAN_30;
   }
+  if (settingsRead < 93) {
+    tab2Content = TAB2_NEWS;
+  }
 
   if (recentVisibleCount < 1 || recentVisibleCount > 9) {
     recentVisibleCount = 9;
@@ -1105,6 +1115,9 @@ bool SystemSetting::loadFromFile() {
   }
   if (x3ReinforceCleanInterval >= X3_REINFORCE_CLEAN_INTERVAL_COUNT) {
     x3ReinforceCleanInterval = X3_REINFORCE_CLEAN_30;
+  }
+  if (tab2Content >= TAB2_CONTENT_COUNT) {
+    tab2Content = TAB2_NEWS;
   }
   sleepImageRotationMinutes = normalizeSleepImageRotationMinutes(sleepImageRotationMinutes);
   if (sleepImageRotationEnabled > 1) {

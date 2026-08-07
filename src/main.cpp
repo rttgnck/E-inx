@@ -30,6 +30,8 @@
 #include "activity/network/CalibreConnectActivity.h"
 #include "activity/network/HotspotActivity.h"
 #include "activity/network/LocalNetworkActivity.h"
+#include "activity/games/AppsActivity.h"
+#include "activity/games/GamesActivity.h"
 #include "activity/page/LibraryActivity.h"
 #include "activity/page/NewsActivity.h"
 #include "activity/page/RecentActivity.h"
@@ -343,6 +345,9 @@ void onSelectBook(const std::string& path);
 void onSelectBookNavigation(const std::string& path);
 void onGoToRecent();
 void onGoToNews();
+void onGoToTab2();
+void onGoToGames();
+void onGoToApps();
 void onGoToStatistics();
 void onGoToFileTransfer();
 void onGoToSettings();
@@ -439,9 +444,31 @@ void onGoToNews() {
   switchTo<NewsActivity>(render, input, onGoToRecent, []() { onGoToLibrary("/"); }, onGoToReader, onGoToNews);
 }
 
+void onGoToGames() {
+  switchTo<GamesActivity>(render, input, onGoToRecent, []() { onGoToLibrary("/"); });
+}
+
+void onGoToApps() {
+  switchTo<AppsActivity>(render, input, onGoToRecent, []() { onGoToLibrary("/"); }, onGoToNews, onGoToGames);
+}
+
+void onGoToTab2() {
+  switch (SETTINGS.tab2Content) {
+    case SystemSetting::TAB2_GAMES:
+      onGoToGames();
+      break;
+    case SystemSetting::TAB2_APPS:
+      onGoToApps();
+      break;
+    default:
+      onGoToNews();
+      break;
+  }
+}
+
 void onGoToRecent() {
   switchTo<RecentActivity>(
-      render, input, onGoToNews, []() { onGoToLibrary("/"); }, onGoToStatistics, onSelectBook, onSelectBookNavigation,
+      render, input, onGoToTab2, []() { onGoToLibrary("/"); }, onGoToStatistics, onSelectBook, onSelectBookNavigation,
       onGoToRecent);
 }
 
@@ -487,7 +514,7 @@ void onGoToSettings() {
  * @brief Navigates to the library activity.
  */
 void onGoToLibrary(const std::string& path) {
-  switchTo<LibraryActivity>(render, input, onGoToRecent, openReaderFromCallback, onGoToRecent, onGoToNews,
+  switchTo<LibraryActivity>(render, input, onGoToRecent, openReaderFromCallback, onGoToRecent, onGoToTab2,
                             onGoToSettings, onEditBookMetadata, path);
 }
 
