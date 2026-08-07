@@ -84,7 +84,9 @@ class GamesActivity final : public Activity, public Menu {
 
  private:
   static constexpr int GAME_COUNT = 4;
-  static constexpr int ITEM_HEIGHT = 70;
+  static constexpr int ITEM_HEIGHT = 72;
+  static constexpr int ITEM_PADDING = 10;
+  static constexpr int kInk = static_cast<int>(GfxRenderer::FillTone::Ink);
 
   struct GameInfo {
     const char* name;
@@ -146,28 +148,32 @@ class GamesActivity final : public Activity, public Menu {
     renderer.clearScreen();
 
     const int sw = renderer.getScreenWidth();
-    const int headerY = mainContentTop();
 
     if (!INX_THEME.mainTabsAtBottom()) {
       renderTabBar(renderer);
     }
 
-    const int contentY = headerY + TAB_BAR_HEIGHT + 10;
-    renderer.text.render(ATKINSON_HYPERLEGIBLE_16_FONT_ID, 30, contentY, "Games");
-    renderer.line.render(30, contentY + 28, sw - 30, contentY + 28);
+    const int contentY = mainContentTop() + 12;
+    renderer.text.render(ATKINSON_HYPERLEGIBLE_16_FONT_ID, 30, contentY, "Games", true, EpdFontFamily::BOLD);
+    renderer.line.render(30, contentY + 30, sw - 30, contentY + 30);
 
-    const int listStartY = contentY + 40;
+    const int listStartY = contentY + 46;
     for (int i = 0; i < GAME_COUNT; ++i) {
       const int itemY = listStartY + i * ITEM_HEIGHT;
       const bool selected = (i == selectedIndex);
 
       if (selected) {
-        renderer.rectangle.fill(20, itemY - 5, sw - 40, ITEM_HEIGHT - 5,
-                                static_cast<int>(GfxRenderer::FillTone::Ink));
+        renderer.rectangle.fill(24, itemY, sw - 48, ITEM_HEIGHT - ITEM_PADDING, kInk);
+      } else {
+        renderer.rectangle.render(24, itemY, sw - 48, ITEM_HEIGHT - ITEM_PADDING);
       }
 
-      renderer.text.render(ATKINSON_HYPERLEGIBLE_14_FONT_ID, 40, itemY + 8, kGames[i].name, !selected);
-      renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, 40, itemY + 32, kGames[i].description, !selected);
+      const int textX = 44;
+      const int nameY = itemY + 12;
+      const int descY = itemY + 36;
+      renderer.text.render(ATKINSON_HYPERLEGIBLE_14_FONT_ID, textX, nameY, kGames[i].name, !selected,
+                           EpdFontFamily::BOLD);
+      renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, textX, descY, kGames[i].description, !selected);
     }
 
     renderButtonHints(renderer, "", "Select", "", "");

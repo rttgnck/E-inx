@@ -37,9 +37,15 @@ class MazeRunnerActivity final : public Activity {
   void onExit() override { Activity::onExit(); }
 
   void loop() override {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      onBack_();
+    if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= kExitHoldMs) {
+      if (!exitTriggered_) {
+        exitTriggered_ = true;
+        onBack_();
+      }
       return;
+    }
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+      exitTriggered_ = false;
     }
 
     bool changed = false;
@@ -91,6 +97,7 @@ class MazeRunnerActivity final : public Activity {
   static constexpr uint8_t kWallWest = 0x08;
   static constexpr uint8_t kWallAll = kWallNorth | kWallEast | kWallSouth | kWallWest;
 
+  static constexpr unsigned long kExitHoldMs = 800;
   static constexpr float kPi = 3.14159265f;
   static constexpr float kFov = kPi / 3.0f;
 
@@ -104,6 +111,7 @@ class MazeRunnerActivity final : public Activity {
   int goalX_ = 0;
   int goalY_ = 0;
   uint8_t dir_ = 1;  // 0=N, 1=E, 2=S, 3=W
+  bool exitTriggered_ = false;
 
   int gridWidth_ = 0;
   int gridHeight_ = 0;

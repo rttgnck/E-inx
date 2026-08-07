@@ -68,7 +68,8 @@ class AppsActivity final : public Activity, public Menu {
 
  private:
   static constexpr int APP_COUNT = 2;
-  static constexpr int ITEM_HEIGHT = 70;
+  static constexpr int ITEM_HEIGHT = 80;
+  static constexpr int ITEM_PADDING = 12;
 
   struct AppInfo {
     const char* name;
@@ -97,31 +98,37 @@ class AppsActivity final : public Activity, public Menu {
     renderer.clearScreen();
 
     const int sw = renderer.getScreenWidth();
-    const int headerY = mainContentTop();
 
     if (!INX_THEME.mainTabsAtBottom()) {
       renderTabBar(renderer);
     }
 
-    const int contentY = headerY + TAB_BAR_HEIGHT + 10;
-    renderer.text.render(ATKINSON_HYPERLEGIBLE_16_FONT_ID, 30, contentY, "Apps");
-    renderer.line.render(30, contentY + 28, sw - 30, contentY + 28);
+    const int contentY = mainContentTop() + 12;
+    renderer.text.render(ATKINSON_HYPERLEGIBLE_16_FONT_ID, 30, contentY, "Apps", true, EpdFontFamily::BOLD);
+    renderer.line.render(30, contentY + 30, sw - 30, contentY + 30);
 
-    const int listStartY = contentY + 40;
+    const int listStartY = contentY + 46;
     for (int i = 0; i < APP_COUNT; ++i) {
       const int itemY = listStartY + i * ITEM_HEIGHT;
       const bool selected = (i == selectedIndex);
 
       if (selected) {
-        renderer.rectangle.fill(20, itemY - 5, sw - 40, ITEM_HEIGHT - 5,
-                                static_cast<int>(GfxRenderer::FillTone::Ink));
+        renderer.rectangle.fill(24, itemY, sw - 48, ITEM_HEIGHT - ITEM_PADDING, kInk);
+      } else {
+        renderer.rectangle.render(24, itemY, sw - 48, ITEM_HEIGHT - ITEM_PADDING);
       }
 
-      renderer.text.render(ATKINSON_HYPERLEGIBLE_14_FONT_ID, 40, itemY + 8, kApps[i].name, !selected);
-      renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, 40, itemY + 32, kApps[i].description, !selected);
+      const int textX = 44;
+      const int nameY = itemY + 14;
+      const int descY = itemY + 40;
+      renderer.text.render(ATKINSON_HYPERLEGIBLE_14_FONT_ID, textX, nameY, kApps[i].name, !selected,
+                           EpdFontFamily::BOLD);
+      renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, textX, descY, kApps[i].description, !selected);
     }
 
     renderButtonHints(renderer, "", "Open", "", "");
     renderer.displayBuffer(HalDisplay::FAST_REFRESH);
   }
+
+  static constexpr int kInk = static_cast<int>(GfxRenderer::FillTone::Ink);
 };

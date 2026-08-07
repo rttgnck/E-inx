@@ -30,9 +30,15 @@ class GalagaActivity final : public Activity {
   void loop() override {
     using Button = MappedInputManager::Button;
 
-    if (mappedInput.wasPressed(Button::Back)) {
-      onBack_();
+    if (mappedInput.isPressed(Button::Back) && mappedInput.getHeldTime() >= kExitHoldMs) {
+      if (!exitTriggered_) {
+        exitTriggered_ = true;
+        onBack_();
+      }
       return;
+    }
+    if (mappedInput.wasReleased(Button::Back)) {
+      exitTriggered_ = false;
     }
 
     if (gameOver_) {
@@ -97,6 +103,7 @@ class GalagaActivity final : public Activity {
   static constexpr int kMaxEnemyBullets = 8;
   static constexpr unsigned long kBaseTurnMs = 450;
   static constexpr unsigned long kMinTurnMs = 220;
+  static constexpr unsigned long kExitHoldMs = 800;
 
   std::function<void()> onBack_;
   Enemy enemies_[kMaxEnemies]{};
@@ -120,6 +127,7 @@ class GalagaActivity final : public Activity {
   int enemyMoveEvery_ = 2;
   int enemyFireEvery_ = 5;
   bool gameOver_ = false;
+  bool exitTriggered_ = false;
   bool firstRender_ = true;
   unsigned long lastTurnMs_ = 0;
 

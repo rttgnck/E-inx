@@ -31,9 +31,15 @@ class SnakeActivity final : public Activity {
   void loop() override {
     using Button = MappedInputManager::Button;
 
-    if (mappedInput.wasPressed(Button::Back)) {
-      onBack_();
+    if (mappedInput.isPressed(Button::Back) && mappedInput.getHeldTime() >= kExitHoldMs) {
+      if (!exitTriggered_) {
+        exitTriggered_ = true;
+        onBack_();
+      }
       return;
+    }
+    if (mappedInput.wasReleased(Button::Back)) {
+      exitTriggered_ = false;
     }
 
     if (gameOver_) {
@@ -78,6 +84,7 @@ class SnakeActivity final : public Activity {
   static constexpr int kMaxSnakeLen = 1280;
   static constexpr unsigned long kBaseTickMs = 400;
   static constexpr unsigned long kMinTickMs = 150;
+  static constexpr unsigned long kExitHoldMs = 800;
   static constexpr int kInitialSnakeLen = 3;
 
   const std::function<void()> onBack_;
@@ -95,6 +102,7 @@ class SnakeActivity final : public Activity {
   Direction direction_ = Direction::Right;
   Direction nextDirection_ = Direction::Right;
   bool gameOver_ = false;
+  bool exitTriggered_ = false;
   unsigned long lastTickMs_ = 0;
 
   void resetGame() {
