@@ -53,10 +53,22 @@ class TetrisActivity final : public Activity {
       return;
     }
 
+    const unsigned long now = millis();
+
     if (mappedInput.wasPressed(Btn::Left)) {
+      lastLeftRepeatMs_ = now;
       if (tryMove(-1, 0)) dirty_ = true;
     }
     if (mappedInput.wasPressed(Btn::Right)) {
+      lastRightRepeatMs_ = now;
+      if (tryMove(1, 0)) dirty_ = true;
+    }
+    if (mappedInput.isPressed(Btn::Left) && now - lastLeftRepeatMs_ >= kMoveRepeatMs) {
+      lastLeftRepeatMs_ = now;
+      if (tryMove(-1, 0)) dirty_ = true;
+    }
+    if (mappedInput.isPressed(Btn::Right) && now - lastRightRepeatMs_ >= kMoveRepeatMs) {
+      lastRightRepeatMs_ = now;
       if (tryMove(1, 0)) dirty_ = true;
     }
     if (mappedInput.wasPressed(Btn::Back)) {
@@ -76,7 +88,6 @@ class TetrisActivity final : public Activity {
       }
     }
 
-    const unsigned long now = millis();
     if (now - lastDropMs_ >= dropIntervalMs()) {
       if (tryMove(0, 1)) {
         dirty_ = true;
@@ -103,7 +114,8 @@ class TetrisActivity final : public Activity {
   static constexpr int kHiddenRows = 2;
   static constexpr int kBoardRows = kBoardH + kHiddenRows;
   static constexpr unsigned long kExitHoldMs = 800;
-  static constexpr unsigned long kMinRenderMs = 80;
+  static constexpr unsigned long kMinRenderMs = 55;
+  static constexpr unsigned long kMoveRepeatMs = 135;
   static constexpr int kInk = static_cast<int>(GfxRenderer::FillTone::Ink);
   static constexpr int kPaper = static_cast<int>(GfxRenderer::FillTone::Paper);
 
@@ -132,6 +144,8 @@ class TetrisActivity final : public Activity {
   bool firstRender_ = true;
   unsigned long lastDropMs_ = 0;
   unsigned long lastRenderMs_ = 0;
+  unsigned long lastLeftRepeatMs_ = 0;
+  unsigned long lastRightRepeatMs_ = 0;
 
   int cellSz_ = 32;
   int boardPixW_ = 0;
@@ -208,6 +222,8 @@ class TetrisActivity final : public Activity {
     next_ = rndPiece();
     spawn();
     lastDropMs_ = millis();
+    lastLeftRepeatMs_ = lastDropMs_;
+    lastRightRepeatMs_ = lastDropMs_;
   }
 
   static Piece rndPiece() { return static_cast<Piece>(random(0, 7)); }

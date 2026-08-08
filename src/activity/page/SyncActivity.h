@@ -10,7 +10,15 @@
 #include "../ActivityWithSubactivity.h"
 #include "../Menu.h"
 
-enum class NetworkMode { JOIN_NETWORK, UPDATE_SERVER, CONNECT_CALIBRE, CREATE_HOTSPOT, OPDS_BROWSER };
+enum class NetworkMode {
+  JOIN_NETWORK,
+  UPDATE_SERVER,
+  LIBRARY_SERVER,
+  LIBRARY_HOTSPOT,
+  CONNECT_CALIBRE,
+  CREATE_HOTSPOT,
+  OPDS_BROWSER
+};
 
 class SyncActivity final : public ActivityWithSubactivity, public Menu {
  public:

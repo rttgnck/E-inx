@@ -111,6 +111,9 @@ class LocalServer {
   void handleNotFound() const;
   void handleStatus() const;
   void handleFileList() const;
+  void handleLibraryPage() const;
+  void handleLibraryPageJs() const;
+  void handleLibraryData() const;
   void handleEpubPage() const;
   void handleExportPage() const;
   void handleFileListData() const;

@@ -84,7 +84,7 @@ class GamesActivity final : public Activity, public Menu {
 
  private:
   static constexpr int GAME_COUNT = 4;
-  static constexpr int ITEM_HEIGHT = 72;
+  static constexpr int ITEM_HEIGHT = 64;
   static constexpr int ITEM_PADDING = 10;
   static constexpr int kInk = static_cast<int>(GfxRenderer::FillTone::Ink);
 
@@ -149,15 +149,14 @@ class GamesActivity final : public Activity, public Menu {
 
     const int sw = renderer.getScreenWidth();
 
-    if (!INX_THEME.mainTabsAtBottom()) {
-      renderTabBar(renderer);
-    }
+    renderTabBar(renderer);
 
-    const int contentY = mainContentTop() + 12;
+    const int contentY = mainContentTop() + 8;
     renderer.text.render(ATKINSON_HYPERLEGIBLE_16_FONT_ID, 30, contentY, "Games", true, EpdFontFamily::BOLD);
     renderer.line.render(30, contentY + 30, sw - 30, contentY + 30);
 
-    const int listStartY = contentY + 46;
+    const int listStartY = contentY + 42;
+    const int textMaxWidth = sw - 88;
     for (int i = 0; i < GAME_COUNT; ++i) {
       const int itemY = listStartY + i * ITEM_HEIGHT;
       const bool selected = (i == selectedIndex);
@@ -173,7 +172,9 @@ class GamesActivity final : public Activity, public Menu {
       const int descY = itemY + 36;
       renderer.text.render(ATKINSON_HYPERLEGIBLE_14_FONT_ID, textX, nameY, kGames[i].name, !selected,
                            EpdFontFamily::BOLD);
-      renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, textX, descY, kGames[i].description, !selected);
+      const std::string description =
+          renderer.text.truncate(ATKINSON_HYPERLEGIBLE_10_FONT_ID, kGames[i].description, textMaxWidth);
+      renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, textX, descY, description.c_str(), !selected);
     }
 
     renderButtonHints(renderer, "", "Select", "", "");

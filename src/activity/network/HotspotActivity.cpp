@@ -274,7 +274,7 @@ void HotspotActivity::render() const {
   if (state == HotspotState::RUNNING) {
     renderServerRunning();
   } else if (state == HotspotState::STARTING) {
-    const int contentStart = renderActivityHeader(renderer, startY, "Hotspot");
+    const int contentStart = renderActivityHeader(renderer, startY, libraryLanding ? "Library Hotspot" : "Hotspot");
 
     int centerY = contentStart + (screenHeight - contentStart - BOTTOM_AREA_HEIGHT) / 2;
 
@@ -307,10 +307,11 @@ void HotspotActivity::renderServerRunning() const {
   int screenWidth = renderer.getScreenWidth();
   int startY = 0;
 
-  const int contentStart = renderActivityHeader(renderer, startY, "Hotspot");
+  const int contentStart = renderActivityHeader(renderer, startY, libraryLanding ? "Library Hotspot" : "Hotspot");
 
-  std::string hostnameUrl = std::string("http://") + AP_HOSTNAME + ".local/";
-  std::string ipUrl = "http://" + connectedIP + "/";
+  const char* path = libraryLanding ? "/library" : "/";
+  std::string hostnameUrl = std::string("http://") + AP_HOSTNAME + ".local" + path;
+  std::string ipUrl = "http://" + connectedIP + path;
 
   const int bodyTop = contentStart + 12;
   const int textX = CONTENT_MARGIN + 2;
@@ -328,7 +329,8 @@ void HotspotActivity::renderServerRunning() const {
   drawQRCode(qrX, wifiY, "WIFI:S:" + connectedSSID + ";;");
 
   renderer.text.render(labelFont, textX, webY, "STEP 2", true, EpdFontFamily::BOLD);
-  renderer.text.render(titleFont, textX, webY + 24, "Open Transfer", true, EpdFontFamily::BOLD);
+  renderer.text.render(titleFont, textX, webY + 24, libraryLanding ? "Open Library" : "Open Transfer", true,
+                       EpdFontFamily::BOLD);
   renderer.text.render(bodyFont, textX, webY + 61, hostnameUrl.c_str(), true);
   renderer.text.render(ATKINSON_HYPERLEGIBLE_8_FONT_ID, textX, webY + 86, ipUrl.c_str());
   drawQRCode(qrX, webY, hostnameUrl);

@@ -42,13 +42,14 @@ class HotspotActivity final : public Activity, public Menu {
    * @param onGoBack Callback function invoked when user requests to go back
    */
   explicit HotspotActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                           const std::function<void()>& onGoBack)
+                           const std::function<void()>& onGoBack, bool libraryLanding = false)
       : Activity("Hotspot", renderer, mappedInput),
         Menu(),
         displayTaskHandle(nullptr),
         renderingMutex(nullptr),
         updateRequired(false),
         state(HotspotState::STARTING),
+        libraryLanding(libraryLanding),
         onGoBack(onGoBack) {
     tabSelectorIndex = 4;
   }
@@ -123,6 +124,7 @@ class HotspotActivity final : public Activity, public Menu {
   SemaphoreHandle_t renderingMutex; /**< Mutex for thread-safe rendering */
   bool updateRequired;              /**< Flag indicating render update needed */
   HotspotState state;               /**< Current activity state */
+  const bool libraryLanding;        /**< Show library-specific copy and QR target */
 
   std::unique_ptr<LocalServer> webServer; /**< Web server instance */
   std::string connectedIP;                /**< IP address of the access point */

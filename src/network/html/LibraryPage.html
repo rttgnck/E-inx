@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Inx - Library</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{color-scheme:light;--ink:#26211f;--muted:#7f746c;--line:#eaded3;--paper:#fffaf5;--panel:#fff3e8;--wash:#f7e6d6;--accent:#8b5e47;--danger:#b42318}
+  body{background:var(--paper);color:var(--ink);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.42;letter-spacing:0}
+  button,input,select{font:inherit}
+  .shell{max-width:980px;margin:0 auto;padding:22px 14px 92px}
+  .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+  h1{font-size:28px;font-weight:500}
+  .count{color:var(--muted);font-size:13px;white-space:nowrap}
+  .nav{display:flex;gap:6px;overflow:auto;padding-bottom:10px;margin-bottom:16px;border-bottom:1px solid var(--line);scrollbar-width:none}
+  .nav::-webkit-scrollbar{display:none}
+  .nav a{flex:0 0 auto;color:#5f534d;text-decoration:none;border:1px solid transparent;border-radius:6px;padding:6px 11px;font-size:13px}
+  .nav a.active{background:var(--ink);border-color:var(--ink);color:#fff}
+  .stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:14px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 11px;min-width:0}
+  .stat b{display:block;font-size:20px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .stat span{display:block;margin-top:2px;color:var(--muted);font-size:11px;text-transform:uppercase}
+  .actions{display:grid;grid-template-columns:1fr auto auto;gap:8px;margin-bottom:12px;align-items:center}
+  .search{width:100%;height:38px;border:1px solid var(--line);border-radius:8px;background:#fff;padding:0 12px;color:var(--ink)}
+  .button,.file-button{height:38px;display:inline-flex;align-items:center;justify-content:center;gap:7px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);padding:0 12px;cursor:pointer;text-decoration:none;font-weight:600;font-size:13px;white-space:nowrap}
+  .button.primary,.file-button.primary{background:var(--ink);border-color:var(--ink);color:#fff}
+  .button:disabled{opacity:.55;cursor:default}
+  .button svg,.file-button svg{width:16px;height:16px;flex:0 0 auto}
+  #uploadInput{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+  .filters{display:flex;gap:7px;overflow:auto;padding-bottom:12px;margin-bottom:8px;scrollbar-width:none}
+  .filters::-webkit-scrollbar{display:none}
+  .chip{flex:0 0 auto;border:1px solid var(--line);border-radius:8px;background:#fff;color:#5f534d;padding:7px 12px;font-size:13px;cursor:pointer}
+  .chip.active{background:var(--wash);border-color:#d7bca8;color:#3a2d27;font-weight:650}
+  .notice{display:none;margin-bottom:12px;border:1px solid var(--line);border-radius:8px;background:#fff;padding:10px 12px;color:var(--muted);font-size:13px}
+  .notice.show{display:block}
+  .progress{display:none;margin-bottom:12px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:11px}
+  .progress.show{display:block}
+  .progress-row{display:flex;justify-content:space-between;gap:10px;color:var(--muted);font-size:12px;margin-bottom:8px}
+  .track{height:5px;border-radius:99px;background:#efe2d7;overflow:hidden}
+  .fill{height:100%;width:0;background:var(--ink);border-radius:99px;transition:width .15s}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:14px}
+  .book{min-width:0}
+  .cover{position:relative;aspect-ratio:2/3;background:linear-gradient(135deg,#f3dfcb,#fff7ef);border:1px solid var(--line);border-radius:8px;overflow:hidden;box-shadow:0 6px 18px rgba(72,45,31,.12)}
+  .cover img{width:100%;height:100%;object-fit:cover;display:block;filter:saturate(.95)}
+  .cover.blank{display:flex;align-items:center;justify-content:center;padding:14px;text-align:center;color:#6f5546;font-weight:650;font-size:14px}
+  .progress-ring{position:absolute;left:8px;right:8px;bottom:8px;height:5px;background:rgba(255,255,255,.72);border:1px solid rgba(38,33,31,.14);border-radius:99px;overflow:hidden}
+  .progress-ring span{display:block;height:100%;width:0;background:var(--ink)}
+  .book-title{margin-top:8px;font-size:13px;font-weight:650;line-height:1.25;min-height:32px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .book-author{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+  .book-meta{display:flex;justify-content:space-between;gap:8px;color:#9a8b82;font-size:11px;margin-top:4px}
+  .row-actions{display:flex;gap:6px;margin-top:8px}
+  .icon-btn{width:32px;height:30px;border:1px solid var(--line);border-radius:6px;background:#fff;color:#5d514b;display:flex;align-items:center;justify-content:center;cursor:pointer;text-decoration:none}
+  .icon-btn svg{width:15px;height:15px}
+  .icon-btn.danger{color:var(--danger)}
+  .empty{display:none;text-align:center;color:var(--muted);padding:56px 20px;font-size:14px}
+  .empty.show{display:block}
+  .toast{position:fixed;left:50%;bottom:22px;max-width:calc(100% - 30px);transform:translate(-50%,12px);opacity:0;pointer-events:none;background:var(--ink);color:#fff;border-radius:8px;padding:10px 13px;font-size:13px;transition:.15s;z-index:5}
+  .toast.show{opacity:1;transform:translate(-50%,0)}
+  .toast.error{background:var(--danger)}
+  @media(max-width:640px){
+    .shell{padding:18px 10px 86px}
+    h1{font-size:25px}
+    .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .actions{grid-template-columns:1fr 42px 42px}
+    .button span,.file-button span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+    .button,.file-button{padding:0}
+    .grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 10px}
+    .book-title{font-size:12px;min-height:30px}
+    .book-author,.book-meta{font-size:11px}
+  }
+</style>
+<div class="shell">
+  <header class="topbar"><h1>Library</h1><div class="count" id="count">-</div></header>
+  <nav class="nav">
+    <a href="/">Dashboard</a>
+    <a class="active" href="/library">Library</a>
+    <a href="/files">Files</a>
+    <a href="/epub">Epub</a>
+    <a href="/tags">Tags</a>
+    <a href="/font-manager">Fonts</a>
+    <a href="/export">Bookmarks</a>
+    <a href="/settings">Settings</a>
+    <a href="/update">Update</a>
+  </nav>
+  <section class="stats">
+    <div class="stat"><b id="statBooks">-</b><span>Books</span></div>
+    <div class="stat"><b id="statRead">-</b><span>Reading</span></div>
+    <div class="stat"><b id="statPages">-</b><span>Pages</span></div>
+    <div class="stat"><b id="statTime">-</b><span>Time</span></div>
+  </section>
+  <div class="actions">
+    <input class="search" id="search" placeholder="Search titles and authors" autocomplete="off">
+    <button class="button" id="refreshBtn" type="button" title="Refresh library">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M16 9a6 6 0 1 0-1.8 4.3"/><path d="M16 5v4h-4"/></svg><span>Refresh</span>
+    </button>
+    <label class="file-button primary" for="uploadInput" title="Upload books">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13V4M6.5 7.5 10 4l3.5 3.5M4 14v1.5A1.5 1.5 0 0 0 5.5 17h9a1.5 1.5 0 0 0 1.5-1.5V14"/></svg><span>Upload</span>
+    </label>
+    <input id="uploadInput" type="file" multiple accept=".epub,.txt,.md,.xtc,.xtch">
+  </div>
+  <div class="filters" id="filters"></div>
+  <div class="notice" id="notice"></div>
+  <div class="progress" id="progress"><div class="progress-row"><span id="progressText"></span><span id="progressCount"></span></div><div class="track"><div class="fill" id="progressFill"></div></div></div>
+  <main class="grid" id="grid"></main>
+  <div class="empty" id="empty">No books found</div>
+</div>
+<div class="toast" id="toast"></div>
+<script defer src="/js/library_page.js"></script>
+</html>
