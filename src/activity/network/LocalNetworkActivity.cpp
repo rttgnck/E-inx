@@ -124,6 +124,12 @@ void LocalNetworkActivity::startSavedWifiConnection() {
   WIFI_STORE.loadFromFile();
   const WifiCredential* credential = WIFI_STORE.getLastCredential();
   if (credential == nullptr || credential->ssid.empty()) {
+    if (libraryLanding && onSwitchMode) {
+      Serial.printf("[%lu] [LOCALNET] No saved WiFi network; starting library hotspot\n", millis());
+      switchModePending = true;
+      updateRequired = true;
+      return;
+    }
     Serial.printf("[%lu] [LOCALNET] No saved WiFi network; opening picker\n", millis());
     startWifiSelection();
     return;
@@ -395,6 +401,12 @@ void LocalNetworkActivity::loop() {
     return;
   }
 
+  if (switchModePending) {
+    switchModePending = false;
+    if (onSwitchMode) onSwitchMode();
+    return;
+  }
+
   if (state == LocalNetworkState::GITHUB_FINISHED) {
     if (githubRestartAt != 0 && static_cast<long>(millis() - githubRestartAt) >= 0) {
       githubRestartAt = 0;
@@ -458,6 +470,12 @@ void LocalNetworkActivity::loop() {
 
     if (WiFi.status() == WL_CONNECT_FAILED || WiFi.status() == WL_NO_SSID_AVAIL ||
         millis() - wifiConnectionStartTime >= SAVED_WIFI_TIMEOUT_MS) {
+      if (libraryLanding && onSwitchMode) {
+        Serial.printf("[%lu] [LOCALNET] Saved WiFi unavailable; starting library hotspot\n", millis());
+        WiFi.disconnect();
+        onSwitchMode();
+        return;
+      }
       Serial.printf("[%lu] [LOCALNET] Saved WiFi unavailable; opening picker\n", millis());
       WiFi.disconnect();
       startWifiSelection();
@@ -470,6 +488,11 @@ void LocalNetworkActivity::loop() {
     if (millis() - lastWifiCheck > 2000) {
       lastWifiCheck = millis();
       if (WiFi.status() != WL_CONNECTED) {
+        if (libraryLanding && onSwitchMode) {
+          Serial.printf("[%lu] [LOCALNET] Library WiFi disconnected; switching to hotspot\n", millis());
+          onSwitchMode();
+          return;
+        }
         Serial.printf("[%lu] [LOCALNET] WiFi disconnected!\n", millis());
         stopWebServer();
         state = LocalNetworkState::ERROR;
@@ -493,6 +516,11 @@ void LocalNetworkActivity::loop() {
           if (onGoBack) onGoBack();
           return;
         }
+        if (libraryLanding && mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+          Serial.printf("[%lu] [LOCALNET] Switching library server to hotspot\n", millis());
+          if (onSwitchMode) onSwitchMode();
+          return;
+        }
       }
     }
   }
@@ -500,6 +528,13 @@ void LocalNetworkActivity::loop() {
   if (state == LocalNetworkState::SERVER_RUNNING && updateLanding &&
       mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     startGithubUpdateCheck();
+    return;
+  }
+
+  if (state == LocalNetworkState::SERVER_RUNNING && libraryLanding &&
+      mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    Serial.printf("[%lu] [LOCALNET] Switching library server to hotspot\n", millis());
+    if (onSwitchMode) onSwitchMode();
     return;
   }
 
@@ -646,6 +681,8 @@ void LocalNetworkActivity::render() const {
   MappedInputManager::Labels labels;
   if (state == LocalNetworkState::SERVER_RUNNING && updateLanding) {
     labels = mappedInput.mapLabels("« Back", "GitHub Update", "", "");
+  } else if (state == LocalNetworkState::SERVER_RUNNING && libraryLanding) {
+    labels = mappedInput.mapLabels("« Back", "Hotspot", "", "");
   } else if (state == LocalNetworkState::GITHUB_CONFIRMATION) {
     labels = mappedInput.mapLabels("Cancel", "Install", "Up", "Down");
   } else if (state == LocalNetworkState::GITHUB_NO_UPDATE || state == LocalNetworkState::GITHUB_FAILED) {
@@ -656,7 +693,7 @@ void LocalNetworkActivity::render() const {
   } else {
     labels = mappedInput.mapLabels("« Back", "", "", "");
   }
-  if (state == LocalNetworkState::SERVER_RUNNING && updateLanding) {
+  if (state == LocalNetworkState::SERVER_RUNNING && (updateLanding || libraryLanding)) {
     renderer.ui.buttonHintsFit(ATKINSON_HYPERLEGIBLE_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else {
     renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

@@ -14,10 +14,9 @@
 #include "system/UiTheme.h"
 
 namespace {
-constexpr int MENU_ITEM_COUNT = 7;
+constexpr int MENU_ITEM_COUNT = 6;
 const char* MENU_ITEMS[MENU_ITEM_COUNT] = {"Join a Network",   "Firmware Update", "Library Server",
-                                           "Library Hotspot",  "Connect to Calibre", "Create Hotspot",
-                                           "OPDS Browser"};
+                                           "Connect to Calibre", "Create Hotspot", "OPDS Browser"};
 constexpr int LIST_ITEM_HEIGHT = UiTheme::DRAWER_LIST_ITEM_HEIGHT;
 }  // namespace
 
@@ -83,18 +82,14 @@ void SyncActivity::loop() {
     }
 
     if (selectedIndex == 3) {
-      mode = NetworkMode::LIBRARY_HOTSPOT;
-    }
-
-    if (selectedIndex == 4) {
       mode = NetworkMode::CONNECT_CALIBRE;
     }
 
-    if (selectedIndex == 5) {
+    if (selectedIndex == 4) {
       mode = NetworkMode::CREATE_HOTSPOT;
     }
 
-    if (selectedIndex == 6) {
+    if (selectedIndex == 5) {
       mode = NetworkMode::OPDS_BROWSER;
     }
 

@@ -7,6 +7,7 @@ This guide explains how to connect your Inx Reader to WiFi and use the built-in 
 Inx Reader includes a built-in web server that allows you to:
 
 - Upload EPUB files wirelessly from any device on the same WiFi network
+- Use **Network → Library Server** for a book-first Web UI with library thumbnails, stats, uploads, downloads, deletes, and indexing
 - Browse and manage files on your device's SD card
 - Create folders to organize your ebooks
 - Delete files and folders
@@ -85,6 +86,11 @@ Once connected, the screen will display:
 ---
 
 ## Step 4: Accessing the Web Interface
+
+For library management, choose **Network → Library Server** on the reader. It first tries the most recently saved WiFi
+network and opens `/library`; if that network cannot be reached, it automatically starts the library hotspot. While the
+library server is showing, the front action button toggles between **Hotspot** and **WiFi** so you can switch connection
+mode without returning to Device connections.
 
 ### From a Computer
 
