@@ -54,7 +54,8 @@ class LocalNetworkActivity final : public ActivityWithSubactivity, public Menu {
    */
   explicit LocalNetworkActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                 const std::function<void()>& onGoBack, bool autoConnectSaved = false,
-                                bool updateLanding = false, bool libraryLanding = false)
+                                bool updateLanding = false, bool libraryLanding = false,
+                                const std::function<void()>& onSwitchMode = nullptr)
       : ActivityWithSubactivity("LocalNetwork", renderer, mappedInput),
         Menu(),
         displayTaskHandle(nullptr),
@@ -63,11 +64,13 @@ class LocalNetworkActivity final : public ActivityWithSubactivity, public Menu {
         state(LocalNetworkState::WIFI_SELECTION),
         wifiSelectionCompletionPending(false),
         wifiSelectionConnected(false),
+        switchModePending(false),
         autoConnectSaved(autoConnectSaved),
         updateLanding(updateLanding),
         libraryLanding(libraryLanding),
         wifiConnectionStartTime(0),
         lastHandleClientTime(0),
+        onSwitchMode(onSwitchMode),
         onGoBack(onGoBack) {
     tabSelectorIndex = 4;
   }
@@ -167,6 +170,7 @@ class LocalNetworkActivity final : public ActivityWithSubactivity, public Menu {
   LocalNetworkState state;               /**< Current activity state */
   bool wifiSelectionCompletionPending;   /**< Deferred child completion callback */
   bool wifiSelectionConnected;           /**< Result captured by the deferred callback */
+  bool switchModePending;                /**< Deferred switch to the paired Library Server WiFi/hotspot mode */
   const bool autoConnectSaved;           /**< Try the newest saved credential before showing the picker */
   const bool updateLanding;              /**< Show the /update URL and update-specific device copy */
   const bool libraryLanding;             /**< Show the /library URL and library-specific device copy */
@@ -183,5 +187,6 @@ class LocalNetworkActivity final : public ActivityWithSubactivity, public Menu {
   int githubDisplayedPercent = -1;                 /**< Last e-ink progress percentage rendered */
   unsigned long lastHandleClientTime;     /**< Timestamp of last client handling */
 
+  const std::function<void()> onSwitchMode; /**< Callback invoked to switch Library Server WiFi/hotspot mode */
   const std::function<void()> onGoBack; /**< Callback invoked when going back */
 };

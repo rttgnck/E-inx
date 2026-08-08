@@ -217,8 +217,17 @@ void HotspotActivity::loop() {
           if (onGoBack) onGoBack();
           return;
         }
+        if (libraryLanding && mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+          if (onSwitchMode) onSwitchMode();
+          return;
+        }
       }
     }
+  }
+
+  if (state == HotspotState::RUNNING && libraryLanding && mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    if (onSwitchMode) onSwitchMode();
+    return;
   }
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
@@ -335,6 +344,10 @@ void HotspotActivity::renderServerRunning() const {
   renderer.text.render(ATKINSON_HYPERLEGIBLE_8_FONT_ID, textX, webY + 86, ipUrl.c_str());
   drawQRCode(qrX, webY, hostnameUrl);
 
-  auto labels = mappedInput.mapLabels("« Back", "", "", "");
-  renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  auto labels = mappedInput.mapLabels("« Back", libraryLanding ? "WiFi" : "", "", "");
+  if (libraryLanding) {
+    renderer.ui.buttonHintsFit(ATKINSON_HYPERLEGIBLE_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  } else {
+    renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  }
 }

@@ -42,7 +42,8 @@ class HotspotActivity final : public Activity, public Menu {
    * @param onGoBack Callback function invoked when user requests to go back
    */
   explicit HotspotActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                           const std::function<void()>& onGoBack, bool libraryLanding = false)
+                           const std::function<void()>& onGoBack, bool libraryLanding = false,
+                           const std::function<void()>& onSwitchMode = nullptr)
       : Activity("Hotspot", renderer, mappedInput),
         Menu(),
         displayTaskHandle(nullptr),
@@ -50,6 +51,7 @@ class HotspotActivity final : public Activity, public Menu {
         updateRequired(false),
         state(HotspotState::STARTING),
         libraryLanding(libraryLanding),
+        onSwitchMode(onSwitchMode),
         onGoBack(onGoBack) {
     tabSelectorIndex = 4;
   }
@@ -130,5 +132,6 @@ class HotspotActivity final : public Activity, public Menu {
   std::string connectedIP;                /**< IP address of the access point */
   std::string connectedSSID;              /**< SSID of the access point */
 
+  const std::function<void()> onSwitchMode; /**< Callback invoked to switch Library Server hotspot/WiFi mode */
   const std::function<void()> onGoBack; /**< Callback invoked when going back */
 };

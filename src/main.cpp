@@ -350,6 +350,8 @@ void onGoToGames();
 void onGoToApps();
 void onGoToStatistics();
 void onGoToFileTransfer();
+void onGoToLibraryServer();
+void onGoToLibraryHotspot();
 void onGoToSettings();
 void onGoToLibrary(const std::string& path = "/");
 void onEditBookMetadata(const std::string& bookPath, const std::string& returnPath);
@@ -472,6 +474,14 @@ void onGoToRecent() {
       onGoToRecent);
 }
 
+void onGoToLibraryServer() {
+  switchTo<LocalNetworkActivity>(render, input, onGoToFileTransfer, true, false, true, onGoToLibraryHotspot);
+}
+
+void onGoToLibraryHotspot() {
+  switchTo<HotspotActivity>(render, input, onGoToFileTransfer, true, onGoToLibraryServer);
+}
+
 /**
  * @brief Handles network mode selection and navigates to appropriate activity.
  */
@@ -484,10 +494,7 @@ void onNetworkModeSelected(NetworkMode mode) {
       switchTo<LocalNetworkActivity>(render, input, onGoToFileTransfer, true, true);
       break;
     case NetworkMode::LIBRARY_SERVER:
-      switchTo<LocalNetworkActivity>(render, input, onGoToFileTransfer, true, false, true);
-      break;
-    case NetworkMode::LIBRARY_HOTSPOT:
-      switchTo<HotspotActivity>(render, input, onGoToFileTransfer, true);
+      onGoToLibraryServer();
       break;
     case NetworkMode::CONNECT_CALIBRE:
       switchTo<CalibreConnectActivity>(render, input, onGoToFileTransfer);
