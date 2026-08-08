@@ -483,6 +483,12 @@ void onNetworkModeSelected(NetworkMode mode) {
     case NetworkMode::UPDATE_SERVER:
       switchTo<LocalNetworkActivity>(render, input, onGoToFileTransfer, true, true);
       break;
+    case NetworkMode::LIBRARY_SERVER:
+      switchTo<LocalNetworkActivity>(render, input, onGoToFileTransfer, true, false, true);
+      break;
+    case NetworkMode::LIBRARY_HOTSPOT:
+      switchTo<HotspotActivity>(render, input, onGoToFileTransfer, true);
+      break;
     case NetworkMode::CONNECT_CALIBRE:
       switchTo<CalibreConnectActivity>(render, input, onGoToFileTransfer);
       break;

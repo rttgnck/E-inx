@@ -622,12 +622,14 @@ void LocalNetworkActivity::render() const {
                            EpdFontFamily::BOLD);
     renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, centerY + 20, "Restarting the reader...");
   } else if (state == LocalNetworkState::WIFI_AUTO_CONNECTING) {
-    const int contentStart = renderActivityHeader(renderer, startY, updateLanding ? "Update Server" : "Local Network");
+    const int contentStart =
+        renderActivityHeader(renderer, startY, updateLanding ? "Update Server" : (libraryLanding ? "Library Server" : "Local Network"));
     const int centerY = contentStart + (screenHeight - contentStart - BOTTOM_AREA_HEIGHT) / 2;
     renderer.text.centered(ATKINSON_HYPERLEGIBLE_10_FONT_ID, centerY - 16, "Connecting to saved WiFi...");
     renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, centerY + 20, truncateString(connectedSSID, 30).c_str());
   } else if (state == LocalNetworkState::SERVER_STARTING) {
-    const int contentStart = renderActivityHeader(renderer, startY, updateLanding ? "Update Server" : "Local Network");
+    const int contentStart =
+        renderActivityHeader(renderer, startY, updateLanding ? "Update Server" : (libraryLanding ? "Library Server" : "Local Network"));
 
     int centerY = contentStart + (screenHeight - contentStart - BOTTOM_AREA_HEIGHT) / 2;
 
@@ -669,9 +671,10 @@ void LocalNetworkActivity::render() const {
 void LocalNetworkActivity::renderServerRunning() const {
   int startY = 0;
 
-  const int contentStart = renderActivityHeader(renderer, startY, updateLanding ? "Update Server" : "Local Network");
+  const int contentStart =
+      renderActivityHeader(renderer, startY, updateLanding ? "Update Server" : (libraryLanding ? "Library Server" : "Local Network"));
 
-  const char* path = updateLanding ? "/update" : "/";
+  const char* path = updateLanding ? "/update" : (libraryLanding ? "/library" : "/");
   std::string ipUrl = "http://" + connectedIP + path;
   std::string hostnameUrl = std::string("http://") + AP_HOSTNAME + ".local" + path;
 
@@ -680,9 +683,9 @@ void LocalNetworkActivity::renderServerRunning() const {
   const int titleFont = ATKINSON_HYPERLEGIBLE_14_FONT_ID;
   const int bodyFont = ATKINSON_HYPERLEGIBLE_10_FONT_ID;
 
-  renderer.text.centered(labelFont, bodyTop, updateLanding ? "FIRMWARE UPDATE" : "LOCAL TRANSFER", true,
+  renderer.text.centered(labelFont, bodyTop, updateLanding ? "FIRMWARE UPDATE" : (libraryLanding ? "LIBRARY MANAGER" : "LOCAL TRANSFER"), true,
                          EpdFontFamily::BOLD);
-  renderer.text.centered(titleFont, bodyTop + 34, updateLanding ? "Update server ready" : "Ready on WiFi", true,
+  renderer.text.centered(titleFont, bodyTop + 34, updateLanding ? "Update server ready" : (libraryLanding ? "Library ready" : "Ready on WiFi"), true,
                          EpdFontFamily::BOLD);
   renderer.text.centered(bodyFont, bodyTop + 74, truncateString(connectedSSID, 30).c_str());
 
@@ -694,5 +697,7 @@ void LocalNetworkActivity::renderServerRunning() const {
   const int hintY = renderer.getScreenHeight() - 92;
   renderer.text.centered(
       ATKINSON_HYPERLEGIBLE_8_FONT_ID, hintY,
-      updateLanding ? "Keep this screen open during the update" : "Keep this screen open while transferring");
+      updateLanding ? "Keep this screen open during the update"
+                    : (libraryLanding ? "Keep this screen open while managing books"
+                                      : "Keep this screen open while transferring"));
 }

@@ -3,6 +3,7 @@
 #include <HalDisplay.h>
 
 #include <functional>
+#include <string>
 
 #include "../Activity.h"
 #include "../Menu.h"
@@ -68,7 +69,7 @@ class AppsActivity final : public Activity, public Menu {
 
  private:
   static constexpr int APP_COUNT = 2;
-  static constexpr int ITEM_HEIGHT = 80;
+  static constexpr int ITEM_HEIGHT = 64;
   static constexpr int ITEM_PADDING = 12;
 
   struct AppInfo {
@@ -99,15 +100,14 @@ class AppsActivity final : public Activity, public Menu {
 
     const int sw = renderer.getScreenWidth();
 
-    if (!INX_THEME.mainTabsAtBottom()) {
-      renderTabBar(renderer);
-    }
+    renderTabBar(renderer);
 
-    const int contentY = mainContentTop() + 12;
+    const int contentY = mainContentTop() + 8;
     renderer.text.render(ATKINSON_HYPERLEGIBLE_16_FONT_ID, 30, contentY, "Apps", true, EpdFontFamily::BOLD);
     renderer.line.render(30, contentY + 30, sw - 30, contentY + 30);
 
-    const int listStartY = contentY + 46;
+    const int listStartY = contentY + 42;
+    const int textMaxWidth = sw - 88;
     for (int i = 0; i < APP_COUNT; ++i) {
       const int itemY = listStartY + i * ITEM_HEIGHT;
       const bool selected = (i == selectedIndex);
@@ -123,7 +123,9 @@ class AppsActivity final : public Activity, public Menu {
       const int descY = itemY + 40;
       renderer.text.render(ATKINSON_HYPERLEGIBLE_14_FONT_ID, textX, nameY, kApps[i].name, !selected,
                            EpdFontFamily::BOLD);
-      renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, textX, descY, kApps[i].description, !selected);
+      const std::string description =
+          renderer.text.truncate(ATKINSON_HYPERLEGIBLE_10_FONT_ID, kApps[i].description, textMaxWidth);
+      renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, textX, descY, description.c_str(), !selected);
     }
 
     renderButtonHints(renderer, "", "Open", "", "");

@@ -54,7 +54,7 @@ class LocalNetworkActivity final : public ActivityWithSubactivity, public Menu {
    */
   explicit LocalNetworkActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                 const std::function<void()>& onGoBack, bool autoConnectSaved = false,
-                                bool updateLanding = false)
+                                bool updateLanding = false, bool libraryLanding = false)
       : ActivityWithSubactivity("LocalNetwork", renderer, mappedInput),
         Menu(),
         displayTaskHandle(nullptr),
@@ -65,6 +65,7 @@ class LocalNetworkActivity final : public ActivityWithSubactivity, public Menu {
         wifiSelectionConnected(false),
         autoConnectSaved(autoConnectSaved),
         updateLanding(updateLanding),
+        libraryLanding(libraryLanding),
         wifiConnectionStartTime(0),
         lastHandleClientTime(0),
         onGoBack(onGoBack) {
@@ -168,6 +169,7 @@ class LocalNetworkActivity final : public ActivityWithSubactivity, public Menu {
   bool wifiSelectionConnected;           /**< Result captured by the deferred callback */
   const bool autoConnectSaved;           /**< Try the newest saved credential before showing the picker */
   const bool updateLanding;              /**< Show the /update URL and update-specific device copy */
+  const bool libraryLanding;             /**< Show the /library URL and library-specific device copy */
   unsigned long wifiConnectionStartTime; /**< Start time for saved-network connection timeout */
 
   std::string connectedIP;                /**< IP address of connected WiFi */

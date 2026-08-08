@@ -45,6 +45,8 @@
 #include "html/HomePageHtml.generated.h"
 #include "html/InxFontPackJs.generated.h"
 #include "html/JsZipMinJs.generated.h"
+#include "html/LibraryPageHtml.generated.h"
+#include "html/LibraryPageJs.generated.h"
 #include "html/SettingsPageHtml.generated.h"
 #include "html/TagsPageHtml.generated.h"
 #include "html/UpdatePageHtml.generated.h"
@@ -54,6 +56,7 @@
 #include "state/BookTags.h"
 #include "state/EpubNotesIndex.h"
 #include "state/RecentBooks.h"
+#include "state/Statistics.h"
 #include "system/FontManager.h"
 #ifndef SIMULATOR
 #include "system/SleepWakeTraceStore.h"
@@ -447,6 +450,65 @@ std::string epubCachePathForBookPath(const std::string& bookPath) {
   return "/.metadata/epub/" + std::to_string(std::hash<std::string>{}(bookPath));
 }
 
+std::string cachePathForIndexedBook(const String& bookPath) {
+  std::string lower = bookPath.c_str();
+  std::transform(lower.begin(), lower.end(), lower.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  const std::string path = bookPath.c_str();
+  if (stringEndsWith(lower, ".xtc") || stringEndsWith(lower, ".xtch")) {
+    return "/.metadata/xtc/" + std::to_string(std::hash<std::string>{}(path));
+  }
+  return epubCachePathForBookPath(path);
+}
+
+String bookFileType(const String& bookPath) {
+  std::string lower = bookPath.c_str();
+  std::transform(lower.begin(), lower.end(), lower.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  if (stringEndsWith(lower, ".epub")) return "EPUB";
+  if (stringEndsWith(lower, ".xtc") || stringEndsWith(lower, ".xtch")) return "XTC";
+  if (stringEndsWith(lower, ".md")) return "Markdown";
+  if (stringEndsWith(lower, ".txt")) return "Text";
+  return "Book";
+}
+
+size_t fileSizeForPath(const String& path) {
+  FsFile file = SdMan.open(path.c_str(), O_READ);
+  if (!file || file.isDirectory()) {
+    if (file) {
+      file.close();
+    }
+    return 0;
+  }
+  const size_t size = file.fileSize();
+  file.close();
+  return size;
+}
+
+String coverUrlForCachePath(const std::string& cachePath) {
+  const std::string coverJpeg = cachePath + "/cover.jpg";
+  const std::string thumbJpeg = cachePath + "/thumb.jpg";
+  const std::string coverBmp = cachePath + "/cover.bmp";
+  const std::string thumbBmp = cachePath + "/thumb.bmp";
+  std::string coverPath;
+  if (SdMan.exists(coverJpeg.c_str())) {
+    coverPath = coverJpeg;
+  } else if (SdMan.exists(thumbJpeg.c_str())) {
+    coverPath = thumbJpeg;
+  } else if (SdMan.exists(coverBmp.c_str())) {
+    coverPath = coverBmp;
+  } else if (SdMan.exists(thumbBmp.c_str())) {
+    coverPath = thumbBmp;
+  }
+  if (coverPath.empty()) {
+    return "";
+  }
+  String url = "/download?path=";
+  url += coverPath.c_str();
+  url += "&inline=1";
+  return url;
+}
+
 std::vector<std::string> epubCacheDirs() {
   std::vector<std::string> out;
   FsFile root = SdMan.open("/.metadata/epub");
@@ -758,6 +820,7 @@ void LocalServer::begin() {
 
   server->on("/", HTTP_GET, [this] { handleRoot(); });
   server->on("/files", HTTP_GET, [this] { handleFileList(); });
+  server->on("/library", HTTP_GET, [this] { handleLibraryPage(); });
   server->on("/epub", HTTP_GET, [this] { handleEpubPage(); });
   server->on("/export", HTTP_GET, [this] { handleExportPage(); });
   server->on("/font-manager", HTTP_GET, [this] { handleFontManagerPage(); });
@@ -766,10 +829,12 @@ void LocalServer::begin() {
   server->on("/js/jszip.min.js", HTTP_GET, [this] { handleJsZipMinJs(); });
   server->on("/js/epub_page.js", HTTP_GET, [this] { handleEpubPageJs(); });
   server->on("/js/files_page.js", HTTP_GET, [this] { handleFilesPageJs(); });
+  server->on("/js/library_page.js", HTTP_GET, [this] { handleLibraryPageJs(); });
   server->on("/update", HTTP_GET, [this] { handleUpdatePage(); });
 
   server->on("/api/status", HTTP_GET, [this] { handleStatus(); });
   server->on("/api/files", HTTP_GET, [this] { handleFileListData(); });
+  server->on("/api/library", HTTP_GET, [this] { handleLibraryData(); });
   server->on("/api/export-notes", HTTP_GET, [this] { handleExportNotesData(); });
   server->on("/api/book-tags", HTTP_GET, [this] { handleBookTagsGet(); });
   server->on("/api/book-tags", HTTP_POST, [this] { handleBookTagsPost(); });
@@ -1537,6 +1602,10 @@ bool LocalServer::isEpubFile(const String& filename) const {
 
 void LocalServer::handleFileList() const { server->send(200, "text/html", FilesPageHtml); }
 
+void LocalServer::handleLibraryPage() const {
+  server->send_P(200, PSTR("text/html; charset=utf-8"), LibraryPageHtml, sizeof(LibraryPageHtml) - 1);
+}
+
 void LocalServer::handleEpubPage() const {
   server->send_P(200, PSTR("text/html; charset=utf-8"), EpubPageHtml, sizeof(EpubPageHtml) - 1);
 }
@@ -1563,6 +1632,10 @@ void LocalServer::handleEpubPageJs() const {
 
 void LocalServer::handleFilesPageJs() const {
   server->send_P(200, PSTR("text/javascript; charset=utf-8"), FILES_PAGE_JS, sizeof(FILES_PAGE_JS) - 1);
+}
+
+void LocalServer::handleLibraryPageJs() const {
+  server->send_P(200, PSTR("text/javascript; charset=utf-8"), LIBRARY_PAGE_JS, sizeof(LIBRARY_PAGE_JS) - 1);
 }
 
 void LocalServer::handleFileListData() const {
@@ -1611,6 +1684,97 @@ void LocalServer::handleFileListData() const {
 
   server->sendContent("");
   Serial.printf("[%lu] [WEB] Served file listing page for path: %s\n", millis(), currentPath.c_str());
+}
+
+void LocalServer::handleLibraryData() const {
+#ifdef INX_SIMULATOR_WEB_ONLY
+  server->send(200, "application/json",
+               "{\"indexed\":true,\"indexing\":false,\"current\":0,\"total\":0,\"books\":["
+               "{\"path\":\"/Books/1984.epub\",\"title\":\"1984\",\"author\":\"George Orwell\",\"folder\":\"Books\","
+               "\"tag\":\"Classic\",\"type\":\"EPUB\",\"size\":1048576,\"coverUrl\":\"\",\"progress\":64,"
+               "\"readingTimeMs\":7200000,\"pagesRead\":126,\"sessions\":8},"
+               "{\"path\":\"/Books/Sample.xtc\",\"title\":\"Sample Panels\",\"author\":\"Inx\",\"folder\":\"Books\","
+               "\"tag\":\"Manga\",\"type\":\"XTC\",\"size\":524288,\"coverUrl\":\"\",\"progress\":12,"
+               "\"readingTimeMs\":900000,\"pagesRead\":18,\"sessions\":2}]}");
+#else
+  std::vector<IndexedBookInfo> books;
+  const bool hasIndex = loadIndexedBooksWithTags(books);
+  std::sort(books.begin(), books.end(), [](const IndexedBookInfo& a, const IndexedBookInfo& b) {
+    return lowerAscii(a.title) < lowerAscii(b.title);
+  });
+
+  server->setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server->send(200, "application/json", "");
+  server->sendContent("{\"indexed\":");
+  server->sendContent(hasIndex ? "true" : "false");
+  server->sendContent(",\"indexing\":");
+  server->sendContent(webLibraryIndexing ? "true" : "false");
+  server->sendContent(",\"current\":");
+  server->sendContent(String(webLibraryIndexCurrent));
+  server->sendContent(",\"total\":");
+  server->sendContent(String(webLibraryIndexTotal));
+  server->sendContent(",\"books\":[");
+
+  bool first = true;
+  for (const IndexedBookInfo& book : books) {
+    const std::string cachePath = cachePathForIndexedBook(book.path);
+    String title = book.title;
+    String author;
+    BookMetadataCache metadata(cachePath);
+    if (metadata.load()) {
+      if (!metadata.coreMetadata.title.empty()) {
+        title = metadata.coreMetadata.title.c_str();
+      }
+      author = metadata.coreMetadata.author.c_str();
+    }
+
+    BookReadingStats stats;
+    const bool hasStats = loadBookStats(cachePath.c_str(), stats);
+    if (hasStats) {
+      if (title.isEmpty() && !stats.title.empty()) {
+        title = stats.title.c_str();
+      }
+      if (author.isEmpty() && !stats.author.empty()) {
+        author = stats.author.c_str();
+      }
+    }
+
+    if (!first) {
+      server->sendContent(",");
+    }
+    first = false;
+
+    String row = "{\"path\":\"";
+    row += jsonEscape(book.path);
+    row += "\",\"title\":\"";
+    row += jsonEscape(title);
+    row += "\",\"author\":\"";
+    row += jsonEscape(author);
+    row += "\",\"folder\":\"";
+    row += jsonEscape(book.folder);
+    row += "\",\"tag\":\"";
+    row += jsonEscape(book.tag);
+    row += "\",\"type\":\"";
+    row += bookFileType(book.path);
+    row += "\",\"size\":";
+    row += String(static_cast<unsigned long>(fileSizeForPath(book.path)));
+    row += ",\"coverUrl\":\"";
+    row += jsonEscape(coverUrlForCachePath(cachePath));
+    row += "\",\"progress\":";
+    row += String(hasStats ? std::max(0.0f, std::min(100.0f, stats.progressPercent)) : 0.0f, 1);
+    row += ",\"readingTimeMs\":";
+    row += String(hasStats ? stats.totalReadingTimeMs : 0);
+    row += ",\"pagesRead\":";
+    row += String(hasStats ? stats.totalPagesRead : 0);
+    row += ",\"sessions\":";
+    row += String(hasStats ? stats.sessionCount : 0);
+    row += "}";
+    server->sendContent(row);
+    yield();
+  }
+  server->sendContent("]}");
+  server->sendContent("");
+#endif
 }
 
 void LocalServer::handleExportNotesData() const {

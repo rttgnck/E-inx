@@ -22,6 +22,22 @@ The updater checks the latest GitHub release and downloads its exact `firmware.b
 
 Release tags should be plain semantic versions such as `1.1.0`. Tags beginning with `v` are also understood by the device version comparator.
 
+## Standard build and release process
+
+After a requested firmware change is implemented, finish the work with this release process unless the user explicitly asks for a local-only build:
+
+1. Document the functional build changes in the commit and release notes.
+2. Bump `[inx].version` in `platformio.ini` to the requested release identifier.
+3. Build the release firmware with `pio run -e gh_release`.
+4. Copy `.pio/build/gh_release/firmware.bin` to `bin/firmware-<version>.bin` for the local archive.
+5. Create a new branch named for the version, stage the source and generated web headers, and commit the changes.
+6. Push the branch to the `fork` remote.
+7. Open a pull request into `main`, merge it, and push `main`.
+8. Create and push a Git tag with the same version string.
+9. Confirm `.github/workflows/release.yml` publishes the GitHub Release with `firmware.bin`, `bootloader.bin`, and `partitions.bin` attached.
+
+The tag push is the step that publishes the OTA release asset; pushing a branch alone is not enough.
+
 ## Local USB flasher
 
 Run:
