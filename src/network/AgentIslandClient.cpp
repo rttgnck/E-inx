@@ -14,14 +14,19 @@
 
 namespace {
 /**
- * Ceilings on one exchange. mbedtls_net_recv() reports an expired SO_RCVTIMEO
- * as MBEDTLS_ERR_SSL_WANT_READ, which is indistinguishable from "call me
- * again" — so a stalled peer would spin the retry loops forever without a
- * deadline of our own. The probe's is short because 253 of them make a sweep;
- * the snapshot's is long because it can run to hundreds of kilobytes.
+ * Clocks on one exchange. mbedtls_net_recv() reports an expired SO_RCVTIMEO as
+ * MBEDTLS_ERR_SSL_WANT_READ, which is indistinguishable from "call me again",
+ * so a stalled peer would spin the retry loops forever without one.
+ *
+ * The connect-and-headers phase gets a short budget: nothing there depends on
+ * how much the agents have been saying. The body gets an *idle* clock instead,
+ * because its size does — see TlsBodyReader. HARD_CEILING_MS is only there so a
+ * peer that dribbles a byte at a time cannot hold the app open indefinitely.
  */
 constexpr uint32_t PROBE_BUDGET_MS = 8000;
-constexpr uint32_t REQUEST_BUDGET_MS = 45000;
+constexpr uint32_t HEADER_BUDGET_MS = 15000;
+constexpr uint32_t BODY_IDLE_MS = 10000;
+constexpr uint32_t HARD_CEILING_MS = 240000;
 }  // namespace
 
 #ifndef SIMULATOR
@@ -170,16 +175,31 @@ struct TlsSession {
  * Reads the response body off an open TLS session, starting with whatever was
  * already pulled in while scanning for the end of the headers. Honours
  * Content-Length when the server gave one and otherwise reads to close.
+ *
+ * The clock here is an *idle* one, deliberately. A total-time budget was the
+ * first thing tried and it is the wrong instrument: /api/state grows with how
+ * much the agents have said, so a perfectly healthy snapshot can take longer to
+ * arrive than any fixed budget you would be willing to wait for on a stalled
+ * one. What actually distinguishes a dead connection from a big body is whether
+ * bytes are still turning up, so that is what is measured. The overall ceiling
+ * below it is only a backstop against a peer that dribbles forever.
  */
 class TlsBodyReader final : public inx::ByteReader {
  public:
-  TlsBodyReader(mbedtls_ssl_context* ssl, std::string leftover, const long contentLength,
-                const unsigned long deadline)
-      : ssl_(ssl), buffer_(std::move(leftover)), remaining_(contentLength), deadline_(deadline) {
+  TlsBodyReader(mbedtls_ssl_context* ssl, std::string leftover, const long contentLength, const uint32_t idleMs,
+                const unsigned long hardDeadline)
+      : ssl_(ssl),
+        buffer_(std::move(leftover)),
+        remaining_(contentLength),
+        expected_(contentLength),
+        idleMs_(idleMs),
+        hardDeadline_(hardDeadline) {
+    received_ = buffer_.size();
     if (remaining_ >= 0) {
       const long alreadyHave = static_cast<long>(buffer_.size());
       remaining_ = remaining_ > alreadyHave ? remaining_ - alreadyHave : 0;
     }
+    idleDeadline_ = millis() + idleMs_;
   }
 
   int read() override {
@@ -203,6 +223,25 @@ class TlsBodyReader final : public inx::ByteReader {
   }
 
   bool complete() const { return remaining_ <= 0; }
+  size_t received() const { return received_; }
+  long expected() const { return expected_; }
+
+  /**
+   * The parser stops on the closing brace, so anything the server puts after it
+   * — a newline, say — would otherwise look like a body cut short. Swallow that
+   * before judging completeness, but only whitespace: real trailing content
+   * means the reply was not what we think it was.
+   */
+  void drainTrailingWhitespace() {
+    char scratch[64];
+    while (!complete()) {
+      const size_t got = readBytes(scratch, sizeof(scratch));
+      if (got == 0) return;
+      for (size_t i = 0; i < got; ++i) {
+        if (!isspace(static_cast<unsigned char>(scratch[i]))) return;
+      }
+    }
+  }
 
  private:
   bool fill() {
@@ -210,7 +249,7 @@ class TlsBodyReader final : public inx::ByteReader {
       finished_ = true;
       return false;
     }
-    if (static_cast<long>(millis() - deadline_) >= 0) {
+    if (static_cast<long>(millis() - idleDeadline_) >= 0 || static_cast<long>(millis() - hardDeadline_) >= 0) {
       finished_ = true;
       return false;
     }
@@ -230,17 +269,36 @@ class TlsBodyReader final : public inx::ByteReader {
 
     buffer_.assign(reinterpret_cast<char*>(chunk), static_cast<size_t>(got));
     offset_ = 0;
+    received_ += static_cast<size_t>(got);
     if (remaining_ > 0) remaining_ -= got;
+    idleDeadline_ = millis() + idleMs_;  // Progress: the clock starts again.
     return true;
   }
 
   mbedtls_ssl_context* ssl_;
   std::string buffer_;
   size_t offset_ = 0;
+  size_t received_ = 0;
   long remaining_;
-  unsigned long deadline_;
+  long expected_;
+  uint32_t idleMs_;
+  unsigned long idleDeadline_ = 0;
+  unsigned long hardDeadline_;
   bool finished_ = false;
 };
+
+/** "1.4 MB", "812 KB", "37 B" — for error text a person has to act on. */
+std::string humanBytes(const size_t bytes) {
+  char text[24];
+  if (bytes >= 1024 * 1024) {
+    snprintf(text, sizeof(text), "%.1f MB", static_cast<double>(bytes) / (1024.0 * 1024.0));
+  } else if (bytes >= 1024) {
+    snprintf(text, sizeof(text), "%u KB", static_cast<unsigned>(bytes / 1024));
+  } else {
+    snprintf(text, sizeof(text), "%u B", static_cast<unsigned>(bytes));
+  }
+  return text;
+}
 
 /** Case-insensitive lookup of one header value in a raw header block. */
 std::string headerValue(const std::string& headers, const std::string& name) {
@@ -382,7 +440,16 @@ AgentIslandClient::Result AgentIslandClient::request(const std::string& host, co
                                                      const std::string& body, const uint32_t budgetMs,
                                                      const BodyHandler* onBody) {
   Result result;
-  const unsigned long deadline = millis() + budgetMs;
+  const unsigned long started = millis();
+  const unsigned long deadline = started + budgetMs;
+
+  // Stamped on every exit path, so a caller can pace itself by how long the
+  // last exchange actually took rather than by a number picked in advance.
+  struct Stopwatch {
+    Result& result;
+    const unsigned long& started;
+    ~Stopwatch() { result.elapsedMs = static_cast<uint32_t>(millis() - started); }
+  } stopwatch{result, started};
 
   TlsSession session;
   const char* personalisation = "einx-agentisland";
@@ -540,19 +607,27 @@ AgentIslandClient::Result AgentIslandClient::request(const std::string& host, co
     result.message = "Agent Island answered " + std::to_string(result.httpStatus) + ".";
   }
 
-  TlsBodyReader reader(&session.ssl, std::move(leftover), contentLength, deadline);
+  TlsBodyReader reader(&session.ssl, std::move(leftover), contentLength, BODY_IDLE_MS, millis() + HARD_CEILING_MS);
 
   if (onBody != nullptr && result.ok()) {
     std::string message;
-    if (!(*onBody)(reader, message)) {
+    const bool handled = (*onBody)(reader, message);
+    if (handled) reader.drainTrailingWhitespace();
+
+    // How much arrived is the whole diagnosis when a body is cut short, so it
+    // is reported either way rather than left to a serial log nobody is
+    // watching. "read 900 KB of 3.4 MB" is a different problem from
+    // "read 3.4 MB of 3.4 MB", and the message has to be able to say which.
+    std::string progress = "read " + humanBytes(reader.received());
+    if (reader.expected() >= 0) progress += " of " + humanBytes(static_cast<size_t>(reader.expected()));
+
+    result.bytesReceived = reader.received();
+    if (!handled) {
       result.status = Status::BadResponse;
-      result.message = message.empty() ? "The reply could not be read." : message;
+      result.message = (message.empty() ? std::string("The reply could not be read.") : message) + " (" + progress + ")";
     } else if (!reader.complete()) {
-      // The parser stopped early — a body cut short by the deadline or a close
-      // looks like valid JSON that simply ends, so say so rather than let a
-      // half-read session list stand in for the truth.
       result.status = Status::BadResponse;
-      result.message = "The reply arrived incomplete.";
+      result.message = "The reply stopped arriving partway through (" + progress + ").";
     }
     return result;
   }
@@ -564,6 +639,7 @@ AgentIslandClient::Result AgentIslandClient::request(const std::string& host, co
     if (got == 0) break;
     result.body.append(chunk, got);
   }
+  result.bytesReceived = reader.received();
   return result;
 }
 
@@ -574,17 +650,17 @@ AgentIslandClient::Result AgentIslandClient::enroll(const AgentIslandPairing& pa
   const std::string body = "{\"deviceId\":\"" + deviceId + "\",\"deviceName\":\"E-inx reader\"}";
   const std::string host = address_.empty() ? pairing.host : address_;
   return request(host, pairing.port, pairing.fingerprint, "POST", "/api/pair", pairing.enrollmentToken, body,
-                 REQUEST_BUDGET_MS);
+                 HEADER_BUDGET_MS);
 }
 
 AgentIslandClient::Result AgentIslandClient::fetchState(const AgentIslandPairing& pairing, const BodyHandler& onBody) {
   const std::string host = address_.empty() ? pairing.host : address_;
   return request(host, pairing.port, pairing.fingerprint, "GET", "/api/state", pairing.deviceToken, "",
-                 REQUEST_BUDGET_MS, &onBody);
+                 HEADER_BUDGET_MS, &onBody);
 }
 
 AgentIslandClient::Result AgentIslandClient::sendCommand(const AgentIslandPairing& pairing, const std::string& json) {
   const std::string host = address_.empty() ? pairing.host : address_;
   return request(host, pairing.port, pairing.fingerprint, "POST", "/api/command", pairing.deviceToken, json,
-                 REQUEST_BUDGET_MS);
+                 HEADER_BUDGET_MS);
 }

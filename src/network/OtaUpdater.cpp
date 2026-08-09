@@ -27,7 +27,16 @@
 namespace {
 constexpr char latestReleaseUrl[] = "https://api.github.com/repos/rttgnck/E-inx/releases/latest";
 
-constexpr size_t kMaxReleaseJsonBytes = 12288;
+// GitHub's release JSON is mostly boilerplate the filter throws away — the
+// author and per-asset uploader objects alone are several KB — so the size
+// tracks the length of the release notes. Historically these payloads have run
+// 8.8KB to 10.9KB, which left the old 12KB ceiling about one paragraph of
+// changelog away from rejecting a perfectly good release. The ceiling is now
+// well clear of that, and when the length is not known in advance the buffer
+// starts small and doubles instead of reserving the whole ceiling up front,
+// which is the allocation most likely to fail on a fragmented heap.
+constexpr size_t kInitialReleaseJsonBytes = 4096;
+constexpr size_t kMaxReleaseJsonBytes = 32768;
 
 constexpr int kGithubCheckTaskStack = 16384;
 constexpr int kGithubCheckTaskPrio = 3;
@@ -155,7 +164,7 @@ esp_err_t event_handler(esp_http_client_event_t* event) {
       local_buf_cap = static_cast<size_t>(content_len) + 1;
       local_buf = static_cast<char*>(calloc(local_buf_cap, 1));
     } else {
-      local_buf_cap = kMaxReleaseJsonBytes;
+      local_buf_cap = kInitialReleaseJsonBytes;
       local_buf = static_cast<char*>(calloc(local_buf_cap, 1));
     }
     if (local_buf == nullptr) {
@@ -274,6 +283,7 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdateWorker() {
   updateAvailable = false;
   latestVersion.clear();
   releaseNotes.clear();
+  failureDetail.clear();
   otaUrl.clear();
   otaSize = 0;
   processedSize = 0;
@@ -341,17 +351,22 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdateWorker() {
 
   const DeserializationError error = deserializeJson(doc, local_buf, DeserializationOption::Filter(filter));
   if (error) {
-    Serial.printf("[%lu] [OTA] JSON parse failed: %s\n", millis(), error.c_str());
+    Serial.printf("[%lu] [OTA] JSON parse failed: %s (%d bytes, cap %u, free heap %u)\n", millis(), error.c_str(),
+                  output_len, static_cast<unsigned>(kMaxReleaseJsonBytes),
+                  static_cast<unsigned>(ESP.getFreeHeap()));
+    failureDetail = std::string(error.c_str()) + " after " + std::to_string(output_len) + " bytes";
     return JSON_PARSE_ERROR;
   }
 
   if (!doc["tag_name"].is<std::string>()) {
     Serial.printf("[%lu] [OTA] No tag_name found\n", millis());
+    failureDetail = "the release had no tag_name";
     return JSON_PARSE_ERROR;
   }
 
   if (!doc["assets"].is<JsonArray>()) {
     Serial.printf("[%lu] [OTA] No assets found\n", millis());
+    failureDetail = "the release listed no assets";
     return JSON_PARSE_ERROR;
   }
 
@@ -418,9 +433,14 @@ const std::string& OtaUpdater::getLatestVersion() const { return latestVersion; 
 /** Return the changelog body supplied with the latest GitHub release. */
 const std::string& OtaUpdater::getReleaseNotes() const { return releaseNotes; }
 
+/** Return why the last check failed, in the terms it failed in. */
+const std::string& OtaUpdater::getFailureDetail() const { return failureDetail; }
+
 /** Download and install the latest update over HTTPS. */
-OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate() {
-  if (!isUpdateNewer()) {
+OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(const bool allowSameVersion) {
+  // A reinstall still needs a release to have been found and an asset picked;
+  // it only waives the "must be newer" test.
+  if (allowSameVersion ? (otaUrl.empty() || otaSize == 0) : !isUpdateNewer()) {
     return UPDATE_OLDER_ERROR;
   }
 

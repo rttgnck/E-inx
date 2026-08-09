@@ -1209,7 +1209,14 @@ void LocalServer::handleGithubFirmwareCheck() {
   doc["newer"] = result == OtaUpdater::OK && githubUpdater->isUpdateNewer();
   doc["notes"] = githubUpdater->getReleaseNotes();
   doc["size"] = githubUpdater->getOtaSize();
-  if (result != OtaUpdater::OK) doc["error"] = otaErrorMessage(result);
+  if (result != OtaUpdater::OK) {
+    // The mapped message says which category the failure fell into; the detail
+    // says what actually happened. Without it "release information the reader
+    // could not understand" is a dead end for whoever has to fix it.
+    const std::string& detail = githubUpdater->getFailureDetail();
+    doc["error"] = detail.empty() ? std::string(otaErrorMessage(result))
+                                  : std::string(otaErrorMessage(result)) + " — " + detail;
+  }
 
   String json;
   serializeJson(doc, json);
@@ -2660,6 +2667,10 @@ void LocalServer::handleSettingsGet() const {
   doc["hideBatteryPercentage"] = SETTINGS.hideBatteryPercentage;
   doc["uiTheme"] = SETTINGS.uiTheme;
   doc["showBottomBarClock"] = SETTINGS.showBottomBarClock;
+  doc["appDrawerNews"] = SETTINGS.appDrawerNews;
+  doc["appDrawerGames"] = SETTINGS.appDrawerGames;
+  doc["appDrawerCrossPlay"] = SETTINGS.appDrawerCrossPlay;
+  doc["appDrawerAgentIsland"] = SETTINGS.appDrawerAgentIsland;
   doc["recentLibraryMode"] = SETTINGS.recentLibraryMode;
   doc["libraryMode"] = SETTINGS.libraryMode;
   doc["recentVisibleCount"] = SETTINGS.recentVisibleCount;
@@ -2973,6 +2984,14 @@ void LocalServer::handleSettingsUpdate() const {
     } else if (strcmp(key, "statusBarRight") == 0) {
       SETTINGS.statusBarRight = value >= 0 && value < SystemSetting::STATUS_BAR_ITEM_COUNT ? (uint8_t)value : 0;
       changed = true;
+    } else if (strcmp(key, "appDrawerNews") == 0) {
+      SETTINGS.appDrawerNews = (uint8_t)value ? 1 : 0;
+    } else if (strcmp(key, "appDrawerGames") == 0) {
+      SETTINGS.appDrawerGames = (uint8_t)value ? 1 : 0;
+    } else if (strcmp(key, "appDrawerCrossPlay") == 0) {
+      SETTINGS.appDrawerCrossPlay = (uint8_t)value ? 1 : 0;
+    } else if (strcmp(key, "appDrawerAgentIsland") == 0) {
+      SETTINGS.appDrawerAgentIsland = (uint8_t)value ? 1 : 0;
     } else if (strcmp(key, "showBottomBarClock") == 0) {
       SETTINGS.showBottomBarClock = (uint8_t)value ? 1 : 0;
       changed = true;
@@ -3440,6 +3459,28 @@ void LocalServer::handleAgentIslandPost() const {
   JsonDocument doc;
   if (deserializeJson(doc, server->arg("plain")) != DeserializationError::Ok) {
     server->send(400, "text/plain", "Body must be a JSON object");
+    return;
+  }
+
+  // Repointing an existing pairing at a new address, without a new code. The
+  // Mac's hostname or DHCP lease changing does not invalidate its certificate,
+  // and the pin is what decides whether whatever answers there is really it.
+  if (doc["host"].is<const char*>()) {
+    const String host = doc["host"] | "";
+    const uint16_t port = doc["port"] | 47124;
+    if (host.length() == 0) {
+      server->send(400, "text/plain", "Enter the Mac's hostname or address");
+      return;
+    }
+    if (!AGENT_ISLAND_STORE.get().hasEndpoint()) {
+      server->send(409, "text/plain", "Pair with a link first; there is no certificate to check against yet");
+      return;
+    }
+    if (!AGENT_ISLAND_STORE.setEndpoint(host.c_str(), port)) {
+      server->send(500, "text/plain", "Failed to save the address");
+      return;
+    }
+    server->send(200, "application/json", "{\"status\":\"ok\"}");
     return;
   }
 

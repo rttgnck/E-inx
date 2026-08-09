@@ -13,6 +13,7 @@ class OtaUpdater {
   bool updateAvailable = false;
   std::string latestVersion;
   std::string releaseNotes;
+  std::string failureDetail;
   std::string otaUrl;
   size_t otaSize = 0;
   std::atomic<size_t> processedSize{0};
@@ -57,10 +58,26 @@ class OtaUpdater {
   const std::string& getLatestVersion() const;
   /** Return the changelog body supplied with the latest GitHub release. */
   const std::string& getReleaseNotes() const;
+  /**
+   * Why the last check failed, in the terms the failure actually occurred in —
+   * the parser's own verdict and how many bytes it was given. The mapped
+   * OtaUpdaterError says which category it fell into; this says what happened,
+   * which is the difference between a message you can act on and one you cannot.
+   * Empty when the last check succeeded.
+   */
+  const std::string& getFailureDetail() const;
   /** Check GitHub for the latest release, running the request on a background task. */
   OtaUpdaterError checkForUpdate();
-  /** Download and install the latest update over HTTPS. */
-  OtaUpdaterError installUpdate();
+  /**
+   * Download and install the latest release over HTTPS.
+   *
+   * `allowSameVersion` re-flashes a release that is not newer than what is
+   * installed — the "Reinstall" path, for recovering a build that flashed badly
+   * or replacing one whose assets were replaced under the same tag. Without it
+   * an equal-or-older release is refused, which is the right default for an
+   * update check.
+   */
+  OtaUpdaterError installUpdate(bool allowSameVersion = false);
   /** Install a firmware image read from the SD card. */
   OtaUpdaterError installUpdateFromSd(const char* firmwarePath = "/firmware.bin");
 };

@@ -38,6 +38,9 @@ enum class GroupType {
   EXPERIMENTAL,
   DEVICE_ACTIONS,
   IMAGE,
+  APP_DRAWER,
+  // Keep IF_FOUND last: kGroupCount is derived from it, so a group added after
+  // it would index past the end of groupExpanded_.
   IF_FOUND,
 };
 

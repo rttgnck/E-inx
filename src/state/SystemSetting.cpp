@@ -40,8 +40,8 @@ void readAndValidate(FsFile& file, uint8_t& member, const uint8_t maxValue) {
 }
 
 namespace {
-constexpr uint8_t SETTINGS_FILE_VERSION = 41;
-constexpr uint8_t SETTINGS_COUNT = 93;
+constexpr uint8_t SETTINGS_FILE_VERSION = 42;
+constexpr uint8_t SETTINGS_COUNT = 97;
 /** Last field index in v9 (1-based count of persisted pods through displayImageDither). */
 constexpr uint8_t SETTINGS_COUNT_V9 = 40;
 constexpr uint8_t LEGACY_SLEEP_IMAGE_ADVANCE_POWER = 7;
@@ -264,6 +264,10 @@ uint32_t settingsHash(const SystemSetting& settings, const uint8_t fontFamilyToS
   hashPod(hash, settings.x3ReinforcePeriodicClean);
   hashPod(hash, settings.x3ReinforceCleanInterval);
   hashPod(hash, settings.tab2Content);
+  hashPod(hash, settings.appDrawerNews);
+  hashPod(hash, settings.appDrawerGames);
+  hashPod(hash, settings.appDrawerCrossPlay);
+  hashPod(hash, settings.appDrawerAgentIsland);
   return hash;
 }
 }  // namespace
@@ -326,6 +330,10 @@ bool SystemSetting::saveToFile() const {
     if (mut->x3ReinforceCleanInterval >= X3_REINFORCE_CLEAN_INTERVAL_COUNT)
       mut->x3ReinforceCleanInterval = X3_REINFORCE_CLEAN_30;
     if (mut->tab2Content >= TAB2_CONTENT_COUNT) mut->tab2Content = TAB2_NEWS;
+    if (mut->appDrawerNews > 1) mut->appDrawerNews = 1;
+    if (mut->appDrawerGames > 1) mut->appDrawerGames = 1;
+    if (mut->appDrawerCrossPlay > 1) mut->appDrawerCrossPlay = 1;
+    if (mut->appDrawerAgentIsland > 1) mut->appDrawerAgentIsland = 1;
     mut->sleepImageRotationMinutes = normalizeSleepImageRotationMinutes(mut->sleepImageRotationMinutes);
     if (mut->sleepImageRotationEnabled > 1) mut->sleepImageRotationEnabled = 1;
     if (mut->sleepImagePowerDoublePress > 1) {
@@ -450,6 +458,10 @@ bool SystemSetting::saveToFile() const {
   serialization::writePod(outputFile, x3ReinforcePeriodicClean);
   serialization::writePod(outputFile, x3ReinforceCleanInterval);
   serialization::writePod(outputFile, tab2Content);
+  serialization::writePod(outputFile, appDrawerNews);
+  serialization::writePod(outputFile, appDrawerGames);
+  serialization::writePod(outputFile, appDrawerCrossPlay);
+  serialization::writePod(outputFile, appDrawerAgentIsland);
 
   outputFile.close();
   saveUiThemeSetting(uiTheme);
@@ -933,6 +945,26 @@ bool SystemSetting::loadFromFile() {
       readAndValidate(inputFile, tab2Content, TAB2_CONTENT_COUNT);
       ++settingsRead;
     }
+    if (settingsRead < fileSettingsCount) {
+      serialization::readPod(inputFile, appDrawerNews);
+      if (appDrawerNews > 1) appDrawerNews = 1;
+      ++settingsRead;
+    }
+    if (settingsRead < fileSettingsCount) {
+      serialization::readPod(inputFile, appDrawerGames);
+      if (appDrawerGames > 1) appDrawerGames = 1;
+      ++settingsRead;
+    }
+    if (settingsRead < fileSettingsCount) {
+      serialization::readPod(inputFile, appDrawerCrossPlay);
+      if (appDrawerCrossPlay > 1) appDrawerCrossPlay = 1;
+      ++settingsRead;
+    }
+    if (settingsRead < fileSettingsCount) {
+      serialization::readPod(inputFile, appDrawerAgentIsland);
+      if (appDrawerAgentIsland > 1) appDrawerAgentIsland = 1;
+      ++settingsRead;
+    }
 
   } while (false);
 
@@ -1034,6 +1066,10 @@ bool SystemSetting::loadFromFile() {
   }
   if (settingsRead < 93) {
     tab2Content = TAB2_NEWS;
+    appDrawerNews = 1;
+    appDrawerGames = 1;
+    appDrawerCrossPlay = 1;
+    appDrawerAgentIsland = 1;
   }
 
   if (recentVisibleCount < 1 || recentVisibleCount > 9) {
@@ -1116,6 +1152,10 @@ bool SystemSetting::loadFromFile() {
   if (x3ReinforceCleanInterval >= X3_REINFORCE_CLEAN_INTERVAL_COUNT) {
     x3ReinforceCleanInterval = X3_REINFORCE_CLEAN_30;
   }
+  if (appDrawerNews > 1) appDrawerNews = 1;
+  if (appDrawerGames > 1) appDrawerGames = 1;
+  if (appDrawerCrossPlay > 1) appDrawerCrossPlay = 1;
+  if (appDrawerAgentIsland > 1) appDrawerAgentIsland = 1;
   if (tab2Content >= TAB2_CONTENT_COUNT) {
     tab2Content = TAB2_NEWS;
   }

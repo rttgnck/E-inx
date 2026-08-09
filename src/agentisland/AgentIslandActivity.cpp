@@ -182,7 +182,7 @@ void AgentIslandActivity::loop() {
     return;
   }
 
-  if ((phase_ == Phase::List || phase_ == Phase::Card) && millis() - lastPollMs_ > POLL_INTERVAL_MS) {
+  if ((phase_ == Phase::List || phase_ == Phase::Card) && millis() - lastPollMs_ > pollInterval()) {
     performRefresh();
     return;
   }
@@ -322,6 +322,16 @@ void AgentIslandActivity::performConnect() {
   performRefresh();
 }
 
+uint32_t AgentIslandActivity::pollInterval() const {
+  // Leave at least twice the last fetch's duration idle between fetches. A
+  // snapshot that takes twenty seconds to arrive polled on an eight-second
+  // timer would mean the radio never stops and the panel never settles, which
+  // is worse than being a minute behind.
+  const uint32_t paced = lastFetchMs_ * 3;
+  if (paced <= POLL_INTERVAL_MS) return POLL_INTERVAL_MS;
+  return paced > POLL_INTERVAL_MAX_MS ? POLL_INTERVAL_MAX_MS : paced;
+}
+
 void AgentIslandActivity::performRefresh() {
   lastPollMs_ = millis();
 
@@ -335,6 +345,13 @@ void AgentIslandActivity::performRefresh() {
         message = "Agent Island's reply could not be read (" + reason + ").";
         return false;
       });
+
+  lastFetchMs_ = result.elapsedMs;
+  lastSnapshotBytes_ = result.bytesReceived;
+  lastPollMs_ = millis();  // Pace from when the fetch finished, not when it started.
+  Serial.printf("[%lu] [AIS] Snapshot %u bytes in %u ms, next poll in %u ms\n", millis(),
+                static_cast<unsigned>(result.bytesReceived), static_cast<unsigned>(result.elapsedMs),
+                static_cast<unsigned>(pollInterval()));
 
   if (!result.ok()) {
     connected_ = false;
@@ -361,6 +378,14 @@ void AgentIslandActivity::performRefresh() {
 
   connected_ = true;
   connectionLabel_ = client_.address().empty() ? pairing_.host : client_.address();
+  // A snapshot this size is not a device problem and the user cannot fix it
+  // from here, but it explains why the list is slow to move, so it is said
+  // rather than hidden.
+  if (lastSnapshotBytes_ >= LARGE_SNAPSHOT_BYTES) {
+    char note[32];
+    snprintf(note, sizeof(note), " · %.1f MB", static_cast<double>(lastSnapshotBytes_) / (1024.0 * 1024.0));
+    connectionLabel_ += note;
+  }
 
   const uint32_t signature = next.signature();
   const std::string openId = phase_ == Phase::Card && selectedSession_ < static_cast<int>(snapshot_.sessions.size())
