@@ -21,5 +21,8 @@ struct Rect {
   int width;
   int height;
 
-  explicit Rect(int x = 0, int y = 0, int width = 0, int height = 0) : x(x), y(y), width(width), height(height) {}
+  // Not explicit: the ported apps pass `Rect{a, b, c, d}` as an argument and
+  // as a return value, both of which are copy-initialisation and both of which
+  // an explicit constructor rejects.
+  Rect(int x = 0, int y = 0, int width = 0, int height = 0) : x(x), y(y), width(width), height(height) {}
 };

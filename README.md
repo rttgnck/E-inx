@@ -10,6 +10,29 @@ E-inx is a community firmware for Xteink e-paper readers, forked from [Inx](http
 
 ![](./docs/images/cover.jpg)
 
+## What's New in E-inx 1.5.17-3_update
+
+- **The rest of CrossPlay** — Jaipur, Murdle, Connections, Insider, Study, Hacker News and xkcd join the four
+  already ported. The `CrossPlay` entry now lists eleven apps and scrolls.
+- **App drawer rows fit their contents** — the row border was exactly as tall as the text block inside it, so
+  every description had its descenders clipped by the box. Row geometry is now derived from the fonts, in the
+  Apps, Games and CrossPlay lists alike, so a font change cannot silently re-break it.
+- **Buttons throughout** — six of the seven new apps route everything through the interaction table, so the
+  focus ring reaches them as-is. Murdle and Jaipur needed cursors of their own (a grid and a clue list; a row of
+  market, hand and herd cells), and Study's four grade cells became a cursor the pad walks.
+- **Networking without a reboot** — Connections, Hacker News and xkcd end a Wi-Fi session by tearing the radio
+  down, the way E-inx's own networked screens do. Upstream reboots the device at that point, which here would
+  drop you out of the app and back to the home screen every time you closed one.
+
+### Known limitations in this release
+
+- **Study will not draw Chinese.** Its five CJK faces are CrossPoint `.cpfont` files loaded through a font
+  subsystem E-inx does not have. Latin-script decks, the FSRS scheduler and the whole review flow work; a deck
+  whose headwords are hanzi will show boxes for them.
+- **PLAY NEARBY still does nothing** — now in Jaipur as well as Chess and Battleship.
+- Typography, corner radii and grey levels are unchanged from 1.5.17 — see below.
+- **Only Solitaire has been run on hardware.**
+
 ## What's New in E-inx 1.5.17-2_update
 
 - **Tier 1 of the CrossPlay port** — Chess, Battleship and D&Diagrams join Solitaire under the `CrossPlay`

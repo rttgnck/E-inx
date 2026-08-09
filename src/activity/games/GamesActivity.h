@@ -84,8 +84,13 @@ class GamesActivity final : public Activity, public Menu {
 
  private:
   static constexpr int GAME_COUNT = 4;
-  static constexpr int ITEM_HEIGHT = 64;
-  static constexpr int ITEM_PADDING = 10;
+  // Row geometry is derived from the fonts rather than fixed, because it was
+  // fixed and wrong: the box was ITEM_HEIGHT - ITEM_PADDING tall and the
+  // description ended at exactly that line, so every descender was clipped by
+  // the border. Deriving it means a font change cannot silently re-break it.
+  static constexpr int ROW_PAD = 12;       // above the name, below the description
+  static constexpr int ROW_TEXT_GAP = 4;   // between the two lines
+  static constexpr int ROW_GAP = 10;       // between one row's box and the next
   static constexpr int kInk = static_cast<int>(GfxRenderer::FillTone::Ink);
 
   struct GameInfo {
@@ -156,20 +161,24 @@ class GamesActivity final : public Activity, public Menu {
     renderer.line.render(30, contentY + 30, sw - 30, contentY + 30);
 
     const int listStartY = contentY + 42;
+    const int nameH = renderer.text.getLineHeight(ATKINSON_HYPERLEGIBLE_14_FONT_ID);
+    const int descH = renderer.text.getLineHeight(ATKINSON_HYPERLEGIBLE_10_FONT_ID);
+    const int boxH = ROW_PAD + nameH + ROW_TEXT_GAP + descH + ROW_PAD;
+    const int rowStride = boxH + ROW_GAP;
     const int textMaxWidth = sw - 88;
     for (int i = 0; i < GAME_COUNT; ++i) {
-      const int itemY = listStartY + i * ITEM_HEIGHT;
+      const int itemY = listStartY + i * rowStride;
       const bool selected = (i == selectedIndex);
 
       if (selected) {
-        renderer.rectangle.fill(24, itemY, sw - 48, ITEM_HEIGHT - ITEM_PADDING, kInk);
+        renderer.rectangle.fill(24, itemY, sw - 48, boxH, kInk);
       } else {
-        renderer.rectangle.render(24, itemY, sw - 48, ITEM_HEIGHT - ITEM_PADDING);
+        renderer.rectangle.render(24, itemY, sw - 48, boxH);
       }
 
       const int textX = 44;
-      const int nameY = itemY + 12;
-      const int descY = itemY + 36;
+      const int nameY = itemY + ROW_PAD;
+      const int descY = nameY + nameH + ROW_TEXT_GAP;
       renderer.text.render(ATKINSON_HYPERLEGIBLE_14_FONT_ID, textX, nameY, kGames[i].name, !selected,
                            EpdFontFamily::BOLD);
       const std::string description =

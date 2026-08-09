@@ -19,7 +19,7 @@ That shared ancestry is why this port is as small as it is.
 
 Copied byte-for-byte, because they touch no firmware surface at all:
 
-- Every `*Core.{h,cpp}` — the rules engines for all four games, plus
+- Every `*Core.{h,cpp}` — the rules engines for all eleven apps, plus
   `chess/ChessEngine.{h,cpp}`.
 - Every `*Screens.{h,cpp}` — the screen builders. They draw through a
   `DrawTarget` they are handed and know nothing about who implements it. The two
@@ -71,3 +71,20 @@ Copied byte-for-byte, because they touch no firmware surface at all:
   chrome, which upstream reaches by tap.
 - `CrossPlayActivity.h` replaces upstream's `Shelf.cpp`, which is built on an
   activity stack E-inx does not have.
+- `compat/CrossPlayWifi.h` joins CrossPoint's `startActivityForResult` push/pop to
+  E-inx's `WifiSelectionActivity`, which reports through a completion callback
+  instead of popping itself.
+- `compat/CrossPlayTheme.h` supplies the two pieces of CrossPoint's reader theme
+  Study borrows (header metrics, centred wrapped text).
+- `compat/CrossPlayFontIds.h` maps upstream's generated font-id hashes onto
+  E-inx's built-ins.
+- `study/StudyFonts.{h,cpp}` is a **stub**. Upstream loads five subset CJK faces
+  from `.cpfont` files through `SdCardFontManager`; both the format and the
+  subsystem are CrossPoint's. It reports "nothing loaded", which is a state
+  upstream already handles — at the cost of hanzi rendering as tofu. See the
+  header.
+- `crossplay::silentRestart()` tears the radio down instead of rebooting.
+  Upstream's reboot depends on an RTC flag that routes you back to where you
+  were; E-inx has no such flag, so a reboot would drop the player out of the app.
+- `crossplay::fetchUrlStreaming()` and `crossplay::openFileForAppend()` supply two
+  storage/network shapes E-inx's own APIs do not have.

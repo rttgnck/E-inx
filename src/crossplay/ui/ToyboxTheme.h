@@ -43,6 +43,19 @@ struct Faces {
 /** The fork's default, and what Solitaire uses. */
 inline Faces toyboxFaces() { return Faces{}; }
 
+/**
+ * @brief Connections' faces: a condensed serif that fits a long word in a tile.
+ *
+ * Upstream picks Instrument Serif because it is the only elegant face also
+ * condensed enough to set "ACTUALLY" inside a 111px tile. That face is not
+ * available here (see ToyboxFonts.h), so both bind to Literata — E-inx's own
+ * reading face — at the two sizes that correspond. The header band stays in the
+ * display cut either way: the top bar is the fork's chrome, not the game's
+ * voice, and a shared one is what makes two apps feel like one device.
+ */
+inline Faces serifBoardFaces() { return Faces{kSerifTileFontId, kUiFontId, kDisplayFontId}; }
+inline Faces serifMenuFaces() { return Faces{kSerifSmallFontId, kSerifTileFontId, kDisplayFontId}; }
+
 /** For a screen whose surface is a page of prose rather than a board. */
 inline Faces readingFaces() { return Faces{kTileFontId, kReadingFontId, kDisplayFontId}; }
 
