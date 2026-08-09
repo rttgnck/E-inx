@@ -1051,12 +1051,12 @@ LocalServer::WsUploadStatus LocalServer::getWsUploadStatus() const {
 }
 
 void LocalServer::handleRoot() const {
-  server->send(200, "text/html", HomePageHtml);
+  server->send_P(200, PSTR("text/html; charset=utf-8"), HomePageHtml, sizeof(HomePageHtml) - 1);
   Serial.printf("[%lu] [WEB] Served root page\n", millis());
 }
 
 void LocalServer::handleUpdatePage() const {
-  server->send(200, "text/html", UpdatePageHtml);
+  server->send_P(200, PSTR("text/html; charset=utf-8"), UpdatePageHtml, sizeof(UpdatePageHtml) - 1);
   Serial.printf("[%lu] [WEB] Served firmware update page\n", millis());
 }
 
@@ -1626,7 +1626,9 @@ bool LocalServer::isEpubFile(const String& filename) const {
   return lower.size() >= 5 && lower.compare(lower.size() - 5, 5, ".epub") == 0;
 }
 
-void LocalServer::handleFileList() const { server->send(200, "text/html", FilesPageHtml); }
+void LocalServer::handleFileList() const {
+  server->send_P(200, PSTR("text/html; charset=utf-8"), FilesPageHtml, sizeof(FilesPageHtml) - 1);
+}
 
 void LocalServer::handleLibraryPage() const {
   server->send_P(200, PSTR("text/html; charset=utf-8"), LibraryPageHtml, sizeof(LibraryPageHtml) - 1);
@@ -1640,9 +1642,13 @@ void LocalServer::handleExportPage() const {
   server->send_P(200, PSTR("text/html; charset=utf-8"), ExportPageHtml, sizeof(ExportPageHtml) - 1);
 }
 
-void LocalServer::handleFontManagerPage() const { server->send(200, "text/html", FontManagerPageHtml); }
+void LocalServer::handleFontManagerPage() const {
+  server->send_P(200, PSTR("text/html; charset=utf-8"), FontManagerPageHtml, sizeof(FontManagerPageHtml) - 1);
+}
 
-void LocalServer::handleTagsPage() const { server->send(200, "text/html", TagsPageHtml); }
+void LocalServer::handleTagsPage() const {
+  server->send_P(200, PSTR("text/html; charset=utf-8"), TagsPageHtml, sizeof(TagsPageHtml) - 1);
+}
 
 void LocalServer::handleInxFontPackJs() const {
   server->send_P(200, PSTR("text/javascript; charset=utf-8"), INX_FONT_PACK_JS, sizeof(INX_FONT_PACK_JS) - 1);
@@ -2632,8 +2638,16 @@ void LocalServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload,
   }
 }
 
+/**
+ * Sent with send_P, not send(). server(code, type, const char*) binds the
+ * String overload, which copies the whole document into the heap before a byte
+ * goes out — 73KB for this page, the largest the reader serves. That
+ * allocation is the first thing to fail on a fragmented heap, and when it does
+ * the browser gets an empty 200: a blank page with nothing in the console to
+ * explain it. send_P streams straight out of flash instead.
+ */
 void LocalServer::handleSettingsPage() const {
-  server->send(200, "text/html", SettingsPageHtml);
+  server->send_P(200, PSTR("text/html; charset=utf-8"), SettingsPageHtml, sizeof(SettingsPageHtml) - 1);
   Serial.printf("[%lu] [WEB] Served settings page\n", millis());
 }
 

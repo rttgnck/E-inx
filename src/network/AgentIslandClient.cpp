@@ -357,7 +357,7 @@ void AgentIslandClient::releaseWifi() {
 #ifdef SIMULATOR
 
 AgentIslandClient::Discovery AgentIslandClient::resolve(const AgentIslandPairing&,
-                                                        const std::function<void(int, int)>&) {
+                                                        const std::function<bool(int, int)>&) {
   return Discovery::Failed;
 }
 
@@ -380,7 +380,7 @@ bool AgentIslandClient::probe(const std::string& host, const AgentIslandPairing&
 }
 
 AgentIslandClient::Discovery AgentIslandClient::resolve(const AgentIslandPairing& pairing,
-                                                        const std::function<void(int, int)>& progress) {
+                                                        const std::function<bool(int, int)>& progress) {
   address_.clear();
 
   // 1. Whatever answered last time. Costs one connect when the lease has not moved.
@@ -417,7 +417,7 @@ AgentIslandClient::Discovery AgentIslandClient::resolve(const AgentIslandPairing
   char candidate[16];
   for (int host = 1; host <= 254; ++host) {
     if (host == self[3]) continue;
-    if (progress) progress(host, 254);
+    if (progress && !progress(host, 254)) return Discovery::Cancelled;
     snprintf(candidate, sizeof(candidate), "%u.%u.%u.%d", static_cast<unsigned>(self[0]), static_cast<unsigned>(self[1]),
              static_cast<unsigned>(self[2]), host);
 
