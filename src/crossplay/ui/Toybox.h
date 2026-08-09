@@ -26,17 +26,10 @@
 #include <algorithm>
 #include <cstdint>
 
+#include "../compat/CrossPlayRect.h"
 #include "ToyboxMetrics.h"
 
 namespace toybox {
-
-/** A box, in the plain integer geometry the helpers below take. */
-struct Box {
-  int x = 0;
-  int y = 0;
-  int width = 0;
-  int height = 0;
-};
 
 namespace detail {
 constexpr int kInk = static_cast<int>(GfxRenderer::FillTone::Ink);
@@ -59,7 +52,7 @@ inline void rule(const GfxRenderer& renderer, const int y, const int weight = kR
 // which upstream uses to turn a square into a circle, becomes the renderer's
 // standard curve instead and reads as a rounded square. Accepted: the gear is a
 // 24px settings glyph, not artwork.
-inline void gear(const GfxRenderer& renderer, const Box& box, const bool ink) {
+inline void gear(const GfxRenderer& renderer, const Rect& box, const bool ink) {
   const int cx = box.x + box.width / 2;
   const int cy = box.y + box.height / 2;
   const int outer = box.width / 2;
@@ -85,7 +78,7 @@ inline void gear(const GfxRenderer& renderer, const Box& box, const bool ink) {
 
 // Four corner marks inside a rect. Used to flag a square without covering what
 // is standing on it, and it rhymes with the brackets around the board.
-inline void cornerMarks(const GfxRenderer& renderer, const Box& box, const int arm, const int weight) {
+inline void cornerMarks(const GfxRenderer& renderer, const Rect& box, const int arm, const int weight) {
   const int x = box.x;
   const int y = box.y;
   const int w = box.width;

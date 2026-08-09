@@ -65,22 +65,6 @@ inline bool hasFocusInput(const freeink::ui::InputSnapshot& input) {
 }
 
 /**
- * @brief The focused interaction's rect, or an empty rect when nothing is focused.
- *
- * An app that needs more than "which control" — Solitaire needs to know which
- * *card* in a fanned column, which a tap answers with its y — reads the geometry
- * back out of the buffer here rather than recomputing it. Recomputing hit
- * geometry that something else already computed is the bug class CrossPlay's own
- * Layout struct exists to prevent; the same rule applies to this layer.
- */
-template <size_t MaxInteractions>
-freeink::ui::Rect focusedRect(const freeink::ui::InteractionBuffer<MaxInteractions>& interactions) {
-  const int16_t index = interactions.focusedIndex();
-  if (index < 0 || static_cast<size_t>(index) >= interactions.count()) return {};
-  return interactions.data()[index].rect;
-}
-
-/**
  * @brief Puts focus on the first control that will take it, if nothing has it.
  *
  * A freshly built screen has focus index -1. `route()` handles that correctly
@@ -103,6 +87,102 @@ void ensureFocus(freeink::ui::InteractionBuffer<MaxInteractions>& interactions) 
     interactions.setFocusedIndex(static_cast<int16_t>(i));
     return;
   }
+}
+
+/**
+ * @brief The input scheme for a game with a play surface as well as chrome.
+ *
+ * Solitaire needs only the focus ring, because every one of its controls is a
+ * registered interaction. Chess, Battleship and D&Diagrams are not like that:
+ * their boards are drawn straight to the renderer and hit-tested from the
+ * geometry that drew them, because sixty-four squares would be sixty-four
+ * interactions and the buffer holds twenty-four. So those games have two things
+ * to point at, and one set of buttons.
+ *
+ * The split:
+ *
+ *   direction pad   move the cursor on the board
+ *   Confirm         act at the cursor
+ *   Prev / Next     step through the chrome buttons instead, showing focus
+ *   Confirm (chrome) activate the focused button, and hand the buttons back
+ *                   to the board
+ *
+ * A direction press always returns to the board, so there is no mode to get
+ * stuck in: if the cursor is not where you expect, press a direction and it is.
+ */
+class ChromeFocus {
+ public:
+  /** True while the chrome owns Confirm. */
+  bool active() const { return active_; }
+
+  /** A direction was pressed: the board takes the buttons back. */
+  void release() { active_ = false; }
+
+  /**
+   * @brief Steps to the next/previous chrome control, entering chrome mode.
+   *
+   * Returns whatever the table did with it, so a caller can repaint. The first
+   * press only enters the mode and lands on the first control, which is what
+   * makes the focus highlight appear before anything is activated.
+   */
+  template <size_t MaxInteractions>
+  bool step(freeink::ui::InteractionBuffer<MaxInteractions>& interactions, const bool forward) {
+    freeink::ui::InputSnapshot input;
+    if (!active_) {
+      // Entering: put focus on something rather than moving from nothing, so
+      // the first press shows the cursor instead of skipping the first control.
+      active_ = true;
+      ensureFocus(interactions);
+      return true;
+    }
+    input.focusNext = forward;
+    input.focusPrev = !forward;
+    interactions.route(input);
+    return true;
+  }
+
+  /**
+   * @brief Confirms the focused chrome control and hands the buttons back.
+   *
+   * The hand-back is deliberate: a button press is a completed errand, and
+   * leaving the chrome holding Confirm afterwards means the next press does
+   * something on a bar the player has stopped looking at.
+   */
+  template <size_t MaxInteractions>
+  freeink::ui::ActionEvent confirm(freeink::ui::InteractionBuffer<MaxInteractions>& interactions) {
+    freeink::ui::InputSnapshot input;
+    input.confirm = true;
+    const freeink::ui::ActionEvent event = interactions.route(input);
+    active_ = false;
+    return event;
+  }
+
+ private:
+  bool active_ = false;
+};
+
+/** Was a direction pressed this pass? Used to take the buttons back from chrome. */
+inline bool anyDirectionPressed(const MappedInputManager& mappedInput) {
+  return mappedInput.wasPressed(MappedInputManager::Button::Up) ||
+         mappedInput.wasPressed(MappedInputManager::Button::Down) ||
+         mappedInput.wasPressed(MappedInputManager::Button::Left) ||
+         mappedInput.wasPressed(MappedInputManager::Button::Right);
+}
+
+/**
+ * @brief The focused interaction's rect, or an empty rect when nothing is focused.
+ *
+ * An app that needs more than "which control" — Solitaire needs to know which
+ * *card* in a fanned column, which a tap answers with its y — reads the geometry
+ * back out of the buffer here rather than recomputing it. Recomputing hit
+ * geometry that something else already computed is the bug class CrossPlay's own
+ * Layout struct exists to prevent; the same rule applies to this layer.
+ */
+template <size_t MaxInteractions>
+freeink::ui::Rect focusedRect(const freeink::ui::InteractionBuffer<MaxInteractions>& interactions) {
+  const int16_t index = interactions.focusedIndex();
+  if (index < 0 || static_cast<size_t>(index) >= interactions.count()) return {};
+  return interactions.data()[index].rect;
 }
 
 }  // namespace crossplay

@@ -10,6 +10,28 @@ E-inx is a community firmware for Xteink e-paper readers, forked from [Inx](http
 
 ![](./docs/images/cover.jpg)
 
+## What's New in E-inx 1.5.17-2_update
+
+- **Tier 1 of the CrossPlay port** — Chess, Battleship and D&Diagrams join Solitaire under the `CrossPlay`
+  entry in the app drawer. All four are single-player.
+- **Chess** — a full engine on the device, with adjustable strength, undo, a resumable save and settings.
+- **Battleship** — arrange five ships, then hunt the computer's fleet, with a per-ship roster of what has gone down.
+- **D&Diagrams** — a nonogram whose clues are a dungeon, 64 of them plus a tutorial and an adventurer's guide.
+- **Buttons on every play surface** — the port's second input problem, and a different one from Solitaire's:
+  these games draw their boards straight to the renderer, so their cells are not in the interaction table and
+  the focus ring cannot reach them. The direction pad now moves a cursor on the board, Confirm acts where it
+  points, and the paging pair steps through the on-screen chrome. A direction press always hands the buttons
+  back to the board, so there is no mode to get stuck in.
+- **PLAY NEARBY is present but does nothing yet.** Chess and Battleship are built on CrossPlay's multiplayer
+  base class, so the interface is ported and the radio is not. The menu row keeps its mark and says why it
+  declined rather than disappearing.
+
+### Known limitations in this release
+
+- Same three as 1.5.17 (typography, corner radii and grey levels, no hardware testing) — see below.
+- **Chess is the slowest app here.** The engine searches on the same core that drives the panel, so a hard
+  difficulty means a visible pause on the device's move. Upstream has the same shape.
+
 ## What's New in E-inx 1.5.17
 
 - **CrossPlay in the app drawer** — a new `CrossPlay` entry sits alongside News and Games, hosting apps ported
