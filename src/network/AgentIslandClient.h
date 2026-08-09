@@ -57,7 +57,7 @@ class AgentIslandClient {
   using BodyHandler = std::function<bool(inx::ByteReader& reader, std::string& message)>;
 
   /** How the endpoint was found, so the UI can say "found it at 192.168.1.42" once. */
-  enum class Discovery : uint8_t { Cached, Hostname, Scan, Failed };
+  enum class Discovery : uint8_t { Cached, Hostname, Scan, Failed, Cancelled };
 
   explicit AgentIslandClient() = default;
 
@@ -70,8 +70,14 @@ class AgentIslandClient {
    * Finds the Mac: the address that answered last time, then the paired
    * hostname over mDNS/DNS, then a sweep of the local /24 for a /health that
    * presents the pinned certificate. The winner is remembered for next time.
+   *
+   * The sweep is 253 connects. The sweep is 253 connects and the whole thing runs on the
+   * calling thread, so `progress` is also the abort hook — return false from it
+   * and resolve() stops and reports Cancelled. Without that a reader whose Mac
+   * is switched off looks frozen for the best part of a minute with no way out
+   * but the reset pin.
    */
-  Discovery resolve(const AgentIslandPairing& pairing, const std::function<void(int scanned, int total)>& progress);
+  Discovery resolve(const AgentIslandPairing& pairing, const std::function<bool(int scanned, int total)>& progress);
 
   /** POST /api/pair with the enrollment secret. On success the device token is stored. */
   Result enroll(const AgentIslandPairing& pairing);

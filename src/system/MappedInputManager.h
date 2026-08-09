@@ -35,6 +35,14 @@ class MappedInputManager {
   void setInvertDirectionalAxes180(bool invert) { invertDirectionalAxes180_ = invert; }
   bool invertDirectionalAxes180() const { return invertDirectionalAxes180_; }
 
+  /**
+   * Refreshes the button state from GPIO. The main loop does this every tick,
+   * so screens never need it — except one that blocks for tens of seconds
+   * without returning, where it is the only way a Back press can be seen
+   * before the operation finishes.
+   */
+  void update() { gpio.update(); }
+
   bool wasPressed(Button button) const;
   bool wasReleased(Button button) const;
   bool isPressed(Button button) const;

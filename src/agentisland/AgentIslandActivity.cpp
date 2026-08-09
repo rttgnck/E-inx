@@ -265,13 +265,31 @@ void AgentIslandActivity::performConnect() {
   unsigned long lastProgressRender = 0;
   const AgentIslandClient::Discovery discovery =
       client_.resolve(pairing_, [this, &lastProgressRender](const int scanned, const int total) {
-        // A sweep of the /24 is the slow path. Repaint a handful of times over
-        // it rather than 253 times, which the panel could not keep up with.
-        if (scanned - static_cast<int>(lastProgressRender) < 50) return;
-        lastProgressRender = static_cast<unsigned long>(scanned);
-        busyMessage_ = "Scanning the network… " + std::to_string(scanned) + " of " + std::to_string(total);
-        render();
+        // Called once per host. Back is checked every time so the sweep can be
+        // abandoned promptly — the main loop is not running to poll GPIO while
+        // this blocks, so refresh it here. Repainting is the expensive part, so
+        // that still happens only every 50; the panel could not keep up with
+        // 253 and does not need to.
+        mappedInput.update();
+        if (mappedInput.wasPressed(MappedInputManager::Button::Back)) return false;
+        if (scanned - static_cast<int>(lastProgressRender) >= 50) {
+          lastProgressRender = static_cast<unsigned long>(scanned);
+          busyMessage_ = "Scanning the network… " + std::to_string(scanned) + " of " + std::to_string(total) +
+                         "   (Back to stop)";
+          render();
+        }
+        return true;
       });
+
+  if (discovery == AgentIslandClient::Discovery::Cancelled) {
+    connected_ = false;
+    connectionLabel_ = "Offline";
+    showNotice("Stopped looking",
+               "The search for " + pairing_.host +
+                   " was stopped. Open the app again to retry, or set the Mac's address directly under Settings › "
+                   "Agent Island in the web manager.");
+    return;
+  }
 
   if (discovery == AgentIslandClient::Discovery::Failed) {
     connected_ = false;
