@@ -46,6 +46,19 @@ class MappedInputManager {
   /** Raw GPIO read (layout + invert still apply to HalGPIO indices). For fixed chords use HalGPIO::BTN_* ). */
   bool rawHalIsPressed(uint8_t halButtonIndex) const;
 
+  /**
+   * Whether this device has a touchscreen. Always false: the X3 is buttons only.
+   *
+   * Exists because the CrossPlay ports under src/crossplay/ are written against
+   * a device that has one, and branch on it. Answering honestly is what makes
+   * their touch paths dead code and their button paths the live ones. See
+   * src/crossplay/compat/CrossPlayFocus.h.
+   */
+  bool hasTouch() const { return false; }
+
+  /** Never a tap, for the same reason. `x` and `y` are left untouched. */
+  bool wasScreenTapped(int& /*x*/, int& /*y*/) const { return false; }
+
   Labels mapLabels(const char* back, const char* confirm, const char* previous, const char* next) const;
 
   /**

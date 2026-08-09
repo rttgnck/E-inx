@@ -31,6 +31,7 @@
 #include <utility>
 
 #include "activity/Activity.h"
+#include "CrossPlayGfx.h"
 
 /**
  * @brief Stand-in for CrossPoint's render-mutex RAII guard.
@@ -64,8 +65,8 @@ class RenderLock {
  */
 class CrossPlayActivity : public Activity {
  public:
-  CrossPlayActivity(std::string name, GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : Activity(std::move(name), renderer, mappedInput) {}
+  CrossPlayActivity(std::string name, GfxRenderer& gfxRenderer, MappedInputManager& mappedInput)
+      : Activity(std::move(name), gfxRenderer, mappedInput), renderer(gfxRenderer) {}
 
   /** Ask for a repaint before the next `loop()`. Idempotent within a frame. */
   virtual void requestUpdate(bool /*immediate*/ = false) { updateRequired_ = true; }
@@ -89,6 +90,22 @@ class CrossPlayActivity : public Activity {
 
   /** True when a repaint is pending, for apps that want to skip work before one. */
   bool updatePending() const { return updateRequired_; }
+
+ protected:
+  /**
+   * @brief The renderer, in CrossPoint's flat spelling.
+   *
+   * Deliberately shadows `Activity::renderer`, which is the same object seen
+   * through E-inx's sub-renderer API. Ported apps draw their play surfaces with
+   * `renderer.fillRect(...)` and friends; this is what makes those sources
+   * compile unedited. It converts implicitly to `GfxRenderer&`, so every call
+   * that wants the real thing — `toybox::makeTarget(renderer)`,
+   * `toybox::blit1bpp(renderer, ...)` — still gets it.
+   *
+   * The shadowing is the one piece of cleverness in this layer, and it is
+   * confined to src/crossplay/: nothing outside sees two renderers.
+   */
+  CrossPlayGfx renderer;
 
  private:
   bool updateRequired_ = false;

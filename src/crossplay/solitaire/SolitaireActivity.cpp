@@ -6,6 +6,7 @@
 #include <cstring>
 
 #include "../compat/CrossPlayFocus.h"
+#include "../compat/CrossPlayServices.h"
 #include "../ui/Toybox.h"
 #include "../ui/ToyboxFonts.h"
 #include "../ui/ToyboxTheme.h"
@@ -354,7 +355,7 @@ void SolitaireActivity::render(RenderLock&&) {
   toybox::reportOverflow(interactions, "Solitaire");
 
   const auto labels = mappedInput.mapLabels("Back", "Select", "Prev", "Next");
-  renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  crossplay::drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   // A win asked for the full blink; every other paint is the fast refresh.
   renderer.displayBuffer(flashOnNextPaint ? HalDisplay::FULL_REFRESH : HalDisplay::FAST_REFRESH);
   flashOnNextPaint = false;

@@ -19,10 +19,15 @@ That shared ancestry is why this port is as small as it is.
 
 Copied byte-for-byte, because they touch no firmware surface at all:
 
-- `solitaire/SolitaireCore.{h,cpp}` — the rules engine.
-- `solitaire/SolitaireScreens.{h,cpp}` — the screen builders. They draw through a
-  `DrawTarget` they are handed and know nothing about who implements it.
-- `solitaire/SolitaireSuits.h` — generated 1-bpp pip artwork.
+- Every `*Core.{h,cpp}` — the rules engines for all four games, plus
+  `chess/ChessEngine.{h,cpp}`.
+- Every `*Screens.{h,cpp}` — the screen builders. They draw through a
+  `DrawTarget` they are handed and know nothing about who implements it. The two
+  that reference `linkui` gained one include; nothing else changed.
+- `solitaire/SolitaireSuits.h`, `chess/ChessPieces.h`, `dungeon/DungeonArt.h`,
+  `dungeon/DungeonPuzzles.h` — generated artwork and puzzle data.
+- `chess/ChessWire.h` — the multiplayer wire format, kept so the state that would
+  travel stays defined next to the game that owns it.
 - `ui/ToyboxTokens.h`, `ui/ToyboxMetrics.h` — the theme as plain constants.
 - `lib/FreeInkUI/`, `lib/Icons/` — the SDK, minus `FreeInkUIGfxRenderer.h`
   (see below).
@@ -46,8 +51,23 @@ Copied byte-for-byte, because they touch no firmware surface at all:
   `EpdFont` cannot read. See the header for what that costs.
 - `ui/Toybox.h`, `ui/ToyboxTheme.h`, `ui/ToyboxScreen.h` are ports: the shapes
   and reasoning are upstream's, the renderer calls underneath are not.
-- `solitaire/SolitaireActivity.{h,cpp}` is a port. The rules, the save format and
-  the screen models are upstream's; storage, the exit path and all input handling
-  are E-inx's.
+- `compat/SoloLink.h` + `.cpp` stands in for upstream's whole `link/` directory
+  (ESP-NOW PLAY NEARBY) and the `player/` device identity it carries. Chess and
+  Battleship inherit `linkplay::LinkActivity`, so the interface is reproduced
+  exactly — twelve hooks, same names, same contract — with the radio removed and
+  the phase pinned to `Off`. Replacing this file is how multiplayer arrives; the
+  games do not change again.
+- `compat/NearbyMark.h` supplies the two `linkui` symbols those games' menus
+  reference while drawing the PLAY NEARBY row.
+- `compat/CrossPlayGfx.h` gives CrossPoint's flat renderer calls
+  (`renderer.fillRect`) on top of E-inx's sub-renderers
+  (`renderer.rectangle.fill`), so the apps' own board-drawing code is unedited.
+- `compat/CrossPlayServices.h`, `compat/CrossPlayRect.h` alias storage, logging,
+  the hint bar and the plain integer `Rect`.
+- Each `*Activity.{h,cpp}` is a port. The rules, the save formats and the screen
+  models are upstream's; storage, the exit path and all input handling are
+  E-inx's. Chess is the least changed — it is the one CrossPlay app that already
+  had button navigation for its board — and needed only a route to its own
+  chrome, which upstream reaches by tap.
 - `CrossPlayActivity.h` replaces upstream's `Shelf.cpp`, which is built on an
   activity stack E-inx does not have.

@@ -66,6 +66,44 @@ constexpr int kButtonFontId = ATKINSON_HYPERLEGIBLE_14_FONT_ID;
  * Jersey port needs and removing it now would mean putting it back into every
  * ported app later.
  */
-inline void ensureFonts(GfxRenderer&) {}
+inline void ensureFonts(const GfxRenderer&) {}
+
+/**
+ * @brief Vertical metrics of the actual ink, which is not what the renderer reports.
+ *
+ * `getLineHeight()` and the y that `text.render()` takes are both measured from
+ * the ascender box. Centring on that centres the box, not the letters: capital
+ * ink sits at the bottom of the ascender box, so text visibly hangs low in every
+ * bar and capsule. Centring on cap height is what typesetters actually do, and
+ * it is what upstream's chrome is built around.
+ */
+struct FontMetrics {
+  int ascender = 0;   ///< baseline = render y + ascender
+  int capTop = 0;     ///< baseline up to the top of a capital
+  int capHeight = 0;  ///< ink height of a capital
+};
+
+/**
+ * @brief Cap metrics for a font id.
+ *
+ * Upstream reads them straight off its own `EpdFontData` tables, which it can
+ * because it owns the twelve fonts it registers. Here the fonts are E-inx's
+ * built-ins, held by the renderer, so the ascender comes from the renderer and
+ * the cap band is derived from it.
+ *
+ * 'H' is the right glyph to ask about — flat-topped, no overshoot, so it
+ * measures the band the eye aligns to — but E-inx's TextRender exposes no glyph
+ * query beyond `getGlyphTopInset()`, which is exactly the ascender-to-ink
+ * distance needed. Cap height is then the remaining ink below that inset, down
+ * to the baseline.
+ */
+FontMetrics metricsFor(const GfxRenderer& renderer, int fontId);
+
+/**
+ * @brief Draws `text` with its capital ink vertically centred in [boxY, boxY + boxH).
+ *
+ * Returns the x it started at, so callers can chain.
+ */
+int drawCapsCentered(const GfxRenderer& renderer, int fontId, int x, int boxY, int boxH, const char* text, bool black);
 
 }  // namespace toybox
