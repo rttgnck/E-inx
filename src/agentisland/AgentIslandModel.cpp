@@ -104,10 +104,15 @@ uint32_t Snapshot::signature() const {
   return hash;
 }
 
-bool parseState(const std::string& json, Snapshot& out) {
+bool parseState(inx::ByteReader& reader, Snapshot& out, std::string* error) {
   // Everything outside this filter is discarded during the parse rather than
   // after it: the activity feed alone is bigger than the rest of the payload,
-  // and none of it reaches the panel.
+  // and none of it reaches the panel. Measured on the host against payloads
+  // shaped like the real thing — 24KB in costs 4.4KB of heap, 639KB in costs
+  // 23.5KB, and the ceiling SessionScanner permits (30 sessions each with a
+  // 6000-character approval detail, 14.7MB in) costs 211KB. Only that last one
+  // is beyond this device, it cannot happen in practice, and ArduinoJson
+  // reports it as NoMemory rather than failing badly.
   JsonDocument filter;
   JsonObject sessionFilter = filter["sessions"].add<JsonObject>();
   sessionFilter["id"] = true;
@@ -118,16 +123,42 @@ bool parseState(const std::string& json, Snapshot& out) {
   sessionFilter["detail"] = true;
   sessionFilter["lastMessage"] = true;
   sessionFilter["pendingActionCount"] = true;
-  sessionFilter["question"] = true;
-  sessionFilter["pendingAction"] = true;
-  sessionFilter["pendingPlan"] = true;
+  // Named sub-fields rather than `= true` on the whole object: `true` would keep
+  // cwd, permissions, timestamps and ids the panel never draws, and each of
+  // those is allocated before this file gets a chance to clip anything.
+  JsonObject actionFilter = sessionFilter["pendingAction"].to<JsonObject>();
+  actionFilter["id"] = true;
+  actionFilter["kind"] = true;
+  actionFilter["title"] = true;
+  actionFilter["summary"] = true;
+  actionFilter["detail"] = true;
+  actionFilter["canAlwaysAllow"] = true;
+
+  JsonObject planFilter = sessionFilter["pendingPlan"].to<JsonObject>();
+  planFilter["id"] = true;
+  planFilter["title"] = true;
+  planFilter["markdown"] = true;
+
+  JsonObject questionFilter = sessionFilter["question"].to<JsonObject>();
+  questionFilter["prompt"] = true;
+  questionFilter["header"] = true;
+  questionFilter["multiSelect"] = true;
+  questionFilter["isSecret"] = true;
+  JsonObject optionFilter = questionFilter["options"].add<JsonObject>();
+  optionFilter["label"] = true;
+  optionFilter["description"] = true;
 
   JsonDocument doc;
-  if (deserializeJson(doc, json, DeserializationOption::Filter(filter)) != DeserializationError::Ok) {
+  const DeserializationError failure = deserializeJson(doc, reader, DeserializationOption::Filter(filter));
+  if (failure != DeserializationError::Ok) {
+    if (error) *error = failure.c_str();
     return false;
   }
   JsonArrayConst sessions = doc["sessions"].as<JsonArrayConst>();
-  if (sessions.isNull()) return false;
+  if (sessions.isNull()) {
+    if (error) *error = "no session list in the reply";
+    return false;
+  }
 
   Snapshot snapshot;
   for (JsonObjectConst object : sessions) {

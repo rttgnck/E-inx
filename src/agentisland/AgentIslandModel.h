@@ -19,6 +19,8 @@
 #include <string>
 #include <vector>
 
+#include "network/ByteReader.h"
+
 namespace agentisland {
 
 /** What a session is waiting on, and therefore what the card offers. */
@@ -80,11 +82,16 @@ struct Snapshot {
 };
 
 /**
- * Parses a GET /api/state body. Returns false and leaves `out` untouched when
- * the body is not the JSON object we expect; a partial parse is treated as a
- * failure, because half a session list is worse than a retry.
+ * Parses a GET /api/state body as it arrives. The snapshot is never held in
+ * memory whole — see ByteReader for why that matters here.
+ *
+ * Returns false and leaves `out` untouched when the body is not the JSON object
+ * we expect; a partial parse is a failure, because half a session list is worse
+ * than a retry. `error`, when given, receives the reason, which is the
+ * difference between a screen that says "unexpected reply" and one that can be
+ * acted on.
  */
-bool parseState(const std::string& json, Snapshot& out);
+bool parseState(inx::ByteReader& reader, Snapshot& out, std::string* error = nullptr);
 
 /** Builds the POST /api/command bodies. Kept next to the parser so the wire format lives in one file. */
 std::string resolveActionCommand(const std::string& actionId, bool allow, bool always);

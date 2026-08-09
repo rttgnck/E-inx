@@ -325,7 +325,17 @@ void AgentIslandActivity::performConnect() {
 void AgentIslandActivity::performRefresh() {
   lastPollMs_ = millis();
 
-  const AgentIslandClient::Result result = client_.fetchState(pairing_);
+  // The snapshot is parsed as it streams: it carries every session's whole
+  // activity feed, which has no useful upper bound and would not fit here.
+  agentisland::Snapshot next;
+  const AgentIslandClient::Result result =
+      client_.fetchState(pairing_, [&next](inx::ByteReader& reader, std::string& message) {
+        std::string reason;
+        if (agentisland::parseState(reader, next, &reason)) return true;
+        message = "Agent Island's reply could not be read (" + reason + ").";
+        return false;
+      });
+
   if (!result.ok()) {
     connected_ = false;
     connectionLabel_ = "Offline";
@@ -336,23 +346,21 @@ void AgentIslandActivity::performRefresh() {
       return;
     }
     // A dropped poll is not worth throwing the user out of a card they are
-    // reading; the status bar says Offline and the next poll tries again.
-    if (phase_ == Phase::List || phase_ == Phase::Card) {
+    // reading; the status bar says Offline and the next poll tries again. A
+    // reply we could not read is different — that will not fix itself, so it
+    // gets said out loud with the parser's reason attached.
+    if (result.status != AgentIslandClient::Status::BadResponse &&
+        (phase_ == Phase::List || phase_ == Phase::Card)) {
       updateRequired_ = true;
       return;
     }
-    showNotice("Lost the connection", result.message);
+    showNotice(result.status == AgentIslandClient::Status::BadResponse ? "Unexpected reply" : "Lost the connection",
+               result.message);
     return;
   }
 
   connected_ = true;
   connectionLabel_ = client_.address().empty() ? pairing_.host : client_.address();
-
-  agentisland::Snapshot next;
-  if (!agentisland::parseState(result.body, next)) {
-    showNotice("Unexpected reply", "Agent Island answered with something this reader could not read.");
-    return;
-  }
 
   const uint32_t signature = next.signature();
   const std::string openId = phase_ == Phase::Card && selectedSession_ < static_cast<int>(snapshot_.sessions.size())

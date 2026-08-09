@@ -34,10 +34,16 @@ E-inx is a community firmware for Xteink e-paper readers, forked from [Inx](http
 - **Finding the Mac when DHCP moves it** — the address that answered last time, then the paired hostname over
   mDNS, then a sweep of the local /24 for a listener presenting the pinned certificate. The pin is what makes the
   sweep safe: nothing else on the network can answer for the Mac.
+- **The snapshot is parsed as it arrives**, never held whole. Agent Island keeps up to eighty activities per
+  session at up to six thousand characters each, across thirty sessions, so `/api/state` has no useful upper
+  bound — three ordinary sessions already come to about 25KB. A filter throws almost all of it away mid-parse, so
+  a 639KB reply costs 24KB of heap. `test/run_agentisland_state.sh` holds that to account on the host.
 
 ### Known limitations in this release
 
-- **Not run on hardware.** Neither the pairing flow nor a live approval has been exercised on a device.
+- **Pairing and connecting have been run on hardware; answering has not.** The reader pairs, pins the
+  certificate and reads the session list on a real device. No approval, plan or question has yet been answered
+  from the panel and seen to land on the Mac.
 - **Foreground only.** The app polls while it is open and drops the radio when you leave it; there is no
   background wake and no notification when an approval arrives with the reader asleep.
 - **Session controls are not here.** Opening a session on the Mac and dismissing one are in the phone app and not
