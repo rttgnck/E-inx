@@ -391,6 +391,20 @@
       </div>
     </div>
     <div class="settings-section">
+      <div class="section-header"><h3>Agent Island</h3></div>
+      <div class="wifi-list" id="agentIslandStatus"><div class="wifi-empty">Loading…</div></div>
+      <div class="setting-item">
+        <div><div class="setting-label">Pairing link</div><div class="setting-desc">On the Mac, open Agent Island › Settings and copy the link under the QR code. It starts with agentisland://pair.</div></div>
+      </div>
+      <div class="setting-item">
+        <div class="setting-control" style="width:100%"><input id="agentIslandPayload" placeholder="agentisland://pair?v=1&url=…&token=…&pin=…" autocomplete="off" style="width:100%"></div>
+      </div>
+      <div class="wifi-form-buttons">
+        <button class="btn-primary" onclick="saveAgentIslandPairing()">Pair</button>
+        <button class="btn-secondary" onclick="forgetAgentIsland()">Forget</button>
+      </div>
+    </div>
+    <div class="settings-section">
       <div class="section-header"><h3>KOReader Sync</h3></div>
       <div class="setting-item">
         <div><div class="setting-label">Username</div></div>
@@ -652,6 +666,7 @@ async function loadSettings() {
     await loadWifiNetworks();
     await loadKOReaderSettings();
     await loadOpdsServers();
+    await loadAgentIsland();
     populateSettings();
     await loadSleepWakeTrace();
     await loadWallpapers();
@@ -961,6 +976,63 @@ async function removeOpdsServer(name) {
     } else showToast("Failed to remove server", true);
   } catch (e) {
     showToast("Error removing server", true);
+  }
+}
+
+async function loadAgentIsland() {
+  const n = document.getElementById("agentIslandStatus");
+  if (!n) return;
+  try {
+    const s = await (await fetch("/api/agentisland")).json();
+    if (!s.configured) {
+      n.innerHTML = '<div class="wifi-empty">Not paired — paste the link below</div>';
+      return;
+    }
+    const where = escapeHtml(s.host) + ":" + s.port + (s.resolvedAddress ? " (" + escapeHtml(s.resolvedAddress) + ")" : "");
+    const state = s.paired ? "Paired" : "Waiting for the reader to finish pairing";
+    n.innerHTML =
+      '<div class="wifi-item"><div class="wifi-row"><div><div class="wifi-ssid">' + escapeHtml(state) + '</div>' +
+      '<div class="wifi-url">' + where + ' · cert ' + escapeHtml(s.fingerprintPrefix) + '… · device ' + escapeHtml(s.deviceId) + '</div></div></div></div>';
+  } catch (e) {
+    n.innerHTML = '<div class="wifi-empty">Could not read the pairing</div>';
+  }
+}
+
+async function saveAgentIslandPairing() {
+  const field = document.getElementById("agentIslandPayload");
+  const payload = field ? field.value.trim() : "";
+  if (!payload) {
+    showToast("Paste the pairing link first", true);
+    return;
+  }
+  try {
+    const r = await fetch("/api/agentisland", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload: payload })
+    });
+    if (r.ok) {
+      field.value = "";
+      showToast("Saved — open AgentIsland on the reader to finish pairing");
+      await loadAgentIsland();
+    } else {
+      showToast(await r.text(), true);
+    }
+  } catch (e) {
+    showToast("Error saving the pairing", true);
+  }
+}
+
+async function forgetAgentIsland() {
+  if (!confirm("Forget the Agent Island pairing?")) return;
+  try {
+    const ok = (await fetch("/api/agentisland", { method: "DELETE" })).ok;
+    if (ok) {
+      showToast("Pairing removed");
+      await loadAgentIsland();
+    } else showToast("Failed to remove the pairing", true);
+  } catch (e) {
+    showToast("Error removing the pairing", true);
   }
 }
 

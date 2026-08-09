@@ -147,6 +147,10 @@ class LocalServer {
   void handleOpdsPost() const;
   void handleOpdsDelete() const;
 
+  void handleAgentIslandGet() const;
+  void handleAgentIslandPost() const;
+  void handleAgentIslandDelete() const;
+
   void handleFontsRescan() const;
   void handleLibraryIndexRefresh() const;
   void handleLibraryIndexStatus() const;
