@@ -500,6 +500,17 @@ class SystemSetting {
   char opdsPassword[64] = "";    ///< OPDS password
 
   char newsRepoUrl[192] = "https://raw.githubusercontent.com/rttgnck/news-reader/main/archive";
+
+  /**
+   * Where the firmware looks for its own updates: any GitHub releases endpoint
+   * returning a release with a `firmware.bin` asset. It defaults to E-inx's own,
+   * so a device out of the box updates from the project it is; it is a setting
+   * so that a fork, a private mirror or a device that should never leave a
+   * network is not stuck with someone else's release channel. Blank falls back
+   * to the default rather than disabling updates, since an empty box in a web
+   * form should not quietly turn a feature off.
+   */
+  char otaReleaseUrl[192] = "https://api.github.com/repos/rttgnck/E-inx/releases/latest";
   uint8_t newsAutoDownload = 0;
   uint8_t newsDownloadHour = 6;
 

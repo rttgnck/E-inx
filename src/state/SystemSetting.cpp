@@ -40,8 +40,8 @@ void readAndValidate(FsFile& file, uint8_t& member, const uint8_t maxValue) {
 }
 
 namespace {
-constexpr uint8_t SETTINGS_FILE_VERSION = 42;
-constexpr uint8_t SETTINGS_COUNT = 97;
+constexpr uint8_t SETTINGS_FILE_VERSION = 43;
+constexpr uint8_t SETTINGS_COUNT = 98;
 /** Last field index in v9 (1-based count of persisted pods through displayImageDither). */
 constexpr uint8_t SETTINGS_COUNT_V9 = 40;
 constexpr uint8_t LEGACY_SLEEP_IMAGE_ADVANCE_POWER = 7;
@@ -254,6 +254,7 @@ uint32_t settingsHash(const SystemSetting& settings, const uint8_t fontFamilyToS
   hashPod(hash, settings.sleepImagePowerSecondPressMax);
   hashPod(hash, settings.persistentSleepLogs);
   hashString(hash, settings.newsRepoUrl);
+  hashString(hash, settings.otaReleaseUrl);
   hashPod(hash, settings.newsAutoDownload);
   hashPod(hash, settings.newsDownloadHour);
   hashPod(hash, settings.uiTheme);
@@ -462,6 +463,7 @@ bool SystemSetting::saveToFile() const {
   serialization::writePod(outputFile, appDrawerGames);
   serialization::writePod(outputFile, appDrawerCrossPlay);
   serialization::writePod(outputFile, appDrawerAgentIsland);
+  serialization::writeString(outputFile, std::string(otaReleaseUrl));
 
   outputFile.close();
   saveUiThemeSetting(uiTheme);
@@ -963,6 +965,15 @@ bool SystemSetting::loadFromFile() {
     if (settingsRead < fileSettingsCount) {
       serialization::readPod(inputFile, appDrawerAgentIsland);
       if (appDrawerAgentIsland > 1) appDrawerAgentIsland = 1;
+      ++settingsRead;
+    }
+    if (settingsRead < fileSettingsCount) {
+      std::string otaUrl;
+      serialization::readString(inputFile, otaUrl);
+      if (!otaUrl.empty()) {
+        strncpy(otaReleaseUrl, otaUrl.c_str(), sizeof(otaReleaseUrl) - 1);
+        otaReleaseUrl[sizeof(otaReleaseUrl) - 1] = '\0';
+      }
       ++settingsRead;
     }
 

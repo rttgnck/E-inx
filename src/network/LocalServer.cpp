@@ -2737,6 +2737,7 @@ void LocalServer::handleSettingsGet() const {
   doc["opdsUsername"] = SETTINGS.opdsUsername;
   doc["opdsPasswordSet"] = strlen(SETTINGS.opdsPassword) > 0;
   doc["newsRepoUrl"] = SETTINGS.newsRepoUrl;
+  doc["otaReleaseUrl"] = SETTINGS.otaReleaseUrl;
   doc["newsAutoDownload"] = SETTINGS.newsAutoDownload;
   doc["newsDownloadHour"] = SETTINGS.newsDownloadHour;
 
@@ -3084,6 +3085,8 @@ void LocalServer::handleSettingsUpdate() const {
       changed = true;
     } else if (strcmp(key, "newsRepoUrl") == 0) {
       copySettingString(SETTINGS.newsRepoUrl, sizeof(SETTINGS.newsRepoUrl), kv.value().as<const char*>());
+    } else if (strcmp(key, "otaReleaseUrl") == 0) {
+      copySettingString(SETTINGS.otaReleaseUrl, sizeof(SETTINGS.otaReleaseUrl), kv.value().as<const char*>());
       changed = true;
     } else if (strcmp(key, "newsAutoDownload") == 0) {
       SETTINGS.newsAutoDownload = (uint8_t)value ? 1 : 0;

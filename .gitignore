@@ -15,3 +15,7 @@ bin
 *.bin
 .claude
 samples
+_Archive/
+.cursor/
+bin/
+.serena/
