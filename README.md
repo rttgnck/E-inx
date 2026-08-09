@@ -34,6 +34,17 @@ E-inx is a community firmware for Xteink e-paper readers, forked from [Inx](http
 - **Finding the Mac when DHCP moves it** — the address that answered last time, then the paired hostname over
   mDNS, then a sweep of the local /24 for a listener presenting the pinned certificate. The pin is what makes the
   sweep safe: nothing else on the network can answer for the Mac.
+- **An App Drawer section in Settings** — News, Games, CrossPlay and AgentIsland each switch on and off, on the
+  device under Settings › App Drawer and in the web manager under Settings. All four start on; the point is that
+  an entry can be taken out. AgentIsland is no use without a Mac running Agent Island, and shipping an app
+  someone cannot use with no way to remove it is worse than not shipping it.
+- **See Latest, and Reinstall** — when the GitHub check reports no update, the screen now offers the release
+  anyway. It opens the usual changelog view with Reinstall in place of Install, which is what you want when a
+  flash went badly or a release's assets were replaced under the same tag.
+- **The Mac's address can be edited without re-pairing.** Settings › Agent Island in the web manager takes a new
+  hostname or IP directly; the pinned certificate is unchanged, and the pin is still what decides whether
+  whatever answers there is really the paired Mac. Nothing about the pairing lives in the firmware — it is all on
+  the SD card, so no address, token or hostname is in the source or in the builds published here.
 - **The snapshot is parsed as it arrives**, never held whole. Agent Island keeps up to eighty activities per
   session at up to six thousand characters each, across thirty sessions, so `/api/state` has no useful upper
   bound — three ordinary sessions already come to about 25KB. A filter throws almost all of it away mid-parse, so

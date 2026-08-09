@@ -175,6 +175,17 @@ bool AgentIslandStore::setDeviceToken(const std::string& token) {
   return saveToFile();
 }
 
+bool AgentIslandStore::setEndpoint(const std::string& host, const uint16_t port) {
+  get();
+  if (host.empty() || port == 0) return false;
+  pairing.host = host;
+  pairing.port = port;
+  // The remembered address belonged to the old name; make the next connection
+  // resolve rather than dial somewhere that is no longer the Mac.
+  pairing.resolvedAddress.clear();
+  return saveToFile();
+}
+
 bool AgentIslandStore::setResolvedAddress(const std::string& address) {
   get();
   if (pairing.resolvedAddress == address) return true;

@@ -26,7 +26,7 @@ const int LIST_ITEM_HEIGHT = 60;
 namespace {
 std::vector<SettingInfo> buildSystemPageSettings(const bool x3) {
   std::vector<SettingInfo> settings;
-  settings.reserve(x3 ? 55 : 48);
+  settings.reserve(x3 ? 60 : 53);
 
   settings.push_back(SettingInfo::Separator("Display ", GroupType::DEVICE_DISPLAY));
   settings.push_back(SettingInfo::Toggle("Dark Mode", &SystemSetting::darkMode, GroupType::DEVICE_DISPLAY));
@@ -79,6 +79,15 @@ std::vector<SettingInfo> buildSystemPageSettings(const bool x3) {
                                        {"Folders", "Books", "Tags", "Shelf"}, GroupType::DEVICE_DISPLAY));
   settings.push_back(SettingInfo::Value("Recent books shown", &SystemSetting::recentVisibleCount, {1, 8, 1},
                                         GroupType::DEVICE_DISPLAY));
+
+  // Its own group rather than another separator under Display: a separator is a
+  // collapsible header whose open/closed state is keyed by GroupType, so two of
+  // them in one group would expand and collapse each other.
+  settings.push_back(SettingInfo::Separator("App Drawer", GroupType::APP_DRAWER));
+  settings.push_back(SettingInfo::Toggle("News", &SystemSetting::appDrawerNews, GroupType::APP_DRAWER));
+  settings.push_back(SettingInfo::Toggle("Games", &SystemSetting::appDrawerGames, GroupType::APP_DRAWER));
+  settings.push_back(SettingInfo::Toggle("CrossPlay", &SystemSetting::appDrawerCrossPlay, GroupType::APP_DRAWER));
+  settings.push_back(SettingInfo::Toggle("AgentIsland", &SystemSetting::appDrawerAgentIsland, GroupType::APP_DRAWER));
 
   if (x3) {
     settings.push_back(SettingInfo::Separator("Clock", GroupType::CLOCK));

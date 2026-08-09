@@ -68,8 +68,16 @@ class OtaUpdater {
   const std::string& getFailureDetail() const;
   /** Check GitHub for the latest release, running the request on a background task. */
   OtaUpdaterError checkForUpdate();
-  /** Download and install the latest update over HTTPS. */
-  OtaUpdaterError installUpdate();
+  /**
+   * Download and install the latest release over HTTPS.
+   *
+   * `allowSameVersion` re-flashes a release that is not newer than what is
+   * installed — the "Reinstall" path, for recovering a build that flashed badly
+   * or replacing one whose assets were replaced under the same tag. Without it
+   * an equal-or-older release is refused, which is the right default for an
+   * update check.
+   */
+  OtaUpdaterError installUpdate(bool allowSameVersion = false);
   /** Install a firmware image read from the SD card. */
   OtaUpdaterError installUpdateFromSd(const char* firmwarePath = "/firmware.bin");
 };

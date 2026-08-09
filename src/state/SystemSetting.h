@@ -533,6 +533,22 @@ class SystemSetting {
   uint8_t tab2Content = TAB2_NEWS;    ///< Tab 2 slot content (News / Games / Apps)
 
   /**
+   * @name App drawer entries
+   * Which rows the Apps drawer offers. All on by default, so the drawer looks
+   * the way it always has; the point of these is that an entry can be removed
+   * rather than that it starts hidden. AgentIsland in particular is no use
+   * without a Mac running Agent Island, and a firmware that puts an app you
+   * cannot use in front of you with no way to take it out is worse than one
+   * that never shipped it.
+   */
+  ///@{
+  uint8_t appDrawerNews = 1;
+  uint8_t appDrawerGames = 1;
+  uint8_t appDrawerCrossPlay = 1;
+  uint8_t appDrawerAgentIsland = 1;
+  ///@}
+
+  /**
    * @brief Page auto-turn interval in seconds
    * @details Values: 0 = off, increments of 10 (10, 20, 30, 40, 50, 60)
    */

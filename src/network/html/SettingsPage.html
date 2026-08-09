@@ -391,6 +391,25 @@
       </div>
     </div>
     <div class="settings-section">
+      <div class="section-header"><h3>App Drawer</h3></div>
+      <div class="setting-item">
+        <div><div class="setting-label">News</div><div class="setting-desc">Daily news reader</div></div>
+        <div class="setting-control"><label class="toggle-switch"><input id="appDrawerNews" type="checkbox"><span class="toggle-slider"></span></label></div>
+      </div>
+      <div class="setting-item">
+        <div><div class="setting-label">Games</div><div class="setting-desc">Tetris, Snake, Galaga, Maze Runner</div></div>
+        <div class="setting-control"><label class="toggle-switch"><input id="appDrawerGames" type="checkbox"><span class="toggle-slider"></span></label></div>
+      </div>
+      <div class="setting-item">
+        <div><div class="setting-label">CrossPlay</div><div class="setting-desc">Games and apps ported from CrossPlay</div></div>
+        <div class="setting-control"><label class="toggle-switch"><input id="appDrawerCrossPlay" type="checkbox"><span class="toggle-slider"></span></label></div>
+      </div>
+      <div class="setting-item">
+        <div><div class="setting-label">AgentIsland</div><div class="setting-desc">Approvals and questions from a Mac running Agent Island. Turn this off if you do not have one.</div></div>
+        <div class="setting-control"><label class="toggle-switch"><input id="appDrawerAgentIsland" type="checkbox"><span class="toggle-slider"></span></label></div>
+      </div>
+    </div>
+    <div class="settings-section">
       <div class="section-header"><h3>Agent Island</h3></div>
       <div class="wifi-list" id="agentIslandStatus"><div class="wifi-empty">Loading…</div></div>
       <div class="setting-item">
@@ -402,6 +421,16 @@
       <div class="wifi-form-buttons">
         <button class="btn-primary" onclick="saveAgentIslandPairing()">Pair</button>
         <button class="btn-secondary" onclick="forgetAgentIsland()">Forget</button>
+      </div>
+      <div class="setting-item">
+        <div><div class="setting-label">Mac address</div><div class="setting-desc">Change where the reader looks without re-pairing. The certificate it checks stays the same.</div></div>
+      </div>
+      <div class="setting-item">
+        <div class="setting-control" style="width:100%;display:flex;gap:8px">
+          <input id="agentIslandHost" placeholder="my-macbook.local" autocomplete="off" style="flex:1">
+          <input id="agentIslandPort" type="number" min="1" max="65535" placeholder="47124" style="width:96px">
+          <button class="btn-secondary" style="width:auto" onclick="saveAgentIslandEndpoint()">Save</button>
+        </div>
       </div>
     </div>
     <div class="settings-section">
@@ -619,7 +648,8 @@ const boolSettings = [
   "textAntiAliasing", "readerSmartRefreshOnImages", "sunlightFadingFix", "antiGhostingExperimental",
   "x3ReinforceReader", "x3ReinforceUi", "x3ReinforceThumbnails", "x3ReinforcePeriodicClean",
   "sleepImageRotationEnabled", "sleepImagePowerDoublePress", "persistentSleepLogs", "showBottomBarClock",
-  "newsAutoDownload"
+  "newsAutoDownload",
+  "appDrawerNews", "appDrawerGames", "appDrawerCrossPlay", "appDrawerAgentIsland"
 ];
 const marginOptions = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80];
 const fontFamilyBuiltin = ["Literata", "Atkinson Hyperlegible"];
@@ -984,6 +1014,10 @@ async function loadAgentIsland() {
   if (!n) return;
   try {
     const s = await (await fetch("/api/agentisland")).json();
+    const hostField = document.getElementById("agentIslandHost");
+    const portField = document.getElementById("agentIslandPort");
+    if (hostField) hostField.value = s.host || "";
+    if (portField) portField.value = s.port || 47124;
     if (!s.configured) {
       n.innerHTML = '<div class="wifi-empty">Not paired — paste the link below</div>';
       return;
@@ -1020,6 +1054,28 @@ async function saveAgentIslandPairing() {
     }
   } catch (e) {
     showToast("Error saving the pairing", true);
+  }
+}
+
+async function saveAgentIslandEndpoint() {
+  const host = (document.getElementById("agentIslandHost").value || "").trim();
+  const port = parseInt(document.getElementById("agentIslandPort").value || "47124", 10);
+  if (!host) {
+    showToast("Enter the Mac's hostname or address", true);
+    return;
+  }
+  try {
+    const r = await fetch("/api/agentisland", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ host: host, port: port })
+    });
+    if (r.ok) {
+      showToast("Saved " + host);
+      await loadAgentIsland();
+    } else showToast(await r.text(), true);
+  } catch (e) {
+    showToast("Error saving the address", true);
   }
 }
 

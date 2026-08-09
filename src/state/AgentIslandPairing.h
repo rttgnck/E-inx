@@ -17,7 +17,7 @@
  * (LocalServer's /api/agentisland) rather than through a scan.
  */
 struct AgentIslandPairing {
-  std::string host;              ///< Hostname or IP from the pairing URL, e.g. "rttgnck-mbp.local".
+  std::string host;              ///< Hostname or IP from the pairing URL, e.g. "my-macbook.local".
   uint16_t port = 47124;         ///< The companion listener. The hook bridge on 47123 is loopback-only.
   std::string fingerprint;       ///< Lowercase hex SHA-256 of the server's DER certificate.
   std::string enrollmentToken;   ///< One-time pairing secret; cleared once exchanged for a device token.
@@ -61,6 +61,13 @@ class AgentIslandStore {
   bool setPairingPayload(const AgentIslandPairing& next);
   /** Records the token POST /api/pair handed back, and drops the spent enrollment secret. */
   bool setDeviceToken(const std::string& token);
+  /**
+   * Repoints an existing pairing at a new address, keeping the device token and
+   * the pinned fingerprint. For when the Mac's hostname or IP changes but its
+   * certificate has not — re-pairing for that would be busywork, and the pin
+   * still decides whether whatever answers is really the paired Mac.
+   */
+  bool setEndpoint(const std::string& host, uint16_t port);
   /** Remembers the address that answered, so the next session can skip mDNS and the scan. */
   bool setResolvedAddress(const std::string& address);
   void forget();

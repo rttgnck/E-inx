@@ -437,8 +437,10 @@ const std::string& OtaUpdater::getReleaseNotes() const { return releaseNotes; }
 const std::string& OtaUpdater::getFailureDetail() const { return failureDetail; }
 
 /** Download and install the latest update over HTTPS. */
-OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate() {
-  if (!isUpdateNewer()) {
+OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(const bool allowSameVersion) {
+  // A reinstall still needs a release to have been found and an asset picked;
+  // it only waives the "must be newer" test.
+  if (allowSameVersion ? (otaUrl.empty() || otaSize == 0) : !isUpdateNewer()) {
     return UPDATE_OLDER_ERROR;
   }
 

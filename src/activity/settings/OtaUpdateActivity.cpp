@@ -383,7 +383,8 @@ void OtaUpdateActivity::render() {
   } else if (state == WAITING_CONFIRMATION) {
     renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, 18, bodyTop + 2, "Current: " INX_VERSION, true,
                          EpdFontFamily::REGULAR);
-    const std::string newVer = "Available: " + updater.getLatestVersion();
+    const std::string newVer =
+        (reinstalling ? "Latest: " : "Available: ") + updater.getLatestVersion() + (reinstalling ? " (installed)" : "");
     renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, 18, bodyTop + 29, newVer.c_str(), true,
                          EpdFontFamily::BOLD);
     renderer.line.render(18, bodyTop + 57, pageWidth - 18, bodyTop + 57, true, LineRender::Style::Dotted);
@@ -410,7 +411,8 @@ void OtaUpdateActivity::render() {
                            EpdFontFamily::REGULAR);
     }
 
-    const auto labels = mappedInput.mapLabels("Cancel", "Install", "Up", "Down");
+    const auto labels =
+        mappedInput.mapLabels(reinstalling ? "« Back" : "Cancel", reinstalling ? "Reinstall" : "Install", "Up", "Down");
     renderButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else if (state == WAITING_SD_SELECTION) {
     const int totalFiles = static_cast<int>(sdFirmwareFiles.size());
@@ -488,7 +490,18 @@ void OtaUpdateActivity::render() {
   } else if (state == NO_UPDATE) {
     const int centerY = dividerY + (screenHeight - dividerY - 80) / 2;
     renderer.text.centered(ATKINSON_HYPERLEGIBLE_10_FONT_ID, centerY, "No update available", true, EpdFontFamily::BOLD);
-    const auto labels = mappedInput.mapLabels("« Back", "", "", "");
+    // A release was found, it just was not newer. Offering it anyway is the
+    // whole point of this screen having a second button: assets do get replaced
+    // under a tag, and a bad flash needs a way back without an SD card.
+    const bool canReinstall = !updater.getLatestVersion().empty();
+    if (canReinstall) {
+      const std::string current = "Latest release: " + updater.getLatestVersion();
+      renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, centerY + 34, current.c_str(), true,
+                             EpdFontFamily::REGULAR);
+      renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, centerY + 58,
+                             "You are on it. See Latest to review or reinstall it.", true, EpdFontFamily::REGULAR);
+    }
+    const auto labels = mappedInput.mapLabels("« Back", canReinstall ? "See Latest" : "", "", "");
     renderButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else if (state == FAILED) {
     const int centerY = dividerY + (screenHeight - dividerY - 80) / 2;
@@ -576,14 +589,15 @@ void OtaUpdateActivity::loop() {
       return;
     }
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      Serial.printf("[%lu] [OTA] New update available, starting download...\n", millis());
+      Serial.printf("[%lu] [OTA] %s, starting download...\n", millis(),
+                    reinstalling ? "Reinstalling the current release" : "New update available");
       xSemaphoreTake(renderingMutex, portMAX_DELAY);
       installingFromGithub = true;
       state = UPDATE_IN_PROGRESS;
       xSemaphoreGive(renderingMutex);
       updateRequired = true;
       vTaskDelay(10 / portTICK_PERIOD_MS);
-      const auto res = updater.installUpdate();
+      const auto res = updater.installUpdate(reinstalling);
 
       if (res != OtaUpdater::OK) {
         Serial.printf("[%lu] [OTA] Update failed: %d\n", millis(), res);
@@ -601,6 +615,15 @@ void OtaUpdateActivity::loop() {
     }
 
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+      if (reinstalling) {
+        // Back out to the screen this was reached from, not out of the activity.
+        xSemaphoreTake(renderingMutex, portMAX_DELAY);
+        reinstalling = false;
+        state = NO_UPDATE;
+        xSemaphoreGive(renderingMutex);
+        updateRequired = true;
+        return;
+      }
       goBack();
     }
 
@@ -692,6 +715,16 @@ void OtaUpdateActivity::loop() {
   if (state == NO_UPDATE) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
       goBack();
+      return;
+    }
+    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm) && !updater.getLatestVersion().empty()) {
+      prepareReleaseNotes();
+      releaseNotesScrollOffset = 0;
+      xSemaphoreTake(renderingMutex, portMAX_DELAY);
+      reinstalling = true;
+      state = WAITING_CONFIRMATION;
+      xSemaphoreGive(renderingMutex);
+      updateRequired = true;
     }
     return;
   }

@@ -2,11 +2,14 @@
 
 #include <HalDisplay.h>
 
+#include <cstdint>
 #include <functional>
 #include <string>
+#include <vector>
 
 #include "../Activity.h"
 #include "../Menu.h"
+#include "state/SystemSetting.h"
 #include "system/Fonts.h"
 
 class AppsActivity final : public Activity, public Menu {
@@ -29,6 +32,7 @@ class AppsActivity final : public Activity, public Menu {
 
   void onEnter() override {
     Activity::onEnter();
+    buildVisibleApps();
     selectedIndex = 0;
     updateRequired = true;
   }
@@ -51,26 +55,29 @@ class AppsActivity final : public Activity, public Menu {
     }
     if (tabSelectorIndex != 1) return;
 
+    const int count = static_cast<int>(visibleApps.size());
+    if (count == 0) return;
+
     if (mappedInput.wasPressed(itemPrevButton())) {
-      selectedIndex = (selectedIndex - 1 + APP_COUNT) % APP_COUNT;
+      selectedIndex = (selectedIndex - 1 + count) % count;
       updateRequired = true;
     }
     if (mappedInput.wasPressed(itemNextButton())) {
-      selectedIndex = (selectedIndex + 1) % APP_COUNT;
+      selectedIndex = (selectedIndex + 1) % count;
       updateRequired = true;
     }
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      switch (selectedIndex) {
-        case 0:
+      switch (visibleApps[static_cast<size_t>(selectedIndex)]) {
+        case App::News:
           if (onOpenNews) onOpenNews();
           break;
-        case 1:
+        case App::Games:
           if (onOpenGames) onOpenGames();
           break;
-        case 2:
+        case App::CrossPlay:
           if (onOpenCrossPlay) onOpenCrossPlay();
           break;
-        case 3:
+        case App::AgentIsland:
           if (onOpenAgentIsland) onOpenAgentIsland();
           break;
       }
@@ -87,6 +94,8 @@ class AppsActivity final : public Activity, public Menu {
   static constexpr int ROW_TEXT_GAP = 4;   // between the two lines
   static constexpr int ROW_GAP = 10;       // between one row's box and the next
 
+  enum class App : uint8_t { News, Games, CrossPlay, AgentIsland };
+
   struct AppInfo {
     const char* name;
     const char* description;
@@ -98,6 +107,17 @@ class AppsActivity final : public Activity, public Menu {
       {"CrossPlay", "Games and apps ported from CrossPlay"},
       {"AgentIsland", "Approvals and questions from your Mac"},
   };
+
+  /** The drawer is whatever Settings › Display › App Drawer has left switched on. */
+  void buildVisibleApps() {
+    visibleApps.clear();
+    if (SETTINGS.appDrawerNews) visibleApps.push_back(App::News);
+    if (SETTINGS.appDrawerGames) visibleApps.push_back(App::Games);
+    if (SETTINGS.appDrawerCrossPlay) visibleApps.push_back(App::CrossPlay);
+    if (SETTINGS.appDrawerAgentIsland) visibleApps.push_back(App::AgentIsland);
+  }
+
+  std::vector<App> visibleApps;
 
   const std::function<void()> onRecentOpen;
   const std::function<void()> onLibraryOpen;
@@ -131,7 +151,18 @@ class AppsActivity final : public Activity, public Menu {
     const int boxH = ROW_PAD + nameH + ROW_TEXT_GAP + descH + ROW_PAD;
     const int rowStride = boxH + ROW_GAP;
     const int textMaxWidth = sw - 88;
-    for (int i = 0; i < APP_COUNT; ++i) {
+
+    if (visibleApps.empty()) {
+      renderer.text.render(ATKINSON_HYPERLEGIBLE_12_FONT_ID, 30, listStartY + 10, "No apps are switched on.");
+      renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, 30, listStartY + 40,
+                           "Settings › Display › App Drawer chooses what appears here.");
+      renderButtonHints(renderer, "", "", "", "");
+      renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+      return;
+    }
+
+    for (int i = 0; i < static_cast<int>(visibleApps.size()); ++i) {
+      const AppInfo& app = kApps[static_cast<size_t>(visibleApps[static_cast<size_t>(i)])];
       const int itemY = listStartY + i * rowStride;
       const bool selected = (i == selectedIndex);
 
@@ -144,10 +175,9 @@ class AppsActivity final : public Activity, public Menu {
       const int textX = 44;
       const int nameY = itemY + ROW_PAD;
       const int descY = nameY + nameH + ROW_TEXT_GAP;
-      renderer.text.render(ATKINSON_HYPERLEGIBLE_14_FONT_ID, textX, nameY, kApps[i].name, !selected,
-                           EpdFontFamily::BOLD);
+      renderer.text.render(ATKINSON_HYPERLEGIBLE_14_FONT_ID, textX, nameY, app.name, !selected, EpdFontFamily::BOLD);
       const std::string description =
-          renderer.text.truncate(ATKINSON_HYPERLEGIBLE_10_FONT_ID, kApps[i].description, textMaxWidth);
+          renderer.text.truncate(ATKINSON_HYPERLEGIBLE_10_FONT_ID, app.description, textMaxWidth);
       renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, textX, descY, description.c_str(), !selected);
     }
 

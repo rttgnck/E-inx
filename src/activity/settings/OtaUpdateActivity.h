@@ -45,6 +45,13 @@ class OtaUpdateActivity : public ActivityWithSubactivity, public Menu {
   OtaUpdater updater;
   int displayedProgressPercent = -1;
   bool installingFromGithub = false;
+  /**
+   * Set when the confirmation screen was reached from "See Latest" on an
+   * already-current device rather than from an update being found. It re-labels
+   * the action Reinstall, waives the newer-than-installed check, and sends Back
+   * to the no-update screen it came from instead of out of the activity.
+   */
+  bool reinstalling = false;
 
   void onWifiSelectionComplete(bool success);
   static void taskTrampoline(void* param);
