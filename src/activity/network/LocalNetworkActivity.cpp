@@ -341,6 +341,7 @@ void LocalNetworkActivity::startGithubUpdateCheck() {
   stopWebServer();
   state = LocalNetworkState::GITHUB_CHECKING;
   githubUpdateError.clear();
+  githubReinstalling = false;
   updateRequired = true;
   vTaskDelay(pdMS_TO_TICKS(350));
 
@@ -365,7 +366,7 @@ void LocalNetworkActivity::installGithubUpdate() {
 
   Serial.printf("[%lu] [LOCALNET] Installing GitHub firmware %s\n", millis(),
                 githubUpdater.getLatestVersion().c_str());
-  const auto result = githubUpdater.installUpdate();
+  const auto result = githubUpdater.installUpdate(githubReinstalling);
   if (result != OtaUpdater::OK) {
     githubUpdateError = githubUpdateErrorMessage(result);
     state = LocalNetworkState::GITHUB_FAILED;
@@ -439,6 +440,12 @@ void LocalNetworkActivity::loop() {
       return;
     }
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+      if (githubReinstalling) {
+        githubReinstalling = false;
+        state = LocalNetworkState::GITHUB_NO_UPDATE;
+        updateRequired = true;
+        return;
+      }
       returnToUpdateServer();
     }
     return;
@@ -447,6 +454,15 @@ void LocalNetworkActivity::loop() {
   if (state == LocalNetworkState::GITHUB_NO_UPDATE || state == LocalNetworkState::GITHUB_FAILED) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       startGithubUpdateCheck();
+      return;
+    }
+    if (state == LocalNetworkState::GITHUB_NO_UPDATE && mappedInput.wasPressed(MenuNav::itemPrev()) &&
+        !githubUpdater.getLatestVersion().empty()) {
+      prepareGithubReleaseNotes();
+      githubReleaseNotesScrollOffset = 0;
+      githubReinstalling = true;
+      state = LocalNetworkState::GITHUB_CONFIRMATION;
+      updateRequired = true;
       return;
     }
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
@@ -591,7 +607,8 @@ void LocalNetworkActivity::render() const {
   } else if (state == LocalNetworkState::GITHUB_CONFIRMATION) {
     const int bodyTop = renderActivityHeader(renderer, startY, "GitHub Update");
     renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, 18, bodyTop + 2, "Current: " INX_VERSION, true);
-    const std::string available = "Available: " + githubUpdater.getLatestVersion();
+    const std::string available = (githubReinstalling ? "Latest: " : "Available: ") +
+                                  githubUpdater.getLatestVersion() + (githubReinstalling ? " (installed)" : "");
     renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, 18, bodyTop + 29, available.c_str(), true,
                          EpdFontFamily::BOLD);
     renderer.line.render(18, bodyTop + 57, renderer.getScreenWidth() - 18, bodyTop + 57, true,
@@ -644,6 +661,10 @@ void LocalNetworkActivity::render() const {
                            EpdFontFamily::BOLD);
     const std::string latest = "Latest release: " + githubUpdater.getLatestVersion();
     renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, centerY + 20, latest.c_str());
+    if (!githubUpdater.getLatestVersion().empty()) {
+      renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, centerY + 44,
+                             "See Latest to review it, or reinstall it as it is.");
+    }
   } else if (state == LocalNetworkState::GITHUB_FAILED) {
     const int contentStart = renderActivityHeader(renderer, startY, "GitHub Update");
     const int centerY = contentStart + (screenHeight - contentStart - BOTTOM_AREA_HEIGHT) / 2;
@@ -684,9 +705,14 @@ void LocalNetworkActivity::render() const {
   } else if (state == LocalNetworkState::SERVER_RUNNING && libraryLanding) {
     labels = mappedInput.mapLabels("« Back", "Hotspot", "", "");
   } else if (state == LocalNetworkState::GITHUB_CONFIRMATION) {
-    labels = mappedInput.mapLabels("Cancel", "Install", "Up", "Down");
+    labels = mappedInput.mapLabels("Cancel", githubReinstalling ? "Reinstall" : "Install", "Up", "Down");
   } else if (state == LocalNetworkState::GITHUB_NO_UPDATE || state == LocalNetworkState::GITHUB_FAILED) {
-    labels = mappedInput.mapLabels("« Server", "Retry", "", "");
+    // Back and Confirm are already spoken for by Server and Retry, so See
+    // Latest takes the third of the X3's four front buttons — the one
+    // mapLabels() hands to the "previous" slot.
+    const bool canReinstall =
+        state == LocalNetworkState::GITHUB_NO_UPDATE && !githubUpdater.getLatestVersion().empty();
+    labels = mappedInput.mapLabels("« Server", "Retry", canReinstall ? "See Latest" : "", "");
   } else if (state == LocalNetworkState::GITHUB_CHECKING || state == LocalNetworkState::GITHUB_INSTALLING ||
              state == LocalNetworkState::GITHUB_FINISHED) {
     labels = mappedInput.mapLabels("", "", "", "");

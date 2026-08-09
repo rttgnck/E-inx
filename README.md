@@ -38,9 +38,12 @@ E-inx is a community firmware for Xteink e-paper readers, forked from [Inx](http
   device under Settings › App Drawer and in the web manager under Settings. All four start on; the point is that
   an entry can be taken out. AgentIsland is no use without a Mac running Agent Island, and shipping an app
   someone cannot use with no way to remove it is worse than not shipping it.
-- **See Latest, and Reinstall** — when the GitHub check reports no update, the screen now offers the release
-  anyway. It opens the usual changelog view with Reinstall in place of Install, which is what you want when a
-  flash went badly or a release's assets were replaced under the same tag.
+- **See Latest, and Reinstall** — when the GitHub check reports no update, the release is offered anyway, opening
+  the usual changelog view with Reinstall in place of Install. That is what you want when a flash went badly or a
+  release's assets were replaced under the same tag. It is on both update screens: on Sync › Update Server, where
+  Back and Confirm are already Server and Retry, See Latest takes the third front button. In the web manager the
+  same thing is a **Force reinstall** checkbox next to the review confirmation, which turns the install button on
+  for a release the reader is already running.
 - **Published builds no longer name the machine that built them.** The Arduino core's log macros expand
   `__FILE__`, so two dozen full paths beginning `/Users/<whoever built it>/.platformio/` were being written into
   every image. `-ffile-prefix-map` rewrites those prefixes: log lines keep the file names they need, and the

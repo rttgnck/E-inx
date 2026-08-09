@@ -92,6 +92,12 @@ class LocalServer {
   std::atomic<unsigned long> githubInstallRestartAt{0};
   std::string githubInstallVersion;
   std::string githubInstallError;
+  /**
+   * Set when the install was requested with force=1 — the web UI's "Force
+   * reinstall". It waives only the newer-than-installed check, so a release the
+   * reader is already on can be flashed again.
+   */
+  std::atomic<bool> githubInstallForce{false};
 
   void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length);
   static void wsEventCallback(uint8_t num, WStype_t type, uint8_t* payload, size_t length);
