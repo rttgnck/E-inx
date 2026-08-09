@@ -10,6 +10,31 @@ E-inx is a community firmware for Xteink e-paper readers, forked from [Inx](http
 
 ![](./docs/images/cover.jpg)
 
+## What's New in E-inx 1.5.17
+
+- **CrossPlay in the app drawer** — a new `CrossPlay` entry sits alongside News and Games, hosting apps ported
+  from [CrossPlay](https://github.com/ma-r-s/crossplay), a CrossPoint fork for the Xteink X4 Pro. This release
+  ships the porting layer plus its first app.
+- **Solitaire** — Klondike, in landscape, with draw-one and draw-three, undo, auto-finish, a resumable save, and
+  a win/streak record kept on the SD card under `/.einx/crossplay/`.
+- **Button play for a touch-only game** — CrossPlay's apps are written for the X4 Pro's touchscreen and are
+  unplayable as-is on the button-only X3. Input now comes from the buttons through FreeInkUI's focus ring, which
+  highlights the current control and needs no change to any screen. Confirm on a card column you are already
+  holding digs one card deeper into the run, which is how multi-card moves work without a finger to point with.
+- **A reusable porting layer** — `src/crossplay/compat/` binds FreeInkUI to E-inx's renderer and adapts
+  CrossPoint's split `loop()`/`render()` activity model to E-inx's. The remaining CrossPlay apps sit on top of
+  this rather than each needing their own adaptation.
+
+### Known limitations in this release
+
+- **Typography is E-inx's, not CrossPlay's.** CrossPlay's Jersey 25 and Noto Serif cuts are in CrossPoint's font
+  binary format, which is not E-inx's, so the screens are set in Atkinson Hyperlegible. Header titles are 18px
+  where the design wants 30px and therefore sit in more air than intended.
+- **Corner radii and grey levels are approximate.** E-inx's renderer derives a rounded rect's radius from its box
+  and has three fill tones to FreeInkUI's four, so light and dark grey render identically.
+- **Not yet run on hardware.** This builds clean for the X3 and the CrossPlay sources it is built from have never
+  been run on a physical device by anyone, upstream included.
+
 ## What's New in E-inx 1.3.17-5_update
 
 - **Live GitHub update progress in the Web UI** — GitHub firmware installation now runs in the background while

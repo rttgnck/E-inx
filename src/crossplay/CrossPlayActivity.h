@@ -1,28 +1,44 @@
 #pragma once
 
+/**
+ * @file CrossPlayActivity.h
+ * @brief The CrossPlay shelf: the app drawer's door into the ported apps.
+ *
+ * Upstream has src/apps_local/Shelf.cpp for this, built around CrossPoint's
+ * `replaceActivity` and its activity stack — an app calls `leave()` and the
+ * manager pops it back to the folder it came from. E-inx has one live activity
+ * and no stack, so that file is deliberately not ported. This follows E-inx's
+ * own GamesActivity instead: the menu owns the running app, hands it a callback,
+ * and deletes it when the callback fires.
+ *
+ * One entry today. The list is a table so that adding the next port is a row.
+ */
+
 #include <HalDisplay.h>
 
 #include <functional>
 #include <string>
 
-#include "../Activity.h"
-#include "../Menu.h"
+#include "../activity/Activity.h"
+#include "../activity/Menu.h"
+#include "solitaire/SolitaireActivity.h"
 #include "system/Fonts.h"
 
-class AppsActivity final : public Activity, public Menu {
+class CrossPlayActivityMenu final : public Activity, public Menu {
  public:
-  explicit AppsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                        const std::function<void()>& onRecentOpen, const std::function<void()>& onLibraryOpen,
-                        const std::function<void()>& onOpenNews, const std::function<void()>& onOpenGames,
-                        const std::function<void()>& onOpenCrossPlay)
-      : Activity("Apps", renderer, mappedInput),
+  explicit CrossPlayActivityMenu(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                                 const std::function<void()>& onRecentOpen,
+                                 const std::function<void()>& onLibraryOpen)
+      : Activity("CrossPlay", renderer, mappedInput),
         Menu(),
         onRecentOpen(onRecentOpen),
-        onLibraryOpen(onLibraryOpen),
-        onOpenNews(onOpenNews),
-        onOpenGames(onOpenGames),
-        onOpenCrossPlay(onOpenCrossPlay) {
+        onLibraryOpen(onLibraryOpen) {
     tabSelectorIndex = 1;
+  }
+
+  ~CrossPlayActivityMenu() override {
+    delete subApp;
+    subApp = nullptr;
   }
 
   void onEnter() override {
@@ -31,9 +47,20 @@ class AppsActivity final : public Activity, public Menu {
     updateRequired = true;
   }
 
-  void onExit() override {}
+  void onExit() override {
+    if (subApp) {
+      subApp->onExit();
+      delete subApp;
+      subApp = nullptr;
+    }
+  }
 
   void loop() override {
+    if (subApp) {
+      subApp->loop();
+      return;
+    }
+
     if (updateRequired) {
       updateRequired = false;
       render();
@@ -58,24 +85,18 @@ class AppsActivity final : public Activity, public Menu {
       updateRequired = true;
     }
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      switch (selectedIndex) {
-        case 0:
-          if (onOpenNews) onOpenNews();
-          break;
-        case 1:
-          if (onOpenGames) onOpenGames();
-          break;
-        case 2:
-          if (onOpenCrossPlay) onOpenCrossPlay();
-          break;
-      }
+      launchApp(selectedIndex);
     }
   }
 
+  bool preventAutoSleep() override { return subApp != nullptr && subApp->preventAutoSleep(); }
+  bool skipLoopDelay() override { return subApp != nullptr && subApp->skipLoopDelay(); }
+
  private:
-  static constexpr int APP_COUNT = 3;
+  static constexpr int APP_COUNT = 1;
   static constexpr int ITEM_HEIGHT = 64;
-  static constexpr int ITEM_PADDING = 12;
+  static constexpr int ITEM_PADDING = 10;
+  static constexpr int kInk = static_cast<int>(GfxRenderer::FillTone::Ink);
 
   struct AppInfo {
     const char* name;
@@ -83,23 +104,43 @@ class AppsActivity final : public Activity, public Menu {
   };
 
   static inline constexpr AppInfo kApps[APP_COUNT] = {
-      {"News", "Daily news reader"},
-      {"Games", "Tetris, Snake, Galaga, Maze Runner"},
-      {"CrossPlay", "Games and apps ported from CrossPlay"},
+      {"Solitaire", "Klondike, in landscape"},
   };
 
   const std::function<void()> onRecentOpen;
   const std::function<void()> onLibraryOpen;
-  const std::function<void()> onOpenNews;
-  const std::function<void()> onOpenGames;
-  const std::function<void()> onOpenCrossPlay;
 
   int selectedIndex = 0;
   bool updateRequired = false;
+  Activity* subApp = nullptr;
 
   void navigateToSelectedMenu() override {
     if (tabSelectorIndex == 0 && onRecentOpen) onRecentOpen();
     if (tabSelectorIndex == 2 && onLibraryOpen) onLibraryOpen();
+  }
+
+  void returnFromApp() {
+    if (subApp) {
+      subApp->onExit();
+      delete subApp;
+      subApp = nullptr;
+    }
+    updateRequired = true;
+  }
+
+  void launchApp(const int index) {
+    auto backCb = [this]() { returnFromApp(); };
+    Activity* app = nullptr;
+    switch (index) {
+      case 0:
+        app = new SolitaireActivity(renderer, mappedInput, backCb);
+        break;
+      default:
+        break;
+    }
+    if (!app) return;
+    subApp = app;
+    subApp->onEnter();
   }
 
   void render() const {
@@ -110,7 +151,7 @@ class AppsActivity final : public Activity, public Menu {
     renderTabBar(renderer);
 
     const int contentY = mainContentTop() + 8;
-    renderer.text.render(ATKINSON_HYPERLEGIBLE_16_FONT_ID, 30, contentY, "Apps", true, EpdFontFamily::BOLD);
+    renderer.text.render(ATKINSON_HYPERLEGIBLE_16_FONT_ID, 30, contentY, "CrossPlay", true, EpdFontFamily::BOLD);
     renderer.line.render(30, contentY + 30, sw - 30, contentY + 30);
 
     const int listStartY = contentY + 42;
@@ -138,6 +179,4 @@ class AppsActivity final : public Activity, public Menu {
     renderButtonHints(renderer, "", "Open", "", "");
     renderer.displayBuffer(HalDisplay::FAST_REFRESH);
   }
-
-  static constexpr int kInk = static_cast<int>(GfxRenderer::FillTone::Ink);
 };
