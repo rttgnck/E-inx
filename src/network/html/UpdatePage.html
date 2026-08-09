@@ -86,6 +86,10 @@
         <input id="githubConfirmInstall" type="checkbox">
         <span>I reviewed this release and will keep the reader powered while it downloads and installs.</span>
       </label>
+      <label class="confirm" id="githubForceRow">
+        <input id="githubForceReinstall" type="checkbox">
+        <span>Force reinstall — flash this release even though the reader is already on it.</span>
+      </label>
       <button id="githubInstallButton" type="button" disabled>Download and install this release</button>
     </div>
     <div class="progress" id="githubProgress">
@@ -129,6 +133,7 @@
   const githubCheckButton = document.getElementById("githubCheckButton");
   const githubConfirmInstall = document.getElementById("githubConfirmInstall");
   const githubInstallButton = document.getElementById("githubInstallButton");
+  const githubForceReinstall = document.getElementById("githubForceReinstall");
 
   function formatBytes(bytes) {
     if (!bytes) return "—";
@@ -149,16 +154,25 @@
     box.className = "message " + kind;
   }
 
+  // A release that is not newer is installable only when Force reinstall is
+  // ticked; that is the whole point of the checkbox, so the newer test moves
+  // here rather than being repeated at each call site.
+  function githubInstallAllowed() {
+    return !!githubRelease && (githubRelease.newer || githubForceReinstall.checked) &&
+      githubConfirmInstall.checked && !!updateStatus && !!updateStatus.token;
+  }
+
   function updateGithubButton() {
-    githubInstallButton.disabled = !githubRelease || !githubRelease.newer || !githubConfirmInstall.checked ||
-      !updateStatus || !updateStatus.token;
+    githubInstallButton.disabled = !githubInstallAllowed();
+    githubInstallButton.textContent = githubRelease && !githubRelease.newer && githubForceReinstall.checked
+      ? "Reinstall this release" : "Download and install this release";
   }
 
   function setGithubInstallControls(disabled) {
     githubCheckButton.disabled = disabled;
     githubConfirmInstall.disabled = disabled;
-    githubInstallButton.disabled = disabled || !githubRelease || !githubRelease.newer ||
-      !githubConfirmInstall.checked || !updateStatus || !updateStatus.token;
+    githubForceReinstall.disabled = disabled;
+    githubInstallButton.disabled = disabled || !githubInstallAllowed();
   }
 
   function renderGithubProgress(status) {
@@ -206,6 +220,7 @@
         "The connection ended before installation was confirmed. Check the reader before retrying.", "error");
       githubCheckButton.disabled = false;
       githubConfirmInstall.disabled = false;
+      githubForceReinstall.disabled = false;
       updateGithubButton();
     } finally {
       githubProgressPolling = false;
@@ -260,6 +275,7 @@
   fileInput.addEventListener("change", () => selectFile(fileInput.files[0]));
   confirmInstall.addEventListener("change", updateButton);
   githubConfirmInstall.addEventListener("change", updateGithubButton);
+  githubForceReinstall.addEventListener("change", updateGithubButton);
   ["dragenter", "dragover"].forEach(name => dropzone.addEventListener(name, event => {
     event.preventDefault();
     dropzone.classList.add("dragover");
@@ -274,6 +290,7 @@
     githubCheckButton.disabled = true;
     githubRelease = null;
     githubConfirmInstall.checked = false;
+    githubForceReinstall.checked = false;
     document.getElementById("githubReleaseDetails").className = "release-details";
     updateGithubButton();
     showGithubMessage("Checking the latest release on GitHub…", "info");
@@ -291,7 +308,7 @@
       if (result.newer) {
         showGithubMessage("A newer firmware release is available. Review the changelog before installing.", "success");
       } else {
-        showGithubMessage("This reader is already running the latest published firmware.", "info");
+        showGithubMessage("This reader is already running the latest published firmware. Tick Force reinstall to flash it again anyway.", "info");
       }
       updateGithubButton();
     } catch (error) {
@@ -302,18 +319,22 @@
   });
 
   githubInstallButton.addEventListener("click", async () => {
-    if (!githubRelease || !githubRelease.newer || !updateStatus || !updateStatus.token) return;
+    if (!githubInstallAllowed()) return;
     const version = githubRelease.latestVersion || "the selected release";
-    if (!window.confirm("Download and install " + version + " now? Keep the reader powered until it reboots.")) return;
+    const forcing = !githubRelease.newer && githubForceReinstall.checked;
+    const question = forcing
+      ? "Reinstall " + version + "? The reader is already on it. Keep it powered until it reboots."
+      : "Download and install " + version + " now? Keep the reader powered until it reboots.";
+    if (!window.confirm(question)) return;
 
     setGithubInstallControls(true);
     renderGithubProgress({state: "running", percent: 0, processed: 0, total: githubRelease.size || 0});
-    showGithubMessage("Downloading and installing " + version + ". Do not power off the reader or close this page.", "info");
+    showGithubMessage((forcing ? "Reinstalling " : "Downloading and installing ") + version + ". Do not power off the reader or close this page.", "info");
     try {
       const response = await fetch("/api/update/github/install?token=" + encodeURIComponent(updateStatus.token), {
         method: "POST",
         headers: {"Content-Type": "application/x-www-form-urlencoded"},
-        body: "confirm=1"
+        body: forcing ? "confirm=1&force=1" : "confirm=1"
       });
       const result = await response.json();
       if (!response.ok || !result.ok) throw new Error(result.error || "GitHub firmware installation failed.");

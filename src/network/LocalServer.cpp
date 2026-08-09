@@ -1277,7 +1277,11 @@ void LocalServer::handleGithubFirmwareInstall() {
     server->send(409, "application/json", json);
     return;
   }
-  if (!githubUpdater || !githubUpdater->isUpdateNewer()) {
+  // force=1 is the web UI's "Force reinstall": it waives the
+  // newer-than-installed test and nothing else, so a release still has to have
+  // been found and an asset picked before anything is flashed.
+  const bool force = server->arg("force") == "1";
+  if (!githubUpdater || (!force && !githubUpdater->isUpdateNewer())) {
     doc["ok"] = false;
     doc["error"] = "Check GitHub and confirm a newer release before installing";
     String json;
@@ -1285,12 +1289,21 @@ void LocalServer::handleGithubFirmwareInstall() {
     server->send(409, "application/json", json);
     return;
   }
+  if (force && githubUpdater->getLatestVersion().empty()) {
+    doc["ok"] = false;
+    doc["error"] = "Check GitHub for a release before forcing a reinstall";
+    String json;
+    serializeJson(doc, json);
+    server->send(409, "application/json", json);
+    return;
+  }
+  githubInstallForce.store(force, std::memory_order_release);
 
   githubInstallVersion = githubUpdater->getLatestVersion();
   githubInstallError.clear();
   githubInstallState.store(GithubInstallState::RUNNING, std::memory_order_release);
-  Serial.printf("[%lu] [WEB] [UPDATE] Starting background install of GitHub release %s\n", millis(),
-                githubInstallVersion.c_str());
+  Serial.printf("[%lu] [WEB] [UPDATE] Starting background %s of GitHub release %s\n", millis(),
+                force ? "reinstall" : "install", githubInstallVersion.c_str());
 
   const BaseType_t created =
       xTaskCreate(githubInstallTaskEntry, "WebGithubOta", 8192, this, 2, nullptr);
@@ -1364,7 +1377,8 @@ void LocalServer::githubInstallTaskEntry(void* context) {
 }
 
 void LocalServer::runGithubInstallTask() {
-  const auto result = githubUpdater ? githubUpdater->installUpdate() : OtaUpdater::INTERNAL_UPDATE_ERROR;
+  const bool force = githubInstallForce.load(std::memory_order_acquire);
+  const auto result = githubUpdater ? githubUpdater->installUpdate(force) : OtaUpdater::INTERNAL_UPDATE_ERROR;
   if (result == OtaUpdater::OK) {
     githubInstallRestartAt.store(millis() + 5000, std::memory_order_relaxed);
     githubInstallState.store(GithubInstallState::SUCCEEDED, std::memory_order_release);

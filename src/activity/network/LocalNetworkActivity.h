@@ -183,6 +183,13 @@ class LocalNetworkActivity final : public ActivityWithSubactivity, public Menu {
   std::vector<std::string> githubReleaseNoteLines; /**< Wrapped GitHub release changelog */
   int githubReleaseNotesScrollOffset = 0;          /**< First visible changelog line */
   std::string githubUpdateError;                    /**< Last device-side GitHub update error */
+  /**
+   * Set when the confirmation screen was reached by "See Latest" from the
+   * already-current screen rather than by an update being found. It relabels
+   * Install as Reinstall, waives the newer-than-installed check, and sends
+   * Cancel back to the screen it came from.
+   */
+  bool githubReinstalling = false;
   unsigned long githubRestartAt = 0;               /**< Reboot deadline after a successful install */
   int githubDisplayedPercent = -1;                 /**< Last e-ink progress percentage rendered */
   unsigned long lastHandleClientTime;     /**< Timestamp of last client handling */
