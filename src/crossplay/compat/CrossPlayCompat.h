@@ -24,6 +24,7 @@
  */
 
 #include <cstddef>
+#include <functional>
 #include <memory>
 #include <new>
 #include <string>
@@ -32,6 +33,19 @@
 
 #include "activity/Activity.h"
 #include "CrossPlayGfx.h"
+
+/**
+ * @brief What a sub-activity hands back when it finishes.
+ *
+ * Upstream's is richer (it carries a payload union); the only field any ported
+ * app reads is this one, so it is the only one here. Adding the rest when
+ * something needs it is a smaller change than carrying it unused.
+ */
+struct ActivityResult {
+  bool isCancelled = false;
+};
+
+using ActivityResultHandler = std::function<void(const ActivityResult&)>;
 
 /**
  * @brief Stand-in for CrossPoint's render-mutex RAII guard.
@@ -44,6 +58,10 @@
 class RenderLock {
  public:
   RenderLock() = default;
+  // Upstream's takes the activity so the guard can name what it is protecting.
+  // Nothing here is, but the call sites say `RenderLock(*this)` and keeping them
+  // unedited is the point of this file.
+  explicit RenderLock(Activity&) {}
   RenderLock(const RenderLock&) = delete;
   RenderLock& operator=(const RenderLock&) = delete;
 };
@@ -91,6 +109,53 @@ class CrossPlayActivity : public Activity {
   /** True when a repaint is pending, for apps that want to skip work before one. */
   bool updatePending() const { return updateRequired_; }
 
+  /**
+   * @brief Runs `activity` on top of this one, calling `handler` when it ends.
+   *
+   * CrossPoint has an ActivityManager holding a stack, and an app pushes onto it.
+   * E-inx has one live activity, so "on top of" is implemented the way E-inx's
+   * own screens do it: the parent owns the child, forwards `loop()` to it while
+   * it lives, and destroys it when it finishes. Nesting is one deep, which is
+   * all any ported app uses (a game opening the WiFi picker).
+   */
+  void startActivityForResult(std::unique_ptr<Activity>&& activity, ActivityResultHandler handler) {
+    subActivity_ = std::move(activity);
+    resultHandler_ = std::move(handler);
+    if (subActivity_) subActivity_->onEnter();
+  }
+
+  /** True while a sub-activity owns the screen. */
+  bool hasSubActivity() const { return subActivity_ != nullptr; }
+
+  /**
+   * @brief Ends the running sub-activity and delivers its result.
+   *
+   * Called by the adapter that wraps the child, not by the child itself: E-inx's
+   * own activities report through a completion callback rather than by popping
+   * themselves, which is the difference this whole file exists to absorb.
+   */
+  void finishSubActivity(const ActivityResult& result) {
+    if (!subActivity_) return;
+    subActivity_->onExit();
+    subActivity_.reset();
+    const ActivityResultHandler handler = resultHandler_;
+    resultHandler_ = nullptr;
+    if (handler) handler(result);
+    requestUpdate();
+  }
+
+  /**
+   * @brief Forwards the pass to a running sub-activity.
+   *
+   * Returns true when it consumed the pass, so a caller's `loop()` is
+   * `if (pumpSubActivity()) return;` at the top.
+   */
+  bool pumpSubActivity() {
+    if (!subActivity_) return false;
+    subActivity_->loop();
+    return true;
+  }
+
  protected:
   /**
    * @brief The renderer, in CrossPoint's flat spelling.
@@ -109,6 +174,8 @@ class CrossPlayActivity : public Activity {
 
  private:
   bool updateRequired_ = false;
+  std::unique_ptr<Activity> subActivity_;
+  ActivityResultHandler resultHandler_;
 };
 
 /**

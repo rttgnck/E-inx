@@ -58,6 +58,17 @@ class CrossPlayGfx {
   operator const GfxRenderer&() const { return gfx_; }
   const GfxRenderer& raw() const { return gfx_; }
 
+  /**
+   * @brief The renderer as a mutable reference.
+   *
+   * A handful of firmware APIs take `GfxRenderer&` rather than `const&` — the
+   * WiFi picker's constructor, the SD font loaders. Const does not propagate
+   * through a reference member, so a const CrossPlayGfx can still hand one out;
+   * it is a named accessor rather than a second conversion operator because a
+   * second conversion made every `makeTarget(renderer)` ambiguous.
+   */
+  GfxRenderer& writable() const { return gfx_; }
+
   // --- pass-through --------------------------------------------------------
 
   int getScreenWidth() const { return gfx_.getScreenWidth(); }
