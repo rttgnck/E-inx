@@ -134,7 +134,12 @@ void AgentIslandActivity::installAbortCheck() {
     if (now - lastAbortPollMs_ < 100) return false;
     lastAbortPollMs_ = now;
     mappedInput.update();
-    return mappedInput.wasPressed(MappedInputManager::Button::Back);
+    // isPressed, not wasPressed: wasPressed is an edge that update() clears on
+    // the next call, so catching it needs two polls inside one press. This hook
+    // runs only as often as the network loop yields, which on a slow body is
+    // not often enough to rely on. Level means Back registers if it is down
+    // when we look, however rarely that is.
+    return mappedInput.isPressed(MappedInputManager::Button::Back);
   });
 }
 

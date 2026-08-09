@@ -48,7 +48,15 @@ namespace {
 
 constexpr uint32_t WIFI_CONNECT_TIMEOUT_MS = 15000;
 constexpr uint32_t TLS_CONNECT_TIMEOUT_MS = 4000;
-constexpr uint32_t TLS_IO_TIMEOUT_MS = 8000;
+/**
+ * Deliberately short. This is the socket's SO_RCVTIMEO, and an expired one
+ * surfaces as MBEDTLS_ERR_SSL_WANT_READ, which the body reader treats as "call
+ * me again" — so it is not a transfer deadline (BODY_IDLE_MS is), it is how
+ * often the read loop comes up for air. At 8s the loop only regained control
+ * every few hundred milliseconds on a slow body, and the abort hook rides on
+ * that: Back had to be held for over a second to land between two polls.
+ */
+constexpr uint32_t TLS_IO_TIMEOUT_MS = 250;
 /** The sweep is 253 connects; anything generous here turns it into minutes. */
 constexpr uint32_t SCAN_CONNECT_TIMEOUT_MS = 120;
 /**
@@ -226,6 +234,9 @@ class TlsBodyReader final : public inx::ByteReader {
   bool complete() const { return remaining_ <= 0; }
   size_t received() const { return received_; }
   bool cancelled() const { return cancelled_; }
+  uint32_t readMs() const { return readMs_; }
+  uint32_t abortMs() const { return abortMs_; }
+  uint32_t fills() const { return fills_; }
   long expected() const { return expected_; }
 
   /**
@@ -248,6 +259,9 @@ class TlsBodyReader final : public inx::ByteReader {
  private:
   std::function<bool()> abort_;
   bool cancelled_ = false;
+  uint32_t readMs_ = 0;   ///< Time inside mbedtls_ssl_read.
+  uint32_t abortMs_ = 0;  ///< Time inside the abort hook, which re-reads GPIO.
+  uint32_t fills_ = 0;
 
   bool fill() {
     if (remaining_ == 0) {
@@ -256,21 +270,29 @@ class TlsBodyReader final : public inx::ByteReader {
     }
     // A snapshot can take tens of seconds. Back has to work throughout it, not
     // only once the last byte has landed.
-    if (abort_ && abort_()) {
-      finished_ = true;
-      cancelled_ = true;
-      return false;
+    if (abort_) {
+      const unsigned long abortStart = millis();
+      const bool stop = abort_();
+      abortMs_ += static_cast<uint32_t>(millis() - abortStart);
+      if (stop) {
+        finished_ = true;
+        cancelled_ = true;
+        return false;
+      }
     }
     if (static_cast<long>(millis() - idleDeadline_) >= 0 || static_cast<long>(millis() - hardDeadline_) >= 0) {
       finished_ = true;
       return false;
     }
 
-    unsigned char chunk[1024];
+    unsigned char chunk[4096];
     size_t want = sizeof(chunk);
     if (remaining_ > 0 && static_cast<size_t>(remaining_) < want) want = static_cast<size_t>(remaining_);
 
+    ++fills_;
+    const unsigned long readStart = millis();
     const int got = mbedtls_ssl_read(ssl_, chunk, want);
+    readMs_ += static_cast<uint32_t>(millis() - readStart);
     if (got == MBEDTLS_ERR_SSL_WANT_READ || got == MBEDTLS_ERR_SSL_WANT_WRITE) return true;
     if (got <= 0) {
       // A close with no Content-Length is the end of the body, not an error.
@@ -644,6 +666,10 @@ AgentIslandClient::Result AgentIslandClient::request(const std::string& host, co
     if (reader.expected() >= 0) progress += " of " + humanBytes(static_cast<size_t>(reader.expected()));
 
     result.bytesReceived = reader.received();
+    Serial.printf("[%lu] [AIS] Body %u B in %u ms: ssl_read %u ms over %u fills, abort hook %u ms\n", millis(),
+                  static_cast<unsigned>(reader.received()), static_cast<unsigned>(millis() - started),
+                  static_cast<unsigned>(reader.readMs()), static_cast<unsigned>(reader.fills()),
+                  static_cast<unsigned>(reader.abortMs()));
     if (reader.cancelled()) {
       result.status = Status::Cancelled;
       result.message = "Stopped (" + progress + ").";
