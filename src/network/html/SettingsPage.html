@@ -391,6 +391,15 @@
       </div>
     </div>
     <div class="settings-section">
+      <div class="section-header"><h3>Firmware Updates</h3></div>
+      <div class="setting-item">
+        <div><div class="setting-label">Release channel</div><div class="setting-desc">Where the reader checks for its own updates. Any GitHub releases endpoint serving a firmware.bin asset. Leave blank for the E-inx default.</div></div>
+      </div>
+      <div class="setting-item">
+        <div class="setting-control" style="width:100%"><input id="otaReleaseUrl" placeholder="https://api.github.com/repos/owner/repo/releases/latest" autocomplete="off" style="width:100%"></div>
+      </div>
+    </div>
+    <div class="settings-section">
       <div class="section-header"><h3>App Drawer</h3></div>
       <div class="setting-item">
         <div><div class="setting-label">News</div><div class="setting-desc">Daily news reader</div></div>
@@ -1326,6 +1335,17 @@ async function copySleepWakeTrace() {
   }
 }
 
+function populateFirmwareSettings() {
+  var ota = document.getElementById("otaReleaseUrl");
+  if (ota && settingsData.otaReleaseUrl !== undefined) {
+    ota.value = settingsData.otaReleaseUrl || "";
+    ota.oninput = function () {
+      pendingChanges.otaReleaseUrl = ota.value;
+      markChanged(ota);
+    };
+  }
+}
+
 function populateNewsSettings() {
   var url = document.getElementById("newsRepoUrl");
   if (url && settingsData.newsRepoUrl !== undefined) {
@@ -1439,6 +1459,7 @@ function populateSettings() {
   populateSleepTimerDiagnostics();
   populateSleepCustomBmp();
   populateNewsSettings();
+  populateFirmwareSettings();
 }
 
 function markChanged(el) {

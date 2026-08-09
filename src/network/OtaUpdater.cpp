@@ -24,8 +24,20 @@
 #include "esp_task_wdt.h"
 #include "esp_wifi.h"
 
+#include "state/SystemSetting.h"
+
 namespace {
-constexpr char latestReleaseUrl[] = "https://api.github.com/repos/rttgnck/E-inx/releases/latest";
+/**
+ * The default release channel, used when the setting is blank. The setting
+ * itself lives on the SD card and is editable in the web manager, so a fork or
+ * a private mirror is not stuck with this one.
+ */
+constexpr char defaultReleaseUrl[] = "https://api.github.com/repos/rttgnck/E-inx/releases/latest";
+
+/** The configured release endpoint, falling back to the default when unset. */
+const char* releaseUrl() {
+  return SETTINGS.otaReleaseUrl[0] != '\0' ? SETTINGS.otaReleaseUrl : defaultReleaseUrl;
+}
 
 // GitHub's release JSON is mostly boilerplate the filter throws away — the
 // author and per-asset uploader objects alone are several KB — so the size
@@ -266,7 +278,7 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdateWorker() {
   JsonDocument doc;
 
   esp_http_client_config_t client_config = {};
-  client_config.url = latestReleaseUrl;
+  client_config.url = releaseUrl();
   client_config.event_handler = event_handler;
   client_config.buffer_size = 2048;
   client_config.buffer_size_tx = 1024;

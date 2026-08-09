@@ -41,6 +41,15 @@ E-inx is a community firmware for Xteink e-paper readers, forked from [Inx](http
 - **See Latest, and Reinstall** — when the GitHub check reports no update, the screen now offers the release
   anyway. It opens the usual changelog view with Reinstall in place of Install, which is what you want when a
   flash went badly or a release's assets were replaced under the same tag.
+- **Published builds no longer name the machine that built them.** The Arduino core's log macros expand
+  `__FILE__`, so two dozen full paths beginning `/Users/<whoever built it>/.platformio/` were being written into
+  every image. `-ffile-prefix-map` rewrites those prefixes: log lines keep the file names they need, and the
+  builder's home directory is no longer in the binary. Verified at zero absolute paths in this release.
+- **The firmware update channel is a setting.** Settings › Firmware Updates in the web manager takes any GitHub
+  releases endpoint serving a `firmware.bin` asset, defaulting to E-inx's own so a device out of the box still
+  updates from the project it is. A fork, a private mirror or a device that should never leave its own network is
+  no longer stuck with someone else's release channel; blank falls back to the default rather than silently
+  turning updates off.
 - **The Mac's address can be edited without re-pairing.** Settings › Agent Island in the web manager takes a new
   hostname or IP directly; the pinned certificate is unchanged, and the pin is still what decides whether
   whatever answers there is really the paired Mac. Nothing about the pairing lives in the firmware — it is all on
