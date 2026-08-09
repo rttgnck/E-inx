@@ -123,9 +123,12 @@ int connectWithTimeout(const std::string& host, const uint16_t port, const uint3
   }
 
   fcntl(sock, F_SETFL, flags);
+  // Sub-second values matter here: tv_usec was hardcoded to 0, which was
+  // harmless while the timeout was whole seconds and became "block forever" the
+  // moment it was not — 250ms rounded to tv_sec=0, tv_usec=0.
   struct timeval io = {};
   io.tv_sec = static_cast<time_t>(TLS_IO_TIMEOUT_MS / 1000);
-  io.tv_usec = 0;
+  io.tv_usec = static_cast<suseconds_t>((TLS_IO_TIMEOUT_MS % 1000) * 1000);
   setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &io, sizeof(io));
   setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &io, sizeof(io));
   return sock;
