@@ -22,6 +22,7 @@
 #include <functional>
 #include <string>
 
+#include "network/ByteReader.h"
 #include "state/AgentIslandPairing.h"
 
 class AgentIslandClient {
@@ -41,11 +42,17 @@ class AgentIslandClient {
   struct Result {
     Status status = Status::Ok;
     int httpStatus = 0;
-    std::string body;     ///< Response body on success, empty otherwise.
+    std::string body;     ///< Buffered response body; empty when one was streamed instead.
     std::string message;  ///< Human-readable failure, safe to put on the panel.
 
     bool ok() const { return status == Status::Ok; }
   };
+
+  /**
+   * Consumes a 2xx body as it arrives, for responses too big to hold. Returning
+   * false marks the request as BadResponse; `message` should say why.
+   */
+  using BodyHandler = std::function<bool(inx::ByteReader& reader, std::string& message)>;
 
   /** How the endpoint was found, so the UI can say "found it at 192.168.1.42" once. */
   enum class Discovery : uint8_t { Cached, Hostname, Scan, Failed };
@@ -66,8 +73,12 @@ class AgentIslandClient {
 
   /** POST /api/pair with the enrollment secret. On success the device token is stored. */
   Result enroll(const AgentIslandPairing& pairing);
-  /** GET /api/state. */
-  Result fetchState(const AgentIslandPairing& pairing);
+  /**
+   * GET /api/state, handing the body to `onBody` as it arrives rather than
+   * buffering it. The snapshot carries every session's whole activity feed and
+   * has no useful upper bound, so buffering it is not an option on this device.
+   */
+  Result fetchState(const AgentIslandPairing& pairing, const BodyHandler& onBody);
   /** POST /api/command with an already-serialised JSON body. */
   Result sendCommand(const AgentIslandPairing& pairing, const std::string& json);
 
@@ -79,10 +90,15 @@ class AgentIslandClient {
    * every route, so there is no keep-alive to be had and nothing to reuse.
    *
    * `bearer` is empty for the health probe, the enrollment secret for /api/pair,
-   * and the device token otherwise.
+   * and the device token otherwise. When `onBody` is set and the status is 2xx,
+   * the body is streamed to it and `result.body` is left empty; otherwise it is
+   * buffered, which every route but /api/state can afford. `budgetMs` bounds the
+   * whole exchange — short for a probe during the subnet sweep, generous for a
+   * snapshot that may run to hundreds of kilobytes.
    */
   Result request(const std::string& host, uint16_t port, const std::string& fingerprint, const char* method,
-                 const char* path, const std::string& bearer, const std::string& body);
+                 const char* path, const std::string& bearer, const std::string& body, uint32_t budgetMs,
+                 const BodyHandler* onBody = nullptr);
 
   /** GET /health against `host`, used by both the resolver and the scan. */
   bool probe(const std::string& host, const AgentIslandPairing& pairing);

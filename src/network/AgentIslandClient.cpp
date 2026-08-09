@@ -12,6 +12,18 @@
 
 #include "state/NetworkCredential.h"
 
+namespace {
+/**
+ * Ceilings on one exchange. mbedtls_net_recv() reports an expired SO_RCVTIMEO
+ * as MBEDTLS_ERR_SSL_WANT_READ, which is indistinguishable from "call me
+ * again" — so a stalled peer would spin the retry loops forever without a
+ * deadline of our own. The probe's is short because 253 of them make a sweep;
+ * the snapshot's is long because it can run to hundreds of kilobytes.
+ */
+constexpr uint32_t PROBE_BUDGET_MS = 8000;
+constexpr uint32_t REQUEST_BUDGET_MS = 45000;
+}  // namespace
+
 #ifndef SIMULATOR
 
 #include <ESPmDNS.h>
@@ -35,14 +47,12 @@ constexpr uint32_t TLS_IO_TIMEOUT_MS = 8000;
 /** The sweep is 253 connects; anything generous here turns it into minutes. */
 constexpr uint32_t SCAN_CONNECT_TIMEOUT_MS = 120;
 /**
- * A hard ceiling on one request. mbedtls_net_recv() reports an expired
- * SO_RCVTIMEO as MBEDTLS_ERR_SSL_WANT_READ, which is indistinguishable from
- * "call me again" — so a stalled peer would spin the retry loops forever
- * without a deadline of our own.
+ * The cap on a *buffered* body — /health, /api/pair, /api/command and any error
+ * page, all of which are a line or two. /api/state is streamed and is not
+ * subject to this; it used to be, and truncating it mid-JSON is exactly what
+ * made the panel say "unexpected reply".
  */
-constexpr uint32_t REQUEST_DEADLINE_MS = 20000;
-/** A state snapshot with a dozen sessions runs to a few KB. Past this we are being fed something else. */
-constexpr size_t MAX_RESPONSE_BYTES = 24 * 1024;
+constexpr size_t MAX_BUFFERED_BYTES = 8 * 1024;
 
 /**
  * TCP connect with a deadline. mbedtls_net_connect() blocks on lwIP's own SYN
@@ -156,6 +166,98 @@ struct TlsSession {
   }
 };
 
+/**
+ * Reads the response body off an open TLS session, starting with whatever was
+ * already pulled in while scanning for the end of the headers. Honours
+ * Content-Length when the server gave one and otherwise reads to close.
+ */
+class TlsBodyReader final : public inx::ByteReader {
+ public:
+  TlsBodyReader(mbedtls_ssl_context* ssl, std::string leftover, const long contentLength,
+                const unsigned long deadline)
+      : ssl_(ssl), buffer_(std::move(leftover)), remaining_(contentLength), deadline_(deadline) {
+    if (remaining_ >= 0) {
+      const long alreadyHave = static_cast<long>(buffer_.size());
+      remaining_ = remaining_ > alreadyHave ? remaining_ - alreadyHave : 0;
+    }
+  }
+
+  int read() override {
+    char one = 0;
+    return readBytes(&one, 1) == 1 ? static_cast<unsigned char>(one) : -1;
+  }
+
+  size_t readBytes(char* out, const size_t length) override {
+    size_t produced = 0;
+    while (produced < length) {
+      if (offset_ < buffer_.size()) {
+        const size_t take = std::min(length - produced, buffer_.size() - offset_);
+        memcpy(out + produced, buffer_.data() + offset_, take);
+        offset_ += take;
+        produced += take;
+        continue;
+      }
+      if (finished_ || !fill()) break;
+    }
+    return produced;
+  }
+
+  bool complete() const { return remaining_ <= 0; }
+
+ private:
+  bool fill() {
+    if (remaining_ == 0) {
+      finished_ = true;
+      return false;
+    }
+    if (static_cast<long>(millis() - deadline_) >= 0) {
+      finished_ = true;
+      return false;
+    }
+
+    unsigned char chunk[1024];
+    size_t want = sizeof(chunk);
+    if (remaining_ > 0 && static_cast<size_t>(remaining_) < want) want = static_cast<size_t>(remaining_);
+
+    const int got = mbedtls_ssl_read(ssl_, chunk, want);
+    if (got == MBEDTLS_ERR_SSL_WANT_READ || got == MBEDTLS_ERR_SSL_WANT_WRITE) return true;
+    if (got <= 0) {
+      // A close with no Content-Length is the end of the body, not an error.
+      if (remaining_ < 0) remaining_ = 0;
+      finished_ = true;
+      return false;
+    }
+
+    buffer_.assign(reinterpret_cast<char*>(chunk), static_cast<size_t>(got));
+    offset_ = 0;
+    if (remaining_ > 0) remaining_ -= got;
+    return true;
+  }
+
+  mbedtls_ssl_context* ssl_;
+  std::string buffer_;
+  size_t offset_ = 0;
+  long remaining_;
+  unsigned long deadline_;
+  bool finished_ = false;
+};
+
+/** Case-insensitive lookup of one header value in a raw header block. */
+std::string headerValue(const std::string& headers, const std::string& name) {
+  std::string lowered = headers;
+  std::transform(lowered.begin(), lowered.end(), lowered.begin(),
+                 [](const unsigned char c) { return static_cast<char>(tolower(c)); });
+  const size_t at = lowered.find("\r\n" + name + ":");
+  if (at == std::string::npos) return "";
+  const size_t valueStart = headers.find(':', at + 2) + 1;
+  const size_t valueEnd = headers.find("\r\n", valueStart);
+  if (valueEnd == std::string::npos) return "";
+  std::string value = headers.substr(valueStart, valueEnd - valueStart);
+  while (!value.empty() && isspace(static_cast<unsigned char>(value.front()))) value.erase(value.begin());
+  while (!value.empty() && isspace(static_cast<unsigned char>(value.back()))) value.pop_back();
+  return value;
+}
+
 }  // namespace
 
 #endif  // !SIMULATOR
@@ -202,7 +304,8 @@ AgentIslandClient::Discovery AgentIslandClient::resolve(const AgentIslandPairing
 }
 
 AgentIslandClient::Result AgentIslandClient::request(const std::string&, uint16_t, const std::string&, const char*,
-                                                     const char*, const std::string&, const std::string&) {
+                                                     const char*, const std::string&, const std::string&, uint32_t,
+                                                     const BodyHandler*) {
   Result result;
   result.status = Status::Unsupported;
   result.message = "Agent Island needs the radio, which the simulator does not have.";
@@ -214,7 +317,7 @@ bool AgentIslandClient::probe(const std::string&, const AgentIslandPairing&) { r
 #else
 
 bool AgentIslandClient::probe(const std::string& host, const AgentIslandPairing& pairing) {
-  const Result result = request(host, pairing.port, pairing.fingerprint, "GET", "/health", "", "");
+  const Result result = request(host, pairing.port, pairing.fingerprint, "GET", "/health", "", "", PROBE_BUDGET_MS);
   return result.ok() && result.body.find("AgentIsland") != std::string::npos;
 }
 
@@ -276,9 +379,10 @@ AgentIslandClient::Discovery AgentIslandClient::resolve(const AgentIslandPairing
 AgentIslandClient::Result AgentIslandClient::request(const std::string& host, const uint16_t port,
                                                      const std::string& fingerprint, const char* method,
                                                      const char* path, const std::string& bearer,
-                                                     const std::string& body) {
+                                                     const std::string& body, const uint32_t budgetMs,
+                                                     const BodyHandler* onBody) {
   Result result;
-  const unsigned long deadline = millis() + REQUEST_DEADLINE_MS;
+  const unsigned long deadline = millis() + budgetMs;
 
   TlsSession session;
   const char* personalisation = "einx-agentisland";
@@ -389,47 +493,44 @@ AgentIslandClient::Result AgentIslandClient::request(const std::string& host, co
     written += static_cast<size_t>(sent);
   }
 
-  std::string response;
-  unsigned char buffer[1024];
-  while (response.size() < MAX_RESPONSE_BYTES) {
+  // Read only as far as the end of the headers. What follows is the body, and
+  // whether it is buffered or streamed is decided from the status line.
+  std::string head;
+  size_t headerEnd = std::string::npos;
+  unsigned char buffer[512];
+  while (headerEnd == std::string::npos) {
     if (static_cast<long>(millis() - deadline) >= 0) {
-      // Whatever arrived before the deadline is still worth parsing; only an
-      // empty response is a failure.
-      if (response.empty()) {
-        result.status = Status::Unreachable;
-        result.message = "Timed out waiting for a reply.";
-        return result;
-      }
-      break;
+      result.status = Status::Unreachable;
+      result.message = "Timed out waiting for a reply.";
+      return result;
     }
     const int read = mbedtls_ssl_read(&session.ssl, buffer, sizeof(buffer));
     if (read == MBEDTLS_ERR_SSL_WANT_READ || read == MBEDTLS_ERR_SSL_WANT_WRITE) continue;
-    if (read == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY || read == 0) break;
-    if (read < 0) {
-      // A reset after the body has arrived is how "Connection: close" often
-      // looks from here; only an empty response is a real failure.
-      if (response.empty()) {
-        result.status = Status::Unreachable;
-        result.message = "Connection dropped while reading.";
-        return result;
-      }
-      break;
+    if (read <= 0) {
+      result.status = Status::Unreachable;
+      result.message = "Connection dropped before the headers arrived.";
+      return result;
     }
-    response.append(reinterpret_cast<char*>(buffer), static_cast<size_t>(read));
+    head.append(reinterpret_cast<char*>(buffer), static_cast<size_t>(read));
+    headerEnd = head.find("\r\n\r\n");
+    if (headerEnd == std::string::npos && head.size() > MAX_BUFFERED_BYTES) {
+      result.status = Status::BadResponse;
+      result.message = "The reply had no end to its headers.";
+      return result;
+    }
   }
 
-  const size_t statusEnd = response.find("\r\n");
-  if (statusEnd == std::string::npos || response.compare(0, 5, "HTTP/") != 0) {
+  if (head.compare(0, 5, "HTTP/") != 0) {
     result.status = Status::BadResponse;
     result.message = "Unrecognised reply from the Mac.";
     return result;
   }
-  result.httpStatus = atoi(response.c_str() + 9);
+  result.httpStatus = atoi(head.c_str() + 9);
 
-  const size_t bodyStart = response.find("\r\n\r\n");
-  if (bodyStart != std::string::npos) {
-    result.body = response.substr(bodyStart + 4);
-  }
+  const std::string headers = head.substr(0, headerEnd + 2);
+  std::string leftover = head.substr(headerEnd + 4);
+  const std::string lengthHeader = headerValue(headers, "content-length");
+  const long contentLength = lengthHeader.empty() ? -1 : atol(lengthHeader.c_str());
 
   if (result.httpStatus == 401) {
     result.status = Status::Unauthorized;
@@ -437,6 +538,31 @@ AgentIslandClient::Result AgentIslandClient::request(const std::string& host, co
   } else if (result.httpStatus < 200 || result.httpStatus >= 300) {
     result.status = Status::ServerError;
     result.message = "Agent Island answered " + std::to_string(result.httpStatus) + ".";
+  }
+
+  TlsBodyReader reader(&session.ssl, std::move(leftover), contentLength, deadline);
+
+  if (onBody != nullptr && result.ok()) {
+    std::string message;
+    if (!(*onBody)(reader, message)) {
+      result.status = Status::BadResponse;
+      result.message = message.empty() ? "The reply could not be read." : message;
+    } else if (!reader.complete()) {
+      // The parser stopped early — a body cut short by the deadline or a close
+      // looks like valid JSON that simply ends, so say so rather than let a
+      // half-read session list stand in for the truth.
+      result.status = Status::BadResponse;
+      result.message = "The reply arrived incomplete.";
+    }
+    return result;
+  }
+
+  // Buffered: every route but /api/state, plus any error body.
+  char chunk[512];
+  while (result.body.size() < MAX_BUFFERED_BYTES) {
+    const size_t got = reader.readBytes(chunk, sizeof(chunk));
+    if (got == 0) break;
+    result.body.append(chunk, got);
   }
   return result;
 }
@@ -447,15 +573,18 @@ AgentIslandClient::Result AgentIslandClient::enroll(const AgentIslandPairing& pa
   const std::string deviceId = pairing.deviceId.empty() ? AgentIslandStore::localDeviceId() : pairing.deviceId;
   const std::string body = "{\"deviceId\":\"" + deviceId + "\",\"deviceName\":\"E-inx reader\"}";
   const std::string host = address_.empty() ? pairing.host : address_;
-  return request(host, pairing.port, pairing.fingerprint, "POST", "/api/pair", pairing.enrollmentToken, body);
+  return request(host, pairing.port, pairing.fingerprint, "POST", "/api/pair", pairing.enrollmentToken, body,
+                 REQUEST_BUDGET_MS);
 }
 
-AgentIslandClient::Result AgentIslandClient::fetchState(const AgentIslandPairing& pairing) {
+AgentIslandClient::Result AgentIslandClient::fetchState(const AgentIslandPairing& pairing, const BodyHandler& onBody) {
   const std::string host = address_.empty() ? pairing.host : address_;
-  return request(host, pairing.port, pairing.fingerprint, "GET", "/api/state", pairing.deviceToken, "");
+  return request(host, pairing.port, pairing.fingerprint, "GET", "/api/state", pairing.deviceToken, "",
+                 REQUEST_BUDGET_MS, &onBody);
 }
 
 AgentIslandClient::Result AgentIslandClient::sendCommand(const AgentIslandPairing& pairing, const std::string& json) {
   const std::string host = address_.empty() ? pairing.host : address_;
-  return request(host, pairing.port, pairing.fingerprint, "POST", "/api/command", pairing.deviceToken, json);
+  return request(host, pairing.port, pairing.fingerprint, "POST", "/api/command", pairing.deviceToken, json,
+                 REQUEST_BUDGET_MS);
 }
