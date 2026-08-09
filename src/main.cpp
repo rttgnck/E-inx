@@ -32,6 +32,7 @@
 #include "activity/network/LocalNetworkActivity.h"
 #include "activity/games/AppsActivity.h"
 #include "activity/games/GamesActivity.h"
+#include "agentisland/AgentIslandActivity.h"
 #include "crossplay/CrossPlayActivity.h"
 #include "activity/page/LibraryActivity.h"
 #include "activity/page/NewsActivity.h"
@@ -350,6 +351,7 @@ void onGoToTab2();
 void onGoToGames();
 void onGoToApps();
 void onGoToCrossPlay();
+void onGoToAgentIsland();
 void onGoToStatistics();
 void onGoToFileTransfer();
 void onGoToLibraryServer();
@@ -456,9 +458,11 @@ void onGoToCrossPlay() {
   switchTo<CrossPlayActivityMenu>(render, input, onGoToRecent, []() { onGoToLibrary("/"); });
 }
 
+void onGoToAgentIsland() { switchTo<AgentIslandActivity>(render, input, onGoToApps); }
+
 void onGoToApps() {
   switchTo<AppsActivity>(render, input, onGoToRecent, []() { onGoToLibrary("/"); }, onGoToNews, onGoToGames,
-                         onGoToCrossPlay);
+                         onGoToCrossPlay, onGoToAgentIsland);
 }
 
 void onGoToTab2() {

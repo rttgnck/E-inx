@@ -14,14 +14,16 @@ class AppsActivity final : public Activity, public Menu {
   explicit AppsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                         const std::function<void()>& onRecentOpen, const std::function<void()>& onLibraryOpen,
                         const std::function<void()>& onOpenNews, const std::function<void()>& onOpenGames,
-                        const std::function<void()>& onOpenCrossPlay)
+                        const std::function<void()>& onOpenCrossPlay,
+                        const std::function<void()>& onOpenAgentIsland)
       : Activity("Apps", renderer, mappedInput),
         Menu(),
         onRecentOpen(onRecentOpen),
         onLibraryOpen(onLibraryOpen),
         onOpenNews(onOpenNews),
         onOpenGames(onOpenGames),
-        onOpenCrossPlay(onOpenCrossPlay) {
+        onOpenCrossPlay(onOpenCrossPlay),
+        onOpenAgentIsland(onOpenAgentIsland) {
     tabSelectorIndex = 1;
   }
 
@@ -68,12 +70,15 @@ class AppsActivity final : public Activity, public Menu {
         case 2:
           if (onOpenCrossPlay) onOpenCrossPlay();
           break;
+        case 3:
+          if (onOpenAgentIsland) onOpenAgentIsland();
+          break;
       }
     }
   }
 
  private:
-  static constexpr int APP_COUNT = 3;
+  static constexpr int APP_COUNT = 4;
   // Row geometry is derived from the fonts rather than fixed, because it was
   // fixed and wrong: the box was ITEM_HEIGHT - ITEM_PADDING tall and the
   // description ended at exactly that line, so every descender was clipped by
@@ -91,6 +96,7 @@ class AppsActivity final : public Activity, public Menu {
       {"News", "Daily news reader"},
       {"Games", "Tetris, Snake, Galaga, Maze Runner"},
       {"CrossPlay", "Games and apps ported from CrossPlay"},
+      {"AgentIsland", "Approvals and questions from your Mac"},
   };
 
   const std::function<void()> onRecentOpen;
@@ -98,6 +104,7 @@ class AppsActivity final : public Activity, public Menu {
   const std::function<void()> onOpenNews;
   const std::function<void()> onOpenGames;
   const std::function<void()> onOpenCrossPlay;
+  const std::function<void()> onOpenAgentIsland;
 
   int selectedIndex = 0;
   bool updateRequired = false;

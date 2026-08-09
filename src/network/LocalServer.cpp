@@ -66,6 +66,7 @@
 #include "KOReaderCredentialStore.h"
 #include "state/NetworkCredential.h"
 #ifndef INX_SIMULATOR_WEB_ONLY
+#include "state/AgentIslandPairing.h"
 #include "state/OpdsServerStore.h"
 #endif
 
@@ -876,6 +877,10 @@ void LocalServer::begin() {
   server->on("/api/opds", HTTP_GET, [this] { handleOpdsGet(); });
   server->on("/api/opds", HTTP_POST, [this] { handleOpdsPost(); });
   server->on("/api/opds/*", HTTP_DELETE, [this] { handleOpdsDelete(); });
+
+  server->on("/api/agentisland", HTTP_GET, [this] { handleAgentIslandGet(); });
+  server->on("/api/agentisland", HTTP_POST, [this] { handleAgentIslandPost(); });
+  server->on("/api/agentisland", HTTP_DELETE, [this] { handleAgentIslandDelete(); });
 #endif
 
   server->on("/api/fonts/rescan", HTTP_POST, [this] { handleFontsRescan(); });
@@ -3395,5 +3400,78 @@ void LocalServer::handleOpdsDelete() const {
   } else {
     server->send(404, "text/plain", "Not found");
   }
+}
+
+/**
+ * The pairing status, without the secrets. The device token and the enrollment
+ * code never leave the card — the page only needs to know whether there is a
+ * pairing and what it points at.
+ */
+void LocalServer::handleAgentIslandGet() const {
+  const AgentIslandPairing& pairing = AGENT_ISLAND_STORE.get();
+
+  JsonDocument doc;
+  doc["configured"] = pairing.hasEndpoint();
+  doc["paired"] = pairing.isPaired();
+  doc["host"] = pairing.host;
+  doc["port"] = pairing.port;
+  doc["resolvedAddress"] = pairing.resolvedAddress;
+  doc["deviceId"] = pairing.deviceId.empty() ? AgentIslandStore::localDeviceId() : pairing.deviceId;
+  // A short prefix is enough to check against the Mac by eye; the whole thing is not.
+  doc["fingerprintPrefix"] = pairing.fingerprint.substr(0, std::min<size_t>(pairing.fingerprint.size(), 16));
+
+  String json;
+  serializeJson(doc, json);
+  server->send(200, "application/json", json);
+}
+
+/**
+ * Takes the `agentisland://pair?…` link copied from the Mac. The X3 has no
+ * camera, so this is the QR code's stand-in: same payload, pasted rather than
+ * scanned. Saving it discards any existing device token, because the Mac
+ * rotates its enrollment secret on every successful pair.
+ */
+void LocalServer::handleAgentIslandPost() const {
+  if (!server->hasArg("plain")) {
+    server->send(400, "text/plain", "Missing JSON");
+    return;
+  }
+
+  JsonDocument doc;
+  if (deserializeJson(doc, server->arg("plain")) != DeserializationError::Ok) {
+    server->send(400, "text/plain", "Body must be a JSON object");
+    return;
+  }
+
+  const String payload = doc["payload"] | "";
+  if (payload.length() == 0) {
+    server->send(400, "text/plain", "Paste the pairing link from Agent Island");
+    return;
+  }
+
+  AgentIslandPairing parsed;
+  if (!AgentIslandStore::parsePairingUrl(payload.c_str(), parsed)) {
+    server->send(400, "text/plain",
+                 "That is not a pairing link. Copy the whole agentisland://pair… line from Agent Island Settings.");
+    return;
+  }
+
+  if (!AGENT_ISLAND_STORE.setPairingPayload(parsed)) {
+    server->send(500, "text/plain", "Failed to save the pairing");
+    return;
+  }
+
+  JsonDocument response;
+  response["status"] = "ok";
+  response["host"] = parsed.host;
+  response["port"] = parsed.port;
+  String json;
+  serializeJson(response, json);
+  server->send(200, "application/json", json);
+}
+
+void LocalServer::handleAgentIslandDelete() const {
+  AGENT_ISLAND_STORE.forget();
+  server->send(200, "application/json", "{\"status\":\"ok\"}");
 }
 #endif

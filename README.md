@@ -10,6 +10,41 @@ E-inx is a community firmware for Xteink e-paper readers, forked from [Inx](http
 
 ![](./docs/images/cover.jpg)
 
+## What's New in E-inx 1.5.17-4_update
+
+- **AgentIsland** — a fourth entry in the app drawer, talking to the Agent Island companion listener on your Mac.
+  It lists the sessions that are actually live,
+  shows the last thing each agent said, and answers the one that is blocked: tool approvals (allow, deny, always
+  allow), plan reviews (accept, accept & auto-approve, reject), and multiple-choice questions including
+  multi-select. Nothing on the Mac side changed to make this work.
+- **It is deliberately not the phone app.** No session history, no usage windows, no settings mirror — the panel is
+  a place you answer from, which is the Wear companion's job rather than the Android one's. Anything needing text
+  typed — a plan revision, a free-form question, a protected answer — says so and points at the phone or the Mac
+  instead of pretending.
+- **A status bar of its own**, because the drawer's lives at the bottom: connection state on the left (a filled dot
+  and the Mac's address when it is answering), clock and battery on the right.
+- **Certificate pinning, done properly.** Agent Island's companion listener is HTTPS on 47124 behind a self-signed
+  certificate that the phone app pins by SHA-256. There is no CA in that picture, so this does not go through
+  `HttpDownloader` — `esp_http_client` verifies against a trust anchor and a fingerprint is not one. The transport
+  is mbedTLS directly: handshake unverified by the library, fingerprint checked by hand straight afterwards, and
+  not one byte of the request — bearer token included — written before it matches.
+- **Pairing without a camera.** The X3 cannot scan the QR code, so the web manager takes it instead: Sync ›
+  Library Server, then Settings › Agent Island, and paste the `agentisland://pair…` link the Mac shows under its
+  code. The device token is exchanged on first connect and the enrollment secret is discarded.
+- **Finding the Mac when DHCP moves it** — the address that answered last time, then the paired hostname over
+  mDNS, then a sweep of the local /24 for a listener presenting the pinned certificate. The pin is what makes the
+  sweep safe: nothing else on the network can answer for the Mac.
+
+### Known limitations in this release
+
+- **Not run on hardware.** Neither the pairing flow nor a live approval has been exercised on a device.
+- **Foreground only.** The app polls while it is open and drops the radio when you leave it; there is no
+  background wake and no notification when an approval arrives with the reader asleep.
+- **Session controls are not here.** Opening a session on the Mac and dismissing one are in the phone app and not
+  in this one.
+- Flash 80.7% (5,285,876 of 6,553,600) — about 53KB over 1.5.17-3. mbedTLS was already linked for the HTTPS
+  downloader, so the TLS is nearly free; what is new is the client, the model and the screens.
+
 ## What's New in E-inx 1.5.17-3_update
 
 - **The rest of CrossPlay** — Jaipur, Murdle, Connections, Insider, Study, Hacker News and xkcd join the four
