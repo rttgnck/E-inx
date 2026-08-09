@@ -440,7 +440,16 @@ AgentIslandClient::Result AgentIslandClient::request(const std::string& host, co
                                                      const std::string& body, const uint32_t budgetMs,
                                                      const BodyHandler* onBody) {
   Result result;
-  const unsigned long deadline = millis() + budgetMs;
+  const unsigned long started = millis();
+  const unsigned long deadline = started + budgetMs;
+
+  // Stamped on every exit path, so a caller can pace itself by how long the
+  // last exchange actually took rather than by a number picked in advance.
+  struct Stopwatch {
+    Result& result;
+    const unsigned long& started;
+    ~Stopwatch() { result.elapsedMs = static_cast<uint32_t>(millis() - started); }
+  } stopwatch{result, started};
 
   TlsSession session;
   const char* personalisation = "einx-agentisland";
@@ -612,6 +621,7 @@ AgentIslandClient::Result AgentIslandClient::request(const std::string& host, co
     std::string progress = "read " + humanBytes(reader.received());
     if (reader.expected() >= 0) progress += " of " + humanBytes(static_cast<size_t>(reader.expected()));
 
+    result.bytesReceived = reader.received();
     if (!handled) {
       result.status = Status::BadResponse;
       result.message = (message.empty() ? std::string("The reply could not be read.") : message) + " (" + progress + ")";
@@ -629,6 +639,7 @@ AgentIslandClient::Result AgentIslandClient::request(const std::string& host, co
     if (got == 0) break;
     result.body.append(chunk, got);
   }
+  result.bytesReceived = reader.received();
   return result;
 }
 

@@ -56,7 +56,17 @@ class AgentIslandActivity final : public Activity {
   /** Work the next loop pass should do, once the screen announcing it has been drawn. */
   enum class Work : uint8_t { None, Connect, Refresh, Submit };
 
+  /**
+   * How long to wait between snapshots, at minimum. The real interval is paced
+   * off how long the last one took — see pollInterval(). A snapshot is not a
+   * cheap request on a busy Mac: it carries every session's whole activity
+   * feed, which on a heavy day is several megabytes, and fetching that every
+   * eight seconds would mean the radio never stops.
+   */
   static constexpr uint32_t POLL_INTERVAL_MS = 8000;
+  static constexpr uint32_t POLL_INTERVAL_MAX_MS = 120000;
+  /** Snapshots past this are worth telling the user about; something is wrong upstream. */
+  static constexpr size_t LARGE_SNAPSHOT_BYTES = 1024 * 1024;
 
   const std::function<void()> onBack_;
   bool exitTriggered_ = false;
@@ -66,6 +76,8 @@ class AgentIslandActivity final : public Activity {
   agentisland::Snapshot snapshot_;
   uint32_t lastSignature_ = 0;
   unsigned long lastPollMs_ = 0;
+  uint32_t lastFetchMs_ = 0;
+  size_t lastSnapshotBytes_ = 0;
 
   Phase phase_ = Phase::Connecting;
   Work pending_ = Work::None;
@@ -84,6 +96,8 @@ class AgentIslandActivity final : public Activity {
   std::string queuedCommand_;
   std::string queuedSuccess_;
 
+  /** Minimum gap before the next snapshot, paced off how long the last one took. */
+  uint32_t pollInterval() const;
   void request(Work what, const char* busyMessage);
   void performConnect();
   void performRefresh();

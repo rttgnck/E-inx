@@ -42,8 +42,10 @@ class AgentIslandClient {
   struct Result {
     Status status = Status::Ok;
     int httpStatus = 0;
-    std::string body;     ///< Buffered response body; empty when one was streamed instead.
-    std::string message;  ///< Human-readable failure, safe to put on the panel.
+    std::string body;         ///< Buffered response body; empty when one was streamed instead.
+    std::string message;      ///< Human-readable failure, safe to put on the panel.
+    size_t bytesReceived = 0; ///< Body bytes off the wire, however they were consumed.
+    uint32_t elapsedMs = 0;   ///< How long the whole exchange took, for pacing the next one.
 
     bool ok() const { return status == Status::Ok; }
   };
