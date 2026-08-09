@@ -37,6 +37,7 @@ class AgentIslandClient {
     ServerError,     ///< The Mac answered with a 4xx/5xx we did not ask for.
     BadResponse,     ///< Answered, but not with the JSON we expect.
     Unsupported,     ///< Simulator build: there is no radio here.
+    Cancelled,       ///< The user pressed Back while this was in flight.
   };
 
   struct Result {
@@ -60,6 +61,18 @@ class AgentIslandClient {
   enum class Discovery : uint8_t { Cached, Hostname, Scan, Failed, Cancelled };
 
   explicit AgentIslandClient() = default;
+
+  /**
+   * Polled from inside every blocking loop — the TLS handshake, the body read,
+   * and between the resolver's strategies. Return true to give up.
+   *
+   * Everything this class does blocks the calling thread, and some of it blocks
+   * for tens of seconds: a Mac that is switched off takes the resolver through
+   * mDNS and 253 connects, and a busy one answers /api/state with megabytes.
+   * The main loop is not running to poll GPIO while any of that happens, so
+   * without a hook the panel is frozen and the reset pin is the only way out.
+   */
+  void setAbortCheck(std::function<bool()> abort) { abort_ = std::move(abort); }
 
   /** Brings up the radio from the saved credential. Idempotent once associated. */
   Status connectWifi();
@@ -111,5 +124,9 @@ class AgentIslandClient {
   /** GET /health against `host`, used by both the resolver and the scan. */
   bool probe(const std::string& host, const AgentIslandPairing& pairing);
 
+  /** True when the caller wants out; never null-checked at the call sites, so guard it. */
+  bool aborted() const { return abort_ && abort_(); }
+
+  std::function<bool()> abort_;
   std::string address_;
 };

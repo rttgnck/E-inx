@@ -187,8 +187,9 @@ struct TlsSession {
 class TlsBodyReader final : public inx::ByteReader {
  public:
   TlsBodyReader(mbedtls_ssl_context* ssl, std::string leftover, const long contentLength, const uint32_t idleMs,
-                const unsigned long hardDeadline)
-      : ssl_(ssl),
+                const unsigned long hardDeadline, std::function<bool()> abort)
+      : abort_(std::move(abort)),
+        ssl_(ssl),
         buffer_(std::move(leftover)),
         remaining_(contentLength),
         expected_(contentLength),
@@ -224,6 +225,7 @@ class TlsBodyReader final : public inx::ByteReader {
 
   bool complete() const { return remaining_ <= 0; }
   size_t received() const { return received_; }
+  bool cancelled() const { return cancelled_; }
   long expected() const { return expected_; }
 
   /**
@@ -244,9 +246,19 @@ class TlsBodyReader final : public inx::ByteReader {
   }
 
  private:
+  std::function<bool()> abort_;
+  bool cancelled_ = false;
+
   bool fill() {
     if (remaining_ == 0) {
       finished_ = true;
+      return false;
+    }
+    // A snapshot can take tens of seconds. Back has to work throughout it, not
+    // only once the last byte has landed.
+    if (abort_ && abort_()) {
+      finished_ = true;
+      cancelled_ = true;
       return false;
     }
     if (static_cast<long>(millis() - idleDeadline_) >= 0 || static_cast<long>(millis() - hardDeadline_) >= 0) {
@@ -389,6 +401,8 @@ AgentIslandClient::Discovery AgentIslandClient::resolve(const AgentIslandPairing
     return Discovery::Cached;
   }
 
+  if (aborted()) return Discovery::Cancelled;
+
   // 2. The paired hostname. `.local` needs mDNS; anything else is ordinary DNS,
   //    which connectWithTimeout() already does through getaddrinfo.
   std::string byName = pairing.host;
@@ -404,6 +418,8 @@ AgentIslandClient::Discovery AgentIslandClient::resolve(const AgentIslandPairing
     address_ = byName;
     return Discovery::Hostname;
   }
+
+  if (aborted()) return Discovery::Cancelled;
 
   // 3. The sweep. DHCP moved the Mac and the name did not resolve, so walk the
   //    local /24 looking for something on 47124 and TLS-probe only what answers.
@@ -494,6 +510,11 @@ AgentIslandClient::Result AgentIslandClient::request(const std::string& host, co
     if (handshake != MBEDTLS_ERR_SSL_WANT_READ && handshake != MBEDTLS_ERR_SSL_WANT_WRITE) {
       result.status = Status::Unreachable;
       result.message = "TLS handshake failed.";
+      return result;
+    }
+    if (aborted()) {
+      result.status = Status::Cancelled;
+      result.message = "Stopped.";
       return result;
     }
     if (static_cast<long>(millis() - deadline) >= 0) {
@@ -607,7 +628,8 @@ AgentIslandClient::Result AgentIslandClient::request(const std::string& host, co
     result.message = "Agent Island answered " + std::to_string(result.httpStatus) + ".";
   }
 
-  TlsBodyReader reader(&session.ssl, std::move(leftover), contentLength, BODY_IDLE_MS, millis() + HARD_CEILING_MS);
+  TlsBodyReader reader(&session.ssl, std::move(leftover), contentLength, BODY_IDLE_MS,
+                       millis() + HARD_CEILING_MS, abort_);
 
   if (onBody != nullptr && result.ok()) {
     std::string message;
@@ -622,6 +644,11 @@ AgentIslandClient::Result AgentIslandClient::request(const std::string& host, co
     if (reader.expected() >= 0) progress += " of " + humanBytes(static_cast<size_t>(reader.expected()));
 
     result.bytesReceived = reader.received();
+    if (reader.cancelled()) {
+      result.status = Status::Cancelled;
+      result.message = "Stopped (" + progress + ").";
+      return result;
+    }
     if (!handled) {
       result.status = Status::BadResponse;
       result.message = (message.empty() ? std::string("The reply could not be read.") : message) + " (" + progress + ")";
@@ -640,6 +667,10 @@ AgentIslandClient::Result AgentIslandClient::request(const std::string& host, co
     result.body.append(chunk, got);
   }
   result.bytesReceived = reader.received();
+  if (reader.cancelled()) {
+    result.status = Status::Cancelled;
+    result.message = "Stopped.";
+  }
   return result;
 }
 

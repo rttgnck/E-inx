@@ -76,6 +76,8 @@ class AgentIslandActivity final : public Activity {
   agentisland::Snapshot snapshot_;
   uint32_t lastSignature_ = 0;
   unsigned long lastPollMs_ = 0;
+  /** Throttles the GPIO re-read inside the abort hook, which is polled per chunk. */
+  unsigned long lastAbortPollMs_ = 0;
   uint32_t lastFetchMs_ = 0;
   size_t lastSnapshotBytes_ = 0;
 
@@ -98,6 +100,16 @@ class AgentIslandActivity final : public Activity {
 
   /** Minimum gap before the next snapshot, paced off how long the last one took. */
   uint32_t pollInterval() const;
+  /**
+   * Installs the abort hook the client polls from inside its blocking loops.
+   * Called once on the way in, before any work is queued.
+   */
+  void installAbortCheck();
+  /**
+   * True when a blocking call came back because Back was pressed. Leaves the
+   * app, since that is what Back does at this level everywhere else.
+   */
+  bool bailOnCancel(AgentIslandClient::Status status);
   void request(Work what, const char* busyMessage);
   void performConnect();
   void performRefresh();

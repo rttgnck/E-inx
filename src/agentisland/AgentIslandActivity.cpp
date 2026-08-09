@@ -124,8 +124,31 @@ std::string statusText(const Session& session) {
 
 }  // namespace
 
+void AgentIslandActivity::installAbortCheck() {
+  client_.setAbortCheck([this] {
+    // Polled from the client's blocking loops — per read chunk and per swept
+    // host — so the GPIO re-read is throttled; the button does not need
+    // millisecond resolution and reading it thousands of times a second would
+    // cost more than the network work it is interrupting.
+    const unsigned long now = millis();
+    if (now - lastAbortPollMs_ < 100) return false;
+    lastAbortPollMs_ = now;
+    mappedInput.update();
+    return mappedInput.wasPressed(MappedInputManager::Button::Back);
+  });
+}
+
+bool AgentIslandActivity::bailOnCancel(const AgentIslandClient::Status status) {
+  if (status != AgentIslandClient::Status::Cancelled) return false;
+  Serial.printf("[%lu] [AIS] Back pressed during a network call; leaving\n", millis());
+  exitTriggered_ = true;
+  if (onBack_) onBack_();
+  return true;
+}
+
 void AgentIslandActivity::onEnter() {
   Activity::onEnter();
+  installAbortCheck();
   pairing_ = AGENT_ISLAND_STORE.get();
 
   if (!pairing_.hasEndpoint()) {
@@ -282,12 +305,8 @@ void AgentIslandActivity::performConnect() {
       });
 
   if (discovery == AgentIslandClient::Discovery::Cancelled) {
-    connected_ = false;
-    connectionLabel_ = "Offline";
-    showNotice("Stopped looking",
-               "The search for " + pairing_.host +
-                   " was stopped. Open the app again to retry, or set the Mac's address directly under Settings › "
-                   "Agent Island in the web manager.");
+    exitTriggered_ = true;
+    if (onBack_) onBack_();
     return;
   }
 
@@ -309,6 +328,7 @@ void AgentIslandActivity::performConnect() {
     render();
 
     const AgentIslandClient::Result enrolled = client_.enroll(pairing_);
+    if (bailOnCancel(enrolled.status)) return;
     if (!enrolled.ok()) {
       connected_ = false;
       connectionLabel_ = "Not paired";
@@ -371,6 +391,7 @@ void AgentIslandActivity::performRefresh() {
                 static_cast<unsigned>(result.bytesReceived), static_cast<unsigned>(result.elapsedMs),
                 static_cast<unsigned>(pollInterval()));
 
+  if (bailOnCancel(result.status)) return;
   if (!result.ok()) {
     connected_ = false;
     connectionLabel_ = "Offline";
@@ -446,6 +467,7 @@ void AgentIslandActivity::performSubmit() {
   const AgentIslandClient::Result result = client_.sendCommand(pairing_, queuedCommand_);
   queuedCommand_.clear();
 
+  if (bailOnCancel(result.status)) return;
   if (!result.ok()) {
     connected_ = result.status != AgentIslandClient::Status::Unreachable;
     showNotice("Could not send that",
@@ -666,8 +688,10 @@ void AgentIslandActivity::renderBusy() const {
                            lines[i].c_str());
   }
 
-  // No hints: the work below this screen blocks, so a button offered here would
-  // not be answered until it had already finished.
+  // Back is live here: the client polls for it from inside its blocking loops,
+  // so this is answered while the work is still in flight rather than after it.
+  const MappedInputManager::Labels labels = mappedInput.mapLabels("« Back", "", "", "");
+  renderer.ui.buttonHintsFit(ATKINSON_HYPERLEGIBLE_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 void AgentIslandActivity::renderNotPaired() const {
