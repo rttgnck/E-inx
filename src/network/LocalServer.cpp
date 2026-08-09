@@ -1209,7 +1209,14 @@ void LocalServer::handleGithubFirmwareCheck() {
   doc["newer"] = result == OtaUpdater::OK && githubUpdater->isUpdateNewer();
   doc["notes"] = githubUpdater->getReleaseNotes();
   doc["size"] = githubUpdater->getOtaSize();
-  if (result != OtaUpdater::OK) doc["error"] = otaErrorMessage(result);
+  if (result != OtaUpdater::OK) {
+    // The mapped message says which category the failure fell into; the detail
+    // says what actually happened. Without it "release information the reader
+    // could not understand" is a dead end for whoever has to fix it.
+    const std::string& detail = githubUpdater->getFailureDetail();
+    doc["error"] = detail.empty() ? std::string(otaErrorMessage(result))
+                                  : std::string(otaErrorMessage(result)) + " — " + detail;
+  }
 
   String json;
   serializeJson(doc, json);
