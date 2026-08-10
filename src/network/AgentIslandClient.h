@@ -37,6 +37,8 @@ class AgentIslandClient {
     ServerError,     ///< The Mac answered with a 4xx/5xx we did not ask for.
     BadResponse,     ///< Answered, but not with the JSON we expect.
     Unsupported,     ///< Simulator build: there is no radio here.
+    Cancelled,       ///< The user pressed Back while this was in flight.
+    NotModified,     ///< 304: the revision we hold is still current. Not an error.
   };
 
   struct Result {
@@ -60,6 +62,18 @@ class AgentIslandClient {
   enum class Discovery : uint8_t { Cached, Hostname, Scan, Failed, Cancelled };
 
   explicit AgentIslandClient() = default;
+
+  /**
+   * Polled from inside every blocking loop — the TLS handshake, the body read,
+   * and between the resolver's strategies. Return true to give up.
+   *
+   * Everything this class does blocks the calling thread, and some of it blocks
+   * for tens of seconds: a Mac that is switched off takes the resolver through
+   * mDNS and 253 connects, and a busy one answers /api/state with megabytes.
+   * The main loop is not running to poll GPIO while any of that happens, so
+   * without a hook the panel is frozen and the reset pin is the only way out.
+   */
+  void setAbortCheck(std::function<bool()> abort) { abort_ = std::move(abort); }
 
   /** Brings up the radio from the saved credential. Idempotent once associated. */
   Status connectWifi();
@@ -86,7 +100,22 @@ class AgentIslandClient {
    * buffering it. The snapshot carries every session's whole activity feed and
    * has no useful upper bound, so buffering it is not an option on this device.
    */
-  Result fetchState(const AgentIslandPairing& pairing, const BodyHandler& onBody);
+  /**
+   * `knownRev` is the revision of the snapshot already held, sent as
+   * If-None-Match. When the Mac's model has not moved it answers 304 with no
+   * body and the result is Status::NotModified — a round trip instead of a
+   * transfer, which on this link is the difference between a second and
+   * minutes. Pass an empty string to force a full fetch.
+   */
+  Result fetchState(const AgentIslandPairing& pairing, const std::string& knownRev, const BodyHandler& onBody);
+
+  /**
+   * One session's approval detail, plan body and question options. The compact
+   * list carries ids and titles only, so this is what a card is drawn from and
+   * it is fetched when the card opens, never for the list.
+   */
+  Result fetchSessionDetail(const AgentIslandPairing& pairing, const std::string& sessionId,
+                            const BodyHandler& onBody);
   /** POST /api/command with an already-serialised JSON body. */
   Result sendCommand(const AgentIslandPairing& pairing, const std::string& json);
 
@@ -105,11 +134,15 @@ class AgentIslandClient {
    * snapshot that may run to hundreds of kilobytes.
    */
   Result request(const std::string& host, uint16_t port, const std::string& fingerprint, const char* method,
-                 const char* path, const std::string& bearer, const std::string& body, uint32_t budgetMs,
-                 const BodyHandler* onBody = nullptr);
+                 const std::string& path, const std::string& bearer, const std::string& body, uint32_t budgetMs,
+                 const BodyHandler* onBody = nullptr, const std::string& extraHeaders = std::string());
 
   /** GET /health against `host`, used by both the resolver and the scan. */
   bool probe(const std::string& host, const AgentIslandPairing& pairing);
 
+  /** True when the caller wants out; never null-checked at the call sites, so guard it. */
+  bool aborted() const { return abort_ && abort_(); }
+
+  std::function<bool()> abort_;
   std::string address_;
 };

@@ -114,6 +114,7 @@ bool parseState(inx::ByteReader& reader, Snapshot& out, std::string* error) {
   // is beyond this device, it cannot happen in practice, and ArduinoJson
   // reports it as NoMemory rather than failing badly.
   JsonDocument filter;
+  filter["rev"] = true;
   JsonObject sessionFilter = filter["sessions"].add<JsonObject>();
   sessionFilter["id"] = true;
   sessionFilter["provider"] = true;
@@ -161,6 +162,14 @@ bool parseState(inx::ByteReader& reader, Snapshot& out, std::string* error) {
   }
 
   Snapshot snapshot;
+  // A number or a string either way — the reader only echoes it back, so it is
+  // kept as text and never interpreted.
+  if (doc["rev"].is<const char*>()) {
+    snapshot.rev = doc["rev"].as<const char*>();
+  } else if (doc["rev"].is<unsigned long long>()) {
+    snapshot.rev = std::to_string(doc["rev"].as<unsigned long long>());
+  }
+
   for (JsonObjectConst object : sessions) {
     Session session;
     session.id = object["id"] | "";
@@ -229,6 +238,76 @@ bool parseState(inx::ByteReader& reader, Snapshot& out, std::string* error) {
 
   snapshot.valid = true;
   out = std::move(snapshot);
+  return true;
+}
+
+bool parseSessionDetail(inx::ByteReader& reader, Session& session, std::string* error) {
+  JsonDocument filter;
+  JsonObject actionFilter = filter["pendingAction"].to<JsonObject>();
+  actionFilter["id"] = true;
+  actionFilter["kind"] = true;
+  actionFilter["title"] = true;
+  actionFilter["summary"] = true;
+  actionFilter["detail"] = true;
+  actionFilter["canAlwaysAllow"] = true;
+
+  JsonObject planFilter = filter["pendingPlan"].to<JsonObject>();
+  planFilter["id"] = true;
+  planFilter["title"] = true;
+  planFilter["markdown"] = true;
+
+  JsonObject questionFilter = filter["question"].to<JsonObject>();
+  questionFilter["prompt"] = true;
+  questionFilter["header"] = true;
+  questionFilter["multiSelect"] = true;
+  questionFilter["isSecret"] = true;
+  JsonObject optionFilter = questionFilter["options"].add<JsonObject>();
+  optionFilter["label"] = true;
+  optionFilter["description"] = true;
+
+  JsonDocument doc;
+  const DeserializationError failure = deserializeJson(doc, reader, DeserializationOption::Filter(filter));
+  if (failure != DeserializationError::Ok) {
+    if (error) *error = failure.c_str();
+    return false;
+  }
+
+  // Only what the reply carries is written back; the list's ids and titles stay
+  // as they were, so a detail response missing a section cannot blank one.
+  JsonObjectConst action = doc["pendingAction"].as<JsonObjectConst>();
+  if (!action.isNull()) {
+    if (action["id"].is<const char*>()) session.actionId = action["id"].as<const char*>();
+    if (action["kind"].is<const char*>()) session.actionKind = action["kind"].as<const char*>();
+    if (action["title"].is<const char*>()) session.actionTitle = clipped(action["title"].as<const char*>(), 120);
+    if (action["summary"].is<const char*>()) session.actionSummary = clipped(action["summary"].as<const char*>(), 200);
+    if (action["detail"].is<const char*>()) session.actionDetail = clipped(action["detail"].as<const char*>(), 600);
+    session.canAlwaysAllow = action["canAlwaysAllow"] | session.canAlwaysAllow;
+  }
+
+  JsonObjectConst plan = doc["pendingPlan"].as<JsonObjectConst>();
+  if (!plan.isNull()) {
+    if (plan["id"].is<const char*>()) session.planId = plan["id"].as<const char*>();
+    if (plan["title"].is<const char*>()) session.planTitle = clipped(plan["title"].as<const char*>(), 120);
+    if (plan["markdown"].is<const char*>()) session.planMarkdown = clipped(plan["markdown"].as<const char*>(), MAX_PLAN_CHARS);
+  }
+
+  JsonObjectConst question = doc["question"].as<JsonObjectConst>();
+  if (!question.isNull()) {
+    if (question["prompt"].is<const char*>()) session.questionPrompt = clipped(question["prompt"].as<const char*>(), MAX_MESSAGE_CHARS);
+    if (question["header"].is<const char*>()) session.questionHeader = clipped(question["header"].as<const char*>(), 60);
+    session.multiSelect = question["multiSelect"] | session.multiSelect;
+    JsonArrayConst options = question["options"].as<JsonArrayConst>();
+    if (!options.isNull()) {
+      session.options.clear();
+      for (JsonObjectConst option : options) {
+        if (session.options.size() >= MAX_OPTIONS) break;
+        QuestionOption entry;
+        entry.label = clipped(option["label"] | "", 80);
+        entry.description = clipped(option["description"] | "", 160);
+        if (!entry.label.empty()) session.options.push_back(entry);
+      }
+    }
+  }
   return true;
 }
 

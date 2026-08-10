@@ -48,7 +48,15 @@ namespace {
 
 constexpr uint32_t WIFI_CONNECT_TIMEOUT_MS = 15000;
 constexpr uint32_t TLS_CONNECT_TIMEOUT_MS = 4000;
-constexpr uint32_t TLS_IO_TIMEOUT_MS = 8000;
+/**
+ * Deliberately short. This is the socket's SO_RCVTIMEO, and an expired one
+ * surfaces as MBEDTLS_ERR_SSL_WANT_READ, which the body reader treats as "call
+ * me again" — so it is not a transfer deadline (BODY_IDLE_MS is), it is how
+ * often the read loop comes up for air. At 8s the loop only regained control
+ * every few hundred milliseconds on a slow body, and the abort hook rides on
+ * that: Back had to be held for over a second to land between two polls.
+ */
+constexpr uint32_t TLS_IO_TIMEOUT_MS = 250;
 /** The sweep is 253 connects; anything generous here turns it into minutes. */
 constexpr uint32_t SCAN_CONNECT_TIMEOUT_MS = 120;
 /**
@@ -115,9 +123,12 @@ int connectWithTimeout(const std::string& host, const uint16_t port, const uint3
   }
 
   fcntl(sock, F_SETFL, flags);
+  // Sub-second values matter here: tv_usec was hardcoded to 0, which was
+  // harmless while the timeout was whole seconds and became "block forever" the
+  // moment it was not — 250ms rounded to tv_sec=0, tv_usec=0.
   struct timeval io = {};
   io.tv_sec = static_cast<time_t>(TLS_IO_TIMEOUT_MS / 1000);
-  io.tv_usec = 0;
+  io.tv_usec = static_cast<suseconds_t>((TLS_IO_TIMEOUT_MS % 1000) * 1000);
   setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &io, sizeof(io));
   setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &io, sizeof(io));
   return sock;
@@ -187,8 +198,9 @@ struct TlsSession {
 class TlsBodyReader final : public inx::ByteReader {
  public:
   TlsBodyReader(mbedtls_ssl_context* ssl, std::string leftover, const long contentLength, const uint32_t idleMs,
-                const unsigned long hardDeadline)
-      : ssl_(ssl),
+                const unsigned long hardDeadline, std::function<bool()> abort)
+      : abort_(std::move(abort)),
+        ssl_(ssl),
         buffer_(std::move(leftover)),
         remaining_(contentLength),
         expected_(contentLength),
@@ -224,6 +236,10 @@ class TlsBodyReader final : public inx::ByteReader {
 
   bool complete() const { return remaining_ <= 0; }
   size_t received() const { return received_; }
+  bool cancelled() const { return cancelled_; }
+  uint32_t readMs() const { return readMs_; }
+  uint32_t abortMs() const { return abortMs_; }
+  uint32_t fills() const { return fills_; }
   long expected() const { return expected_; }
 
   /**
@@ -244,21 +260,42 @@ class TlsBodyReader final : public inx::ByteReader {
   }
 
  private:
+  std::function<bool()> abort_;
+  bool cancelled_ = false;
+  uint32_t readMs_ = 0;   ///< Time inside mbedtls_ssl_read.
+  uint32_t abortMs_ = 0;  ///< Time inside the abort hook, which re-reads GPIO.
+  uint32_t fills_ = 0;
+
   bool fill() {
     if (remaining_ == 0) {
       finished_ = true;
       return false;
+    }
+    // A snapshot can take tens of seconds. Back has to work throughout it, not
+    // only once the last byte has landed.
+    if (abort_) {
+      const unsigned long abortStart = millis();
+      const bool stop = abort_();
+      abortMs_ += static_cast<uint32_t>(millis() - abortStart);
+      if (stop) {
+        finished_ = true;
+        cancelled_ = true;
+        return false;
+      }
     }
     if (static_cast<long>(millis() - idleDeadline_) >= 0 || static_cast<long>(millis() - hardDeadline_) >= 0) {
       finished_ = true;
       return false;
     }
 
-    unsigned char chunk[1024];
+    unsigned char chunk[4096];
     size_t want = sizeof(chunk);
     if (remaining_ > 0 && static_cast<size_t>(remaining_) < want) want = static_cast<size_t>(remaining_);
 
+    ++fills_;
+    const unsigned long readStart = millis();
     const int got = mbedtls_ssl_read(ssl_, chunk, want);
+    readMs_ += static_cast<uint32_t>(millis() - readStart);
     if (got == MBEDTLS_ERR_SSL_WANT_READ || got == MBEDTLS_ERR_SSL_WANT_WRITE) return true;
     if (got <= 0) {
       // A close with no Content-Length is the end of the body, not an error.
@@ -362,8 +399,8 @@ AgentIslandClient::Discovery AgentIslandClient::resolve(const AgentIslandPairing
 }
 
 AgentIslandClient::Result AgentIslandClient::request(const std::string&, uint16_t, const std::string&, const char*,
-                                                     const char*, const std::string&, const std::string&, uint32_t,
-                                                     const BodyHandler*) {
+                                                     const std::string&, const std::string&, const std::string&,
+                                                     uint32_t, const BodyHandler*, const std::string&) {
   Result result;
   result.status = Status::Unsupported;
   result.message = "Agent Island needs the radio, which the simulator does not have.";
@@ -389,6 +426,8 @@ AgentIslandClient::Discovery AgentIslandClient::resolve(const AgentIslandPairing
     return Discovery::Cached;
   }
 
+  if (aborted()) return Discovery::Cancelled;
+
   // 2. The paired hostname. `.local` needs mDNS; anything else is ordinary DNS,
   //    which connectWithTimeout() already does through getaddrinfo.
   std::string byName = pairing.host;
@@ -404,6 +443,8 @@ AgentIslandClient::Discovery AgentIslandClient::resolve(const AgentIslandPairing
     address_ = byName;
     return Discovery::Hostname;
   }
+
+  if (aborted()) return Discovery::Cancelled;
 
   // 3. The sweep. DHCP moved the Mac and the name did not resolve, so walk the
   //    local /24 looking for something on 47124 and TLS-probe only what answers.
@@ -436,9 +477,9 @@ AgentIslandClient::Discovery AgentIslandClient::resolve(const AgentIslandPairing
 
 AgentIslandClient::Result AgentIslandClient::request(const std::string& host, const uint16_t port,
                                                      const std::string& fingerprint, const char* method,
-                                                     const char* path, const std::string& bearer,
+                                                     const std::string& path, const std::string& bearer,
                                                      const std::string& body, const uint32_t budgetMs,
-                                                     const BodyHandler* onBody) {
+                                                     const BodyHandler* onBody, const std::string& extraHeaders) {
   Result result;
   const unsigned long started = millis();
   const unsigned long deadline = started + budgetMs;
@@ -496,6 +537,11 @@ AgentIslandClient::Result AgentIslandClient::request(const std::string& host, co
       result.message = "TLS handshake failed.";
       return result;
     }
+    if (aborted()) {
+      result.status = Status::Cancelled;
+      result.message = "Stopped.";
+      return result;
+    }
     if (static_cast<long>(millis() - deadline) >= 0) {
       result.status = Status::Unreachable;
       result.message = "TLS handshake timed out.";
@@ -539,6 +585,7 @@ AgentIslandClient::Result AgentIslandClient::request(const std::string& host, co
   if (!body.empty()) {
     requestText += "Content-Type: application/json\r\nContent-Length: " + std::to_string(body.size()) + "\r\n";
   }
+  requestText += extraHeaders;
   requestText += "\r\n";
   requestText += body;
 
@@ -599,6 +646,12 @@ AgentIslandClient::Result AgentIslandClient::request(const std::string& host, co
   const std::string lengthHeader = headerValue(headers, "content-length");
   const long contentLength = lengthHeader.empty() ? -1 : atol(lengthHeader.c_str());
 
+  if (result.httpStatus == 304) {
+    // Nothing moved. There is no body to read and nothing for the caller to do,
+    // which is the entire point of asking.
+    result.status = Status::NotModified;
+    return result;
+  }
   if (result.httpStatus == 401) {
     result.status = Status::Unauthorized;
     result.message = "This device is not paired, or the Mac revoked it.";
@@ -607,7 +660,8 @@ AgentIslandClient::Result AgentIslandClient::request(const std::string& host, co
     result.message = "Agent Island answered " + std::to_string(result.httpStatus) + ".";
   }
 
-  TlsBodyReader reader(&session.ssl, std::move(leftover), contentLength, BODY_IDLE_MS, millis() + HARD_CEILING_MS);
+  TlsBodyReader reader(&session.ssl, std::move(leftover), contentLength, BODY_IDLE_MS,
+                       millis() + HARD_CEILING_MS, abort_);
 
   if (onBody != nullptr && result.ok()) {
     std::string message;
@@ -622,6 +676,15 @@ AgentIslandClient::Result AgentIslandClient::request(const std::string& host, co
     if (reader.expected() >= 0) progress += " of " + humanBytes(static_cast<size_t>(reader.expected()));
 
     result.bytesReceived = reader.received();
+    Serial.printf("[%lu] [AIS] Body %u B in %u ms: ssl_read %u ms over %u fills, abort hook %u ms\n", millis(),
+                  static_cast<unsigned>(reader.received()), static_cast<unsigned>(millis() - started),
+                  static_cast<unsigned>(reader.readMs()), static_cast<unsigned>(reader.fills()),
+                  static_cast<unsigned>(reader.abortMs()));
+    if (reader.cancelled()) {
+      result.status = Status::Cancelled;
+      result.message = "Stopped (" + progress + ").";
+      return result;
+    }
     if (!handled) {
       result.status = Status::BadResponse;
       result.message = (message.empty() ? std::string("The reply could not be read.") : message) + " (" + progress + ")";
@@ -640,6 +703,10 @@ AgentIslandClient::Result AgentIslandClient::request(const std::string& host, co
     result.body.append(chunk, got);
   }
   result.bytesReceived = reader.received();
+  if (reader.cancelled()) {
+    result.status = Status::Cancelled;
+    result.message = "Stopped.";
+  }
   return result;
 }
 
@@ -653,10 +720,22 @@ AgentIslandClient::Result AgentIslandClient::enroll(const AgentIslandPairing& pa
                  HEADER_BUDGET_MS);
 }
 
-AgentIslandClient::Result AgentIslandClient::fetchState(const AgentIslandPairing& pairing, const BodyHandler& onBody) {
+AgentIslandClient::Result AgentIslandClient::fetchState(const AgentIslandPairing& pairing,
+                                                       const std::string& knownRev, const BodyHandler& onBody) {
   const std::string host = address_.empty() ? pairing.host : address_;
-  return request(host, pairing.port, pairing.fingerprint, "GET", "/api/state", pairing.deviceToken, "",
-                 HEADER_BUDGET_MS, &onBody);
+  // compact=1 asks for the list projection: ids, titles and status, without the
+  // activity feeds and detail bodies that made this a multi-megabyte reply.
+  const std::string headers = knownRev.empty() ? std::string() : "If-None-Match: " + knownRev + "\r\n";
+  return request(host, pairing.port, pairing.fingerprint, "GET", "/api/state?compact=1", pairing.deviceToken, "",
+                 HEADER_BUDGET_MS, &onBody, headers);
+}
+
+AgentIslandClient::Result AgentIslandClient::fetchSessionDetail(const AgentIslandPairing& pairing,
+                                                                const std::string& sessionId,
+                                                                const BodyHandler& onBody) {
+  const std::string host = address_.empty() ? pairing.host : address_;
+  return request(host, pairing.port, pairing.fingerprint, "GET", "/api/session/" + sessionId, pairing.deviceToken,
+                 "", HEADER_BUDGET_MS, &onBody);
 }
 
 AgentIslandClient::Result AgentIslandClient::sendCommand(const AgentIslandPairing& pairing, const std::string& json) {
