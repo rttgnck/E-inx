@@ -75,6 +75,13 @@ struct Session {
 struct Snapshot {
   std::vector<Session> sessions;
   bool valid = false;
+  /**
+   * The Mac's model revision this snapshot came from, echoed back as
+   * If-None-Match so an unchanged poll answers 304 instead of resending
+   * everything. Empty when the Mac did not supply one, which simply means every
+   * poll is a full fetch, as it was before.
+   */
+  std::string rev;
 
   int attentionCount() const;
   /** A cheap change signal, so the panel is only redrawn when something moved. */
@@ -92,6 +99,14 @@ struct Snapshot {
  * acted on.
  */
 bool parseState(inx::ByteReader& reader, Snapshot& out, std::string* error = nullptr);
+
+/**
+ * Parses GET /api/session/{id} and merges the bodies into `session` — the
+ * approval detail, the plan markdown and the question options that the compact
+ * list deliberately leaves out. Only the fields the reply carries are touched,
+ * so the list's ids and titles survive.
+ */
+bool parseSessionDetail(inx::ByteReader& reader, Session& session, std::string* error = nullptr);
 
 /** Builds the POST /api/command bodies. Kept next to the parser so the wire format lives in one file. */
 std::string resolveActionCommand(const std::string& actionId, bool allow, bool always);

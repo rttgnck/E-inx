@@ -176,7 +176,9 @@ void AgentIslandActivity::onExit() {
 void AgentIslandActivity::request(const Work what, const char* busyMessage) {
   pending_ = what;
   busyMessage_ = busyMessage;
-  if (what == Work::Connect || what == Work::Submit) {
+  // Detail included: without it the list stays on screen looking frozen while
+  // the card's bodies are fetched.
+  if (what == Work::Connect || what == Work::Submit || what == Work::Detail) {
     phase_ = Phase::Connecting;
   }
   updateRequired_ = true;
@@ -203,6 +205,9 @@ void AgentIslandActivity::loop() {
         break;
       case Work::Submit:
         performSubmit();
+        break;
+      case Work::Detail:
+        performDetail();
         break;
       case Work::None:
         break;
@@ -382,7 +387,7 @@ void AgentIslandActivity::performRefresh() {
   // activity feed, which has no useful upper bound and would not fit here.
   agentisland::Snapshot next;
   const AgentIslandClient::Result result =
-      client_.fetchState(pairing_, [&next](inx::ByteReader& reader, std::string& message) {
+      client_.fetchState(pairing_, knownRev_, [&next](inx::ByteReader& reader, std::string& message) {
         std::string reason;
         if (agentisland::parseState(reader, next, &reason)) return true;
         message = "Agent Island's reply could not be read (" + reason + ").";
@@ -392,6 +397,16 @@ void AgentIslandActivity::performRefresh() {
   lastFetchMs_ = result.elapsedMs;
   lastSnapshotBytes_ = result.bytesReceived;
   lastPollMs_ = millis();  // Pace from when the fetch finished, not when it started.
+
+  if (result.status == AgentIslandClient::Status::NotModified) {
+    // The model has not moved. Nothing to parse, nothing to redraw — and on this
+    // link that is the difference between a round trip and minutes.
+    connected_ = true;
+    Serial.printf("[%lu] [AIS] Not modified (rev %s) in %u ms\n", millis(), knownRev_.c_str(),
+                  static_cast<unsigned>(result.elapsedMs));
+    if (phase_ == Phase::Connecting) showList();
+    return;
+  }
   Serial.printf("[%lu] [AIS] Snapshot %u bytes in %u ms, next poll in %u ms\n", millis(),
                 static_cast<unsigned>(result.bytesReceived), static_cast<unsigned>(result.elapsedMs),
                 static_cast<unsigned>(pollInterval()));
@@ -436,6 +451,7 @@ void AgentIslandActivity::performRefresh() {
                                  ? snapshot_.sessions[selectedSession_].id
                                  : "";
   snapshot_ = std::move(next);
+  knownRev_ = snapshot_.rev;  // Echoed on the next poll so an unchanged model answers 304.
 
   if (phase_ == Phase::Connecting) {
     showList();
@@ -518,6 +534,41 @@ void AgentIslandActivity::openSelected() {
 
   cardChoice_ = 0;
   optionChecked_.assign(session->waiting == Waiting::Question ? session->options.size() : 0, false);
+  // The compact list carries ids and titles but not the bodies, so the card is
+  // drawn from a fetch of its own. Queued rather than called, so the wait is on
+  // screen before it starts.
+  request(Work::Detail, "Loading…");
+}
+
+void AgentIslandActivity::performDetail() {
+  const Session* session = openSession();
+  if (session == nullptr) {
+    showList();
+    return;
+  }
+
+  Session merged = *session;
+  const AgentIslandClient::Result result =
+      client_.fetchSessionDetail(pairing_, merged.id, [&merged](inx::ByteReader& reader, std::string& message) {
+        std::string reason;
+        if (agentisland::parseSessionDetail(reader, merged, &reason)) return true;
+        message = "That session's detail could not be read (" + reason + ").";
+        return false;
+      });
+
+  if (bailOnCancel(result.status)) return;
+  if (!result.ok()) {
+    // Back to the list rather than into a card with nothing in it.
+    showNotice("Could not open that", result.message);
+    return;
+  }
+
+  snapshot_.sessions[static_cast<size_t>(selectedSession_)] = std::move(merged);
+  optionChecked_.assign(
+      snapshot_.sessions[static_cast<size_t>(selectedSession_)].waiting == Waiting::Question
+          ? snapshot_.sessions[static_cast<size_t>(selectedSession_)].options.size()
+          : 0,
+      false);
   phase_ = Phase::Card;
   updateRequired_ = true;
 }

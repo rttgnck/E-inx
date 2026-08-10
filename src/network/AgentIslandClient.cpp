@@ -399,8 +399,8 @@ AgentIslandClient::Discovery AgentIslandClient::resolve(const AgentIslandPairing
 }
 
 AgentIslandClient::Result AgentIslandClient::request(const std::string&, uint16_t, const std::string&, const char*,
-                                                     const char*, const std::string&, const std::string&, uint32_t,
-                                                     const BodyHandler*) {
+                                                     const std::string&, const std::string&, const std::string&,
+                                                     uint32_t, const BodyHandler*, const std::string&) {
   Result result;
   result.status = Status::Unsupported;
   result.message = "Agent Island needs the radio, which the simulator does not have.";
@@ -477,9 +477,9 @@ AgentIslandClient::Discovery AgentIslandClient::resolve(const AgentIslandPairing
 
 AgentIslandClient::Result AgentIslandClient::request(const std::string& host, const uint16_t port,
                                                      const std::string& fingerprint, const char* method,
-                                                     const char* path, const std::string& bearer,
+                                                     const std::string& path, const std::string& bearer,
                                                      const std::string& body, const uint32_t budgetMs,
-                                                     const BodyHandler* onBody) {
+                                                     const BodyHandler* onBody, const std::string& extraHeaders) {
   Result result;
   const unsigned long started = millis();
   const unsigned long deadline = started + budgetMs;
@@ -585,6 +585,7 @@ AgentIslandClient::Result AgentIslandClient::request(const std::string& host, co
   if (!body.empty()) {
     requestText += "Content-Type: application/json\r\nContent-Length: " + std::to_string(body.size()) + "\r\n";
   }
+  requestText += extraHeaders;
   requestText += "\r\n";
   requestText += body;
 
@@ -645,6 +646,12 @@ AgentIslandClient::Result AgentIslandClient::request(const std::string& host, co
   const std::string lengthHeader = headerValue(headers, "content-length");
   const long contentLength = lengthHeader.empty() ? -1 : atol(lengthHeader.c_str());
 
+  if (result.httpStatus == 304) {
+    // Nothing moved. There is no body to read and nothing for the caller to do,
+    // which is the entire point of asking.
+    result.status = Status::NotModified;
+    return result;
+  }
   if (result.httpStatus == 401) {
     result.status = Status::Unauthorized;
     result.message = "This device is not paired, or the Mac revoked it.";
@@ -713,10 +720,22 @@ AgentIslandClient::Result AgentIslandClient::enroll(const AgentIslandPairing& pa
                  HEADER_BUDGET_MS);
 }
 
-AgentIslandClient::Result AgentIslandClient::fetchState(const AgentIslandPairing& pairing, const BodyHandler& onBody) {
+AgentIslandClient::Result AgentIslandClient::fetchState(const AgentIslandPairing& pairing,
+                                                       const std::string& knownRev, const BodyHandler& onBody) {
   const std::string host = address_.empty() ? pairing.host : address_;
-  return request(host, pairing.port, pairing.fingerprint, "GET", "/api/state", pairing.deviceToken, "",
-                 HEADER_BUDGET_MS, &onBody);
+  // compact=1 asks for the list projection: ids, titles and status, without the
+  // activity feeds and detail bodies that made this a multi-megabyte reply.
+  const std::string headers = knownRev.empty() ? std::string() : "If-None-Match: " + knownRev + "\r\n";
+  return request(host, pairing.port, pairing.fingerprint, "GET", "/api/state?compact=1", pairing.deviceToken, "",
+                 HEADER_BUDGET_MS, &onBody, headers);
+}
+
+AgentIslandClient::Result AgentIslandClient::fetchSessionDetail(const AgentIslandPairing& pairing,
+                                                                const std::string& sessionId,
+                                                                const BodyHandler& onBody) {
+  const std::string host = address_.empty() ? pairing.host : address_;
+  return request(host, pairing.port, pairing.fingerprint, "GET", "/api/session/" + sessionId, pairing.deviceToken,
+                 "", HEADER_BUDGET_MS, &onBody);
 }
 
 AgentIslandClient::Result AgentIslandClient::sendCommand(const AgentIslandPairing& pairing, const std::string& json) {

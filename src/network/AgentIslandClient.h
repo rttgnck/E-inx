@@ -38,6 +38,7 @@ class AgentIslandClient {
     BadResponse,     ///< Answered, but not with the JSON we expect.
     Unsupported,     ///< Simulator build: there is no radio here.
     Cancelled,       ///< The user pressed Back while this was in flight.
+    NotModified,     ///< 304: the revision we hold is still current. Not an error.
   };
 
   struct Result {
@@ -99,7 +100,22 @@ class AgentIslandClient {
    * buffering it. The snapshot carries every session's whole activity feed and
    * has no useful upper bound, so buffering it is not an option on this device.
    */
-  Result fetchState(const AgentIslandPairing& pairing, const BodyHandler& onBody);
+  /**
+   * `knownRev` is the revision of the snapshot already held, sent as
+   * If-None-Match. When the Mac's model has not moved it answers 304 with no
+   * body and the result is Status::NotModified — a round trip instead of a
+   * transfer, which on this link is the difference between a second and
+   * minutes. Pass an empty string to force a full fetch.
+   */
+  Result fetchState(const AgentIslandPairing& pairing, const std::string& knownRev, const BodyHandler& onBody);
+
+  /**
+   * One session's approval detail, plan body and question options. The compact
+   * list carries ids and titles only, so this is what a card is drawn from and
+   * it is fetched when the card opens, never for the list.
+   */
+  Result fetchSessionDetail(const AgentIslandPairing& pairing, const std::string& sessionId,
+                            const BodyHandler& onBody);
   /** POST /api/command with an already-serialised JSON body. */
   Result sendCommand(const AgentIslandPairing& pairing, const std::string& json);
 
@@ -118,8 +134,8 @@ class AgentIslandClient {
    * snapshot that may run to hundreds of kilobytes.
    */
   Result request(const std::string& host, uint16_t port, const std::string& fingerprint, const char* method,
-                 const char* path, const std::string& bearer, const std::string& body, uint32_t budgetMs,
-                 const BodyHandler* onBody = nullptr);
+                 const std::string& path, const std::string& bearer, const std::string& body, uint32_t budgetMs,
+                 const BodyHandler* onBody = nullptr, const std::string& extraHeaders = std::string());
 
   /** GET /health against `host`, used by both the resolver and the scan. */
   bool probe(const std::string& host, const AgentIslandPairing& pairing);

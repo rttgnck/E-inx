@@ -54,7 +54,7 @@ class AgentIslandActivity final : public Activity {
   };
 
   /** Work the next loop pass should do, once the screen announcing it has been drawn. */
-  enum class Work : uint8_t { None, Connect, Refresh, Submit };
+  enum class Work : uint8_t { None, Connect, Refresh, Submit, Detail };
 
   /**
    * How long to wait between snapshots, at minimum. The real interval is paced
@@ -64,9 +64,19 @@ class AgentIslandActivity final : public Activity {
    * eight seconds would mean the radio never stops.
    */
   static constexpr uint32_t POLL_INTERVAL_MS = 8000;
-  static constexpr uint32_t POLL_INTERVAL_MAX_MS = 120000;
-  /** Snapshots past this are worth telling the user about; something is wrong upstream. */
-  static constexpr size_t LARGE_SNAPSHOT_BYTES = 1024 * 1024;
+  /**
+   * With a compact list and a 304 on an unchanged model, a poll is a round trip
+   * rather than a transfer, so the ceiling that existed only to stop fetches
+   * overlapping can come down. Two minutes meant an approval could sit unseen
+   * for two minutes, which is the one thing this app exists to prevent.
+   */
+  static constexpr uint32_t POLL_INTERVAL_MAX_MS = 30000;
+  /**
+   * Snapshots past this are worth telling the user about. The compact list is a
+   * few KB, so anything approaching this means the Mac is not honouring
+   * compact=1 and the reader is back to downloading everything.
+   */
+  static constexpr size_t LARGE_SNAPSHOT_BYTES = 64 * 1024;
 
   const std::function<void()> onBack_;
   bool exitTriggered_ = false;
@@ -80,6 +90,8 @@ class AgentIslandActivity final : public Activity {
   unsigned long lastAbortPollMs_ = 0;
   uint32_t lastFetchMs_ = 0;
   size_t lastSnapshotBytes_ = 0;
+  /** Revision of the held snapshot, echoed as If-None-Match. */
+  std::string knownRev_;
 
   Phase phase_ = Phase::Connecting;
   Work pending_ = Work::None;
@@ -114,6 +126,8 @@ class AgentIslandActivity final : public Activity {
   void performConnect();
   void performRefresh();
   void performSubmit();
+  /** Fetches the open session's bodies, which the compact list leaves out. */
+  void performDetail();
 
   void openSelected();
   void activateChoice();

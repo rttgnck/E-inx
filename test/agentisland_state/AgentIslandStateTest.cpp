@@ -160,6 +160,46 @@ int main() {
     }
   }
 
+  {
+    // The compact list: a revision, and rows carrying ids and titles but none of
+    // the bodies. The reader has to keep the rev and still build usable rows.
+    const std::string json =
+        "{\"rev\":\"1741\",\"sessions\":[{\"id\":\"a\",\"provider\":\"Claude\",\"status\":\"needsApproval\","
+        "\"title\":\"t\",\"project\":\"inx\",\"detail\":\"d\",\"lastMessage\":\"m\","
+        "\"pendingActionCount\":2,\"pendingAction\":{\"id\":\"act-1\",\"kind\":\"bash\",\"title\":\"Run it\"}}]}";
+    StringReader reader(json);
+    agentisland::Snapshot snapshot;
+    std::string error;
+    const bool ok = agentisland::parseState(reader, snapshot, &error);
+    const bool revKept = snapshot.rev == "1741";
+    const bool waits = ok && snapshot.sessions.size() == 1 &&
+                       snapshot.sessions[0].waiting == agentisland::Waiting::Action;
+    printf("%-28s -> %s, rev=%s, waiting=%s\n", "compact list", ok ? "parsed" : "FAILED", snapshot.rev.c_str(),
+           waits ? "action" : "NO");
+    allOk &= ok && revKept && waits;
+  }
+
+  {
+    // The detail fetch merges bodies into a row that already has ids and titles,
+    // and must not blank what it does not carry.
+    agentisland::Session session;
+    session.id = "a";
+    session.title = "from the list";
+    session.actionId = "act-1";
+    session.actionTitle = "Run it";
+    const std::string json =
+        "{\"id\":\"a\",\"pendingAction\":{\"id\":\"act-1\",\"kind\":\"bash\",\"summary\":\"rm -rf\","
+        "\"detail\":\"the whole command\",\"canAlwaysAllow\":true}}";
+    StringReader reader(json);
+    std::string error;
+    const bool ok = agentisland::parseSessionDetail(reader, session, &error);
+    const bool merged = session.actionDetail == "the whole command" && session.canAlwaysAllow;
+    const bool kept = session.title == "from the list" && session.actionTitle == "Run it";
+    printf("%-28s -> %s, detail merged=%s, list fields kept=%s\n", "session detail", ok ? "parsed" : "FAILED",
+           merged ? "yes" : "NO", kept ? "yes" : "NO");
+    allOk &= ok && merged && kept;
+  }
+
   printf("\n%s\n", allOk ? "ALL OK" : "FAILURES ABOVE");
   return allOk ? 0 : 1;
 }
