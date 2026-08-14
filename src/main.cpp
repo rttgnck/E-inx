@@ -27,6 +27,7 @@
 #include <string>
 
 #include "activity/OpdsServerListActivity.h"
+#include "activity/network/BluetoothTransferActivity.h"
 #include "activity/network/CalibreConnectActivity.h"
 #include "activity/network/HotspotActivity.h"
 #include "activity/network/LocalNetworkActivity.h"
@@ -510,6 +511,9 @@ void onNetworkModeSelected(NetworkMode mode) {
       break;
     case NetworkMode::LIBRARY_SERVER:
       onGoToLibraryServer();
+      break;
+    case NetworkMode::BLUETOOTH_TRANSFER:
+      switchTo<BluetoothTransferActivity>(render, input, onGoToFileTransfer);
       break;
     case NetworkMode::CONNECT_CALIBRE:
       switchTo<CalibreConnectActivity>(render, input, onGoToFileTransfer);

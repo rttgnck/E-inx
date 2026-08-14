@@ -10,6 +10,25 @@ E-inx is a community firmware for Xteink e-paper readers, forked from [Inx](http
 
 ![](./docs/images/cover.jpg)
 
+## What's New in E-inx 1.6.17
+
+- **Bluetooth Transfer** — a new entry in Device Connections, straight after Library Server. Open it and the reader
+  waits for a phone; send a book from Android and it lands in your library. No WiFi network, no hotspot, no pairing,
+  and no server to keep running: the two devices talk to each other directly over Bluetooth LE, and the radio only
+  exists while that screen is open. Going Back shuts the stack all the way down.
+- **Books stream to the SD card, never through RAM.** The reader keeps 16 KB between the radio and the card and
+  writes as the bytes arrive, so the size of a book is not bounded by free heap. A transfer is written to a hidden
+  `.part` file and only renamed into place once both its size and its CRC32 check out — an interrupted send can
+  never turn into a half-written book sitting in your library, and every failure path deletes the partial file.
+- **E-inx Send for Android**, included with this release rather than living in a repository of its own. Pick a book
+  in the app or share one to it from anywhere in Android; it lists only readers that are actually waiting, and
+  streams the file rather than reading it into memory. It asks for Bluetooth and nothing else — no location, no
+  storage permission.
+- **The Device Connections navigation bug is fixed.** Entering the screen for the first time could immediately jump
+  on to System Settings and then Reader Settings, on one button press. The button edge that opens a screen is now
+  dropped until the buttons are next seen idle, so it cannot act a second time on the screen it just opened.
+- The wire protocol is written down in [docs/BLE_FILE_TRANSFER.md](./docs/BLE_FILE_TRANSFER.md).
+
 ## What's New in E-inx 1.5.17-4_update
 
 - **AgentIsland** — a fourth entry in the app drawer, talking to the Agent Island companion listener on your Mac.
@@ -390,6 +409,7 @@ E-inx 1.2.17 builds on Inx 1.0.17 with the following additions and improvements.
 
 - Join Wi-Fi networks (with auto-connect from saved credentials).
 - Create a hotspot.
+- Send books from Android over Bluetooth (see [docs/BLE_FILE_TRANSFER.md](./docs/BLE_FILE_TRANSFER.md)).
 - Connect to Calibre.
 - Browse OPDS catalogs.
 - Use KOReader sync.

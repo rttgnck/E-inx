@@ -93,6 +93,49 @@ Inx supports sending books from Calibre using the Inx Reader device plugin.
 3. Make sure your computer is on the same WiFi network.
 4. In Calibre, click "Send to device" to transfer books.
 
+### 3.4.2 Bluetooth Transfer
+
+Sends a book straight from an Android phone over Bluetooth. No WiFi network, no hotspot and
+no pairing — the two devices talk to each other directly, and only while the reader is showing
+the Bluetooth Transfer screen.
+
+**On the reader**
+
+    Device Connections → Bluetooth Transfer
+
+The screen shows the reader's name (for example `E-inx X3 A31F`) and waits. Bluetooth is only
+on while this screen is open; going Back shuts the radio down completely.
+
+**On the phone**
+
+1. Install **E-inx Send**. The APK is attached to the same GitHub release as the firmware —
+   download `E-inx-Send.apk` and open it. Android will ask you to allow installing from your
+   browser or files app the first time.
+2. Open E-inx Send and tap **Choose Book**, or share a book to it from any app:
+   Files → long-press the book → **Share** → **E-inx Send**.
+3. The app lists readers that are waiting. Tap **Send** next to yours.
+4. Progress shows on both screens. When it finishes, the book is in your library under
+   **Books**.
+
+Grant the Bluetooth permission when asked. The app never asks for location or for access to
+your storage — it only reads the one file you picked.
+
+**Supported formats:** EPUB, TXT, XTC and XTCH, up to 64 MB.
+
+**If something goes wrong**
+
+Both screens name the problem, and nothing is added to the library. Interrupted transfers clean
+themselves up, so a failed send never leaves a half-written book behind — just try again.
+
+- *No readers found* — the reader has to be on the Bluetooth Transfer screen, not just powered
+  on. Check that Bluetooth is on for the phone too.
+- *"That book is already on the reader"* — a book with that file name is already in `/Books`.
+  Rename the file on the phone, or delete the old copy first.
+- *"The file did not survive the transfer intact"* — the checksum did not match. This is the
+  reader refusing a corrupted book; send it again.
+
+The wire protocol is documented in [docs/BLE_FILE_TRANSFER.md](./docs/BLE_FILE_TRANSFER.md).
+
 ### 3.5 Settings
 
 The Settings screen allows you to configure the device's behavior. There are a few settings you can adjust:
