@@ -388,6 +388,10 @@ T* switchTo(Args&&... args) {
   Serial.printf("[%lu] [SIM] Activity: %s\n", millis(), currentActivity->getName());
 #endif
   currentActivity->onEnter();
+  // After the first paint, not before it: onEnter() blocks on a full e-ink refresh without
+  // sampling the buttons, so the press that opened this screen is only finished settling by
+  // the time it returns. Suppressing from here means the screen starts from a clean edge.
+  input.ignoreInputUntilIdle();
   return nextActivity;
 }
 
