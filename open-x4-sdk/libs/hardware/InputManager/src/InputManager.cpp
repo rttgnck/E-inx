@@ -28,6 +28,16 @@ void InputManager::begin() {
 int InputManager::getButtonFromADC(const int adcValue, const int ranges[], const int numButtons) {
   for (int i = 0; i < numButtons; i++) {
     if (ranges[i + 1] < adcValue && adcValue <= ranges[i]) {
+      // Too close to either threshold to be sure which side of it the contact is on. Reporting
+      // "no button" here is what turns a mid-transition reading into a dropped sample instead of
+      // a press of the neighbouring button.
+      const bool nearUpper = ranges[i] - adcValue < ADC_GUARD_BAND;
+      // The bottom range is open-ended (INT32_MIN); subtracting from it would overflow, and there
+      // is no neighbour below it to be confused with.
+      const bool nearLower = ranges[i + 1] != INT32_MIN && adcValue - ranges[i + 1] < ADC_GUARD_BAND;
+      if (nearUpper || nearLower) {
+        return -1;
+      }
       return i;
     }
   }
@@ -63,12 +73,37 @@ void InputManager::injectOneShotPress(const uint8_t buttonIndex) {
   }
 }
 
+bool InputManager::readStableState(uint8_t& out) {
+  const uint8_t first = getState();
+
+  for (uint8_t i = 1; i < STABLE_SAMPLE_COUNT; i++) {
+    delayMicroseconds(STABLE_SAMPLE_GAP_US);
+    if (getState() != first) {
+      return false;
+    }
+  }
+
+  out = first;
+  return true;
+}
+
 void InputManager::update() {
   const unsigned long currentTime = millis();
-  const uint8_t state = getState();
 
   pressedEvents = 0;
   releasedEvents = 0;
+
+  uint8_t state = 0;
+  if (!readStableState(state)) {
+    // The buttons were caught mid-change. Leaving the debounce state untouched means the next
+    // call starts from the last settled reading rather than from a transition, so a press is
+    // registered once the contact has actually settled and never on the way there.
+    if (pendingInjectPress != 0) {
+      pressedEvents |= pendingInjectPress;
+      pendingInjectPress = 0;
+    }
+    return;
+  }
 
   if (state != lastState) {
     lastDebounceTime = currentTime;

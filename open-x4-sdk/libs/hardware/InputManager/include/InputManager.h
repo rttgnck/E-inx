@@ -94,6 +94,23 @@ class InputManager {
  private:
   int getButtonFromADC(int adcValue, const int ranges[], int numButtons);
 
+  /**
+   * Samples the buttons several times in a row and only reports a reading the samples agree on.
+   *
+   * The alternative — trusting one sample once DEBOUNCE_DELAY of wall clock has elapsed — counts
+   * time rather than agreement, and the callers do not sample at a steady rate: a screen painting
+   * a full e-ink refresh goes several hundred milliseconds without calling update() at all, which
+   * satisfies the elapsed-time test on the very first sample afterwards. That sample can easily
+   * land mid-press, and because the ADC ladder's ranges are contiguous it then decodes as a
+   * neighbouring button rather than as nothing.
+   *
+   * Sampling happens inside one call, deliberately, so the guarantee does not depend on how often
+   * the caller gets round to updating.
+   *
+   * @return false when the samples disagreed, in which case `out` is untouched.
+   */
+  bool readStableState(uint8_t& out);
+
   uint8_t currentState;
   uint8_t lastState;
   uint8_t pressedEvents;
@@ -111,6 +128,19 @@ class InputManager {
 
   static constexpr int ADC_NO_BUTTON = 3800;
   static constexpr unsigned long DEBOUNCE_DELAY = 5;
+
+  /** Samples per update(), and the gap between them. Three costs about 1.2 ms. */
+  static constexpr uint8_t STABLE_SAMPLE_COUNT = 3;
+  static constexpr unsigned int STABLE_SAMPLE_GAP_US = 600;
+
+  /**
+   * Dead zone either side of an ADC threshold, in counts.
+   *
+   * The ranges are contiguous, so without this every reading decodes as *some* button and a
+   * contact that is still making or breaking reads as whichever neighbour it happens to pass
+   * through. Sixty counts is about 8% of the narrowest gap between thresholds (3800/3100/2090/750).
+   */
+  static constexpr int ADC_GUARD_BAND = 60;
 
   static const char* BUTTON_NAMES[];
 };
