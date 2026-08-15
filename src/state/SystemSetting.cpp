@@ -41,7 +41,7 @@ void readAndValidate(FsFile& file, uint8_t& member, const uint8_t maxValue) {
 
 namespace {
 constexpr uint8_t SETTINGS_FILE_VERSION = 43;
-constexpr uint8_t SETTINGS_COUNT = 98;
+constexpr uint8_t SETTINGS_COUNT = 101;
 /** Last field index in v9 (1-based count of persisted pods through displayImageDither). */
 constexpr uint8_t SETTINGS_COUNT_V9 = 40;
 constexpr uint8_t LEGACY_SLEEP_IMAGE_ADVANCE_POWER = 7;
@@ -264,6 +264,9 @@ uint32_t settingsHash(const SystemSetting& settings, const uint8_t fontFamilyToS
   hashPod(hash, settings.x3ReinforceThumbnails);
   hashPod(hash, settings.x3ReinforcePeriodicClean);
   hashPod(hash, settings.x3ReinforceCleanInterval);
+  hashPod(hash, settings.x3PageWaveform);
+  hashPod(hash, settings.x3MaintenanceAction);
+  hashPod(hash, settings.x3MaintenancePasses);
   hashPod(hash, settings.tab2Content);
   hashPod(hash, settings.appDrawerNews);
   hashPod(hash, settings.appDrawerGames);
@@ -330,6 +333,10 @@ bool SystemSetting::saveToFile() const {
     if (mut->x3ReinforcePeriodicClean > 1) mut->x3ReinforcePeriodicClean = 1;
     if (mut->x3ReinforceCleanInterval >= X3_REINFORCE_CLEAN_INTERVAL_COUNT)
       mut->x3ReinforceCleanInterval = X3_REINFORCE_CLEAN_30;
+    if (mut->x3PageWaveform >= X3_PAGE_WAVEFORM_COUNT) mut->x3PageWaveform = X3_PAGE_WAVEFORM_REINFORCE;
+    if (mut->x3MaintenanceAction >= X3_MAINTENANCE_ACTION_COUNT)
+      mut->x3MaintenanceAction = X3_MAINTENANCE_FULL_CLEAN;
+    if (mut->x3MaintenancePasses >= X3_MAINTENANCE_PASSES_COUNT) mut->x3MaintenancePasses = 0;
     if (mut->tab2Content >= TAB2_CONTENT_COUNT) mut->tab2Content = TAB2_NEWS;
     if (mut->appDrawerNews > 1) mut->appDrawerNews = 1;
     if (mut->appDrawerGames > 1) mut->appDrawerGames = 1;
@@ -464,6 +471,9 @@ bool SystemSetting::saveToFile() const {
   serialization::writePod(outputFile, appDrawerCrossPlay);
   serialization::writePod(outputFile, appDrawerAgentIsland);
   serialization::writeString(outputFile, std::string(otaReleaseUrl));
+  serialization::writePod(outputFile, x3PageWaveform);
+  serialization::writePod(outputFile, x3MaintenanceAction);
+  serialization::writePod(outputFile, x3MaintenancePasses);
 
   outputFile.close();
   saveUiThemeSetting(uiTheme);
@@ -974,6 +984,18 @@ bool SystemSetting::loadFromFile() {
         strncpy(otaReleaseUrl, otaUrl.c_str(), sizeof(otaReleaseUrl) - 1);
         otaReleaseUrl[sizeof(otaReleaseUrl) - 1] = '\0';
       }
+      ++settingsRead;
+    }
+    if (settingsRead < fileSettingsCount) {
+      readAndValidate(inputFile, x3PageWaveform, X3_PAGE_WAVEFORM_COUNT);
+      ++settingsRead;
+    }
+    if (settingsRead < fileSettingsCount) {
+      readAndValidate(inputFile, x3MaintenanceAction, X3_MAINTENANCE_ACTION_COUNT);
+      ++settingsRead;
+    }
+    if (settingsRead < fileSettingsCount) {
+      readAndValidate(inputFile, x3MaintenancePasses, X3_MAINTENANCE_PASSES_COUNT);
       ++settingsRead;
     }
 

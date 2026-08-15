@@ -98,6 +98,12 @@ class GfxRenderer {
   void displayWithReinforcement(ReinforcementTarget target,
                                 HalDisplay::RefreshMode fallback = HalDisplay::FAST_REFRESH) const;
   void allowReinforcementAfterTextAntiAliasing() const;
+  /**
+   * Periodic maintenance on the reader's refresh cadence: shows `frame` and, depending on
+   * SystemSetting::X3_MAINTENANCE_ACTION, resets accumulated differential error. Only the
+   * FULL_CLEAN action flashes.
+   */
+  void displayMaintenance(bool reinforcementEligible = true) const;
   void invertScreen() const;
   void clearScreen(uint8_t color = 0xFF) const;
   void begin();

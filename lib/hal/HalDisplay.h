@@ -29,6 +29,9 @@ class HalDisplay {
 
   void displayBuffer(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false);
   void displayBwReinforced(RefreshMode fallback = RefreshMode::FAST_REFRESH, bool turnOffScreen = false);
+  void displayHalfScrub(RefreshMode fallback = RefreshMode::HALF_REFRESH, bool turnOffScreen = false);
+  /** Selects the bank used for an ordinary X3 differential update (SystemSetting::X3_PAGE_WAVEFORM). */
+  void setX3PageWaveform(uint8_t waveform);
   void refreshDisplay(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false);
 
   void deepSleep();

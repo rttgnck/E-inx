@@ -38,16 +38,6 @@ inline void displayWithCycle(const GfxRenderer& renderer, int& pagesUntilFullRef
     return;
   }
 
-  if (reinforcementEligible && renderer.reinforcementEnabled(GfxRenderer::ReinforcementTarget::ReaderBw)) {
-    renderer.displayWithReinforcement(GfxRenderer::ReinforcementTarget::ReaderBw);
-    if (pagesUntilFullRefresh <= 1) {
-      pagesUntilFullRefresh = cadence;
-    } else {
-      pagesUntilFullRefresh--;
-    }
-    return;
-  }
-
   if (!reinforcementEligible && renderer.reinforcementEnabled(GfxRenderer::ReinforcementTarget::ReaderBw) && Serial) {
     Serial.printf("[%lu] [GFX] X3 reader reinforcement bypass: image/grayscale page\n", millis());
   }
@@ -58,13 +48,22 @@ inline void displayWithCycle(const GfxRenderer& renderer, int& pagesUntilFullRef
     return;
   }
 
+  // The countdown drives maintenance whether or not reinforcement is on. It previously did not:
+  // the reinforcement branch returned before ever reaching here, so the cadence the reader had
+  // configured was decremented, reset, and never acted on, and the only thing that ever cleaned
+  // up was a separate counter inside GfxRenderer.
   if (pagesUntilFullRefresh <= 1) {
-    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+    renderer.displayMaintenance(reinforcementEligible);
     pagesUntilFullRefresh = cadence;
+    return;
+  }
+
+  if (reinforcementEligible && renderer.reinforcementEnabled(GfxRenderer::ReinforcementTarget::ReaderBw)) {
+    renderer.displayWithReinforcement(GfxRenderer::ReinforcementTarget::ReaderBw);
   } else {
     renderer.displayBuffer();
-    pagesUntilFullRefresh--;
   }
+  pagesUntilFullRefresh--;
 }
 
 }  // namespace ReaderRefresh

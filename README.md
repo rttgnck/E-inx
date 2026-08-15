@@ -10,6 +10,28 @@ E-inx is a community firmware for Xteink e-paper readers, forked from [Inx](http
 
 ![](./docs/images/cover.jpg)
 
+## What's New in E-inx 1.6.17-2
+
+- **The button that opens a screen can no longer act on it twice.** `InputManager` accepted a single ADC
+  reading as soon as 5 ms of clock had passed — it counted time, not agreement — and the front buttons
+  share one ladder whose ranges sit directly against each other, so a reading taken while a contact was
+  still making or breaking decoded as a *neighbouring* button. Painting a screen goes several hundred
+  milliseconds without sampling at all, which made the first reading afterwards land mid-press. Now three
+  samples are taken inside a single update and must agree, and readings within 60 counts of a threshold
+  are discarded rather than rounded to whichever button they are nearest.
+- **Refresh Frequency works while B/W reinforcement is on.** It never did: the reinforcement path returned
+  before the cadence was ever acted on, so the countdown was decremented, reset, and ignored, and the only
+  cleanup during a reading session came from a separate hidden counter. Ghosting accumulated until that
+  counter fired.
+- **Maintenance no longer has to flash.** A new experimental setting chooses what happens on the refresh
+  cadence: **Full clean** (as before), **Half scrub** (the YACP scrub bank — every pixel driven to its
+  target regardless of what it held, without first flashing to white), **Reinforce** (extra passes of the
+  waveform each page turn already uses, so it cannot flash), or **None**.
+- **The page-turn waveform is selectable**, so the divergence from YACP can be measured instead of argued
+  about: **Reinforce** (what E-inx has shipped), **Fast (E-inx)**, or **Fast (YACP)**. Pairing
+  *Fast (YACP)* with maintenance action *Reinforce* reproduces YACP's no-flash reader exactly.
+- Defaults are unchanged, so an existing reader behaves as it did in 1.6.17 until these are switched.
+
 ## What's New in E-inx 1.6.17
 
 - **Bluetooth Transfer** — a new entry in Device Connections, straight after Library Server. Open it and the reader

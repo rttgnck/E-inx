@@ -169,6 +169,13 @@ std::vector<SettingInfo> buildSystemPageSettings(const bool x3) {
     settings.push_back(SettingInfo::Enum("Full clean interval", &SystemSetting::x3ReinforceCleanInterval,
                                          {"10 updates", "15 updates", "30 updates", "60 updates"},
                                          GroupType::EXPERIMENTAL));
+    settings.push_back(SettingInfo::Enum("Page turn waveform", &SystemSetting::x3PageWaveform,
+                                         {"Reinforce", "Fast (E-inx)", "Fast (YACP)"}, GroupType::EXPERIMENTAL));
+    settings.push_back(SettingInfo::Enum("Maintenance action", &SystemSetting::x3MaintenanceAction,
+                                         {"Full clean", "Half scrub", "Reinforce", "None"},
+                                         GroupType::EXPERIMENTAL));
+    settings.push_back(SettingInfo::Enum("Maintenance passes", &SystemSetting::x3MaintenancePasses,
+                                         {"1 pass", "2 passes", "3 passes"}, GroupType::EXPERIMENTAL));
     settings.push_back(SettingInfo::Action("Full clean now", GroupType::EXPERIMENTAL));
   }
 

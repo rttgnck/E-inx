@@ -324,6 +324,18 @@
         <div><div class="setting-label">Full clean interval</div></div>
         <div class="setting-control"><select id="x3ReinforceCleanInterval"></select></div>
       </div>
+      <div class="setting-item">
+        <div><div class="setting-label">Page turn waveform</div><div class="setting-description">Waveform used for an ordinary page turn. Fast (YACP) is the bank YACP uses; pair it with Maintenance action &quot;Reinforce&quot; to reproduce YACP's no-flash reader exactly.</div></div>
+        <div class="setting-control"><select id="x3PageWaveform"></select></div>
+      </div>
+      <div class="setting-item">
+        <div><div class="setting-label">Maintenance action</div><div class="setting-description">What happens on the Refresh Frequency cadence. Only Full clean flashes; Reinforce cannot flash. None leaves ghosting unbounded.</div></div>
+        <div class="setting-control"><select id="x3MaintenanceAction"></select></div>
+      </div>
+      <div class="setting-item">
+        <div><div class="setting-label">Maintenance passes</div><div class="setting-description">Reinforcement passes per maintenance tick. Only used when the action is Reinforce.</div></div>
+        <div class="setting-control"><select id="x3MaintenancePasses"></select></div>
+      </div>
     </div>
     <p class="hint">Actions such as Index library, reset, updates, and About are available on the device.</p>
 
@@ -640,6 +652,9 @@ const options = {
   refreshFrequency: ["1 page", "5 pages", "10 pages", "15 pages", "30 pages"],
   readerRefreshMode: ["Auto", "Fast", "Half", "Full"],
   x3ReinforceCleanInterval: ["10 updates", "15 updates", "30 updates", "60 updates"],
+  x3PageWaveform: ["Reinforce", "Fast (E-inx)", "Fast (YACP)"],
+  x3MaintenanceAction: ["Full clean", "Half scrub", "Reinforce", "None"],
+  x3MaintenancePasses: ["1 pass", "2 passes", "3 passes"],
   statusBar: ["None", "No Progress", "Full w/ Percentage", "Full w/ Progress Bar", "Progress Bar", "Battery %", "Percentage", "Page Bars"],
   sleepImagePowerGestureWindow: ["Auto", "600 ms", "700 ms", "800 ms", "900 ms", "1000 ms", "1100 ms", "1200 ms", "1300 ms", "1400 ms", "1500 ms", "1600 ms", "1700 ms", "1800 ms", "1900 ms", "2000 ms", "2100 ms", "2200 ms"],
   sleepImagePowerFirstPressMin: ["Auto", "100 ms", "200 ms", "300 ms", "400 ms", "500 ms", "600 ms", "700 ms", "800 ms", "900 ms", "1000 ms", "1100 ms", "1200 ms", "1300 ms", "1400 ms", "1500 ms"],

@@ -67,6 +67,17 @@ class EInkDisplay {
    * RAM does not contain a safe previous-frame baseline.
    */
   void displayBwReinforced(RefreshMode fallback = FAST_REFRESH, bool turnOffScreen = false);
+  /**
+   * X3-only cleanup using the scrub bank, where WW == BW and WB == BB.
+   *
+   * Every pixel is driven to its target regardless of what it held before, so accumulated
+   * differential error is reset without the white fill the _img full sync performs first.
+   * Falls back to displayBuffer() when the controller RAM has no safe baseline.
+   */
+  void displayHalfScrub(RefreshMode fallback = HALF_REFRESH, bool turnOffScreen = false);
+
+  /** Selects the bank used for an ordinary X3 differential update; see SystemSetting::X3_PAGE_WAVEFORM. */
+  void setX3PageWaveform(uint8_t waveform) { _x3PageWaveform = waveform; }
   // EXPERIMENTAL: Windowed update - display only a rectangular region
   void displayWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h, bool turnOffScreen = false);
   void displayGrayBuffer(bool turnOffScreen = false, const unsigned char* lutData = nullptr, bool quality = false,
@@ -123,6 +134,8 @@ class EInkDisplay {
   };
   X3GrayState _x3GrayState;
   uint8_t _x3InitialFullSyncsRemaining = 0;
+  /** 2 selects the YACP _fast bank; anything else keeps the bank E-inx has always used. */
+  uint8_t _x3PageWaveform = 0;
   bool _x3ForceFullSyncNext = false;
   // Frame buffer storage is allocated exactly for the active device during begin().
   uint8_t* frameBuffer0 = nullptr;
