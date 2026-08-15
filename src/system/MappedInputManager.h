@@ -43,6 +43,20 @@ class MappedInputManager {
    */
   void update() { gpio.update(); }
 
+  /**
+   * Drops every press and release edge until the buttons are next seen fully idle.
+   *
+   * Call this after entering a new screen. The press that opened the screen is still
+   * physically down (or still settling) while that screen paints its first frame, and
+   * the paint is a full e-ink refresh that blocks for several hundred milliseconds
+   * without sampling the buttons. The first sample taken afterwards is therefore
+   * accepted immediately by InputManager's 5 ms debounce, whichever button the
+   * half-made contact happens to decode as on the shared ADC ladder — so the opening
+   * press could act a second time on the screen it had just opened. Waiting for idle
+   * ties the suppression to the button actually coming up rather than to a timeout.
+   */
+  void ignoreInputUntilIdle() { suppressUntilIdle_ = true; }
+
   bool wasPressed(Button button) const;
   bool wasReleased(Button button) const;
   bool isPressed(Button button) const;
@@ -82,6 +96,10 @@ class MappedInputManager {
  private:
   HalGPIO& gpio;
   bool invertDirectionalAxes180_ = false;
+  mutable bool suppressUntilIdle_ = false;
+
+  /** True while edges are being dropped; clears itself once no button reads as held. */
+  bool suppressingEdges() const;
 
   bool mapButton(Button button, bool (HalGPIO::*fn)(uint8_t) const) const;
 };

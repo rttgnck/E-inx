@@ -88,15 +88,37 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
   return false;
 }
 
-bool MappedInputManager::wasPressed(const Button button) const { return mapButton(button, &HalGPIO::wasPressed); }
+bool MappedInputManager::suppressingEdges() const {
+  if (!suppressUntilIdle_) {
+    return false;
+  }
 
-bool MappedInputManager::wasReleased(const Button button) const { return mapButton(button, &HalGPIO::wasReleased); }
+  for (uint8_t index = 0; index <= HalGPIO::BTN_POWER; ++index) {
+    if (gpio.isPressed(index)) {
+      return true;
+    }
+  }
 
+  suppressUntilIdle_ = false;
+  return false;
+}
+
+bool MappedInputManager::wasPressed(const Button button) const {
+  return !suppressingEdges() && mapButton(button, &HalGPIO::wasPressed);
+}
+
+bool MappedInputManager::wasReleased(const Button button) const {
+  return !suppressingEdges() && mapButton(button, &HalGPIO::wasReleased);
+}
+
+// Deliberately not suppressed: this reports the level, not an edge, so a screen asking
+// "is the button down right now" gets the truth even while the opening press is being
+// waited out.
 bool MappedInputManager::isPressed(const Button button) const { return mapButton(button, &HalGPIO::isPressed); }
 
-bool MappedInputManager::wasAnyPressed() const { return gpio.wasAnyPressed(); }
+bool MappedInputManager::wasAnyPressed() const { return !suppressingEdges() && gpio.wasAnyPressed(); }
 
-bool MappedInputManager::wasAnyReleased() const { return gpio.wasAnyReleased(); }
+bool MappedInputManager::wasAnyReleased() const { return !suppressingEdges() && gpio.wasAnyReleased(); }
 
 MappedInputManager::MotionGesture MappedInputManager::readMotionGesture(const uint8_t orientation, const uint8_t mode,
                                                                         const uint8_t sensitivity) const {

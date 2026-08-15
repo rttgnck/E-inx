@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A book with a signal arc over it: the two halves of what this app does. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <path
+        android:fillColor="#FF1B1B1B"
+        android:pathData="M32,44 L52,44 L52,76 L32,76 A4,4 0 0,1 28,72 L28,48 A4,4 0 0,1 32,44 Z" />
+    <path
+        android:fillColor="#FF4A4A4A"
+        android:pathData="M56,44 L76,44 A4,4 0 0,1 80,48 L80,72 A4,4 0 0,1 76,76 L56,76 Z" />
+    <path
+        android:strokeColor="#FF1B1B1B"
+        android:strokeWidth="4"
+        android:fillColor="#00000000"
+        android:strokeLineCap="round"
+        android:pathData="M62,38 A16,16 0 0,1 76,24" />
+    <path
+        android:strokeColor="#FF1B1B1B"
+        android:strokeWidth="4"
+        android:fillColor="#00000000"
+        android:strokeLineCap="round"
+        android:pathData="M68,40 A26,26 0 0,1 88,20" />
+</vector>
