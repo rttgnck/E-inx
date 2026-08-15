@@ -35,7 +35,7 @@ sealed interface TransferOutcome {
  */
 class EinxTransferClient(private val context: Context) {
 
-  private companion object {
+  internal companion object {
     const val TAG = "EinxTransferClient"
 
     const val CONNECT_TIMEOUT_MS = 20_000L
@@ -48,6 +48,12 @@ class EinxTransferClient(private val context: Context) {
 
     /** ATT overhead: three bytes of the MTU are the opcode and handle. */
     const val ATT_HEADER_BYTES = 3
+
+    /**
+     * A GATT attribute value tops out at 512 bytes regardless of the MTU, and Android
+     * throws rather than truncating. MTU 517 would otherwise give a 514-byte chunk.
+     */
+    const val MAX_ATTRIBUTE_BYTES = 512
 
     /** Used until the reader and phone have agreed on something larger. */
     const val DEFAULT_CHUNK_BYTES = 20
@@ -156,7 +162,7 @@ class EinxTransferClient(private val context: Context) {
       gatt.requestMtu(517)
       val negotiatedMtu = withTimeout(SETUP_TIMEOUT_MS) { mtuChanged.receive() }
       if (negotiatedMtu > 0) {
-        chunkSize = negotiatedMtu - ATT_HEADER_BYTES
+        chunkSize = chunkSizeForMtu(negotiatedMtu)
       }
       Log.i(TAG, "Negotiated MTU $negotiatedMtu, sending $chunkSize bytes per write")
 
@@ -351,6 +357,13 @@ class EinxTransferClient(private val context: Context) {
     value: ByteArray,
     writeType: Int,
   ): Boolean {
+    // Android throws rather than truncating an oversize attribute write, and the throw
+    // surfaces as an unrecognisable error several layers up. Refuse it here instead.
+    if (value.size > MAX_ATTRIBUTE_BYTES) {
+      Log.e(TAG, "Refusing a ${value.size} byte write; the GATT limit is $MAX_ATTRIBUTE_BYTES")
+      return false
+    }
+
     return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
       gatt.writeCharacteristic(characteristic, value, writeType) == BluetoothStatusCodes.SUCCESS
     } else {
@@ -375,3 +388,13 @@ class EinxTransferClient(private val context: Context) {
     }
   }
 }
+
+/**
+ * Payload size for one DATA write, given the negotiated ATT MTU.
+ *
+ * Three bytes of the MTU are ATT overhead, and a GATT attribute value cannot exceed 512
+ * bytes however large the MTU is — an MTU of 517 does not mean a 514-byte write is legal.
+ */
+internal fun chunkSizeForMtu(mtu: Int): Int =
+  (mtu - EinxTransferClient.ATT_HEADER_BYTES)
+    .coerceIn(EinxTransferClient.DEFAULT_CHUNK_BYTES, EinxTransferClient.MAX_ATTRIBUTE_BYTES)

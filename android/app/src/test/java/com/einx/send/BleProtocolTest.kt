@@ -68,3 +68,25 @@ class BleProtocolTest {
     assertFalse(BleProtocol.isSupportedFilename("Dune"))
   }
 }
+
+class ChunkSizeTest {
+
+  @Test
+  fun `an MTU of 517 does not produce an illegal 514 byte write`() {
+    // The GATT attribute limit is 512 whatever the MTU says. Android throws on 514.
+    assertEquals(512, chunkSizeForMtu(517))
+  }
+
+  @Test
+  fun `smaller MTUs keep their full payload`() {
+    assertEquals(20, chunkSizeForMtu(23))
+    assertEquals(182, chunkSizeForMtu(185))
+    assertEquals(244, chunkSizeForMtu(247))
+  }
+
+  @Test
+  fun `a nonsense MTU never yields a write smaller than the BLE minimum`() {
+    assertEquals(20, chunkSizeForMtu(0))
+    assertEquals(20, chunkSizeForMtu(5))
+  }
+}
