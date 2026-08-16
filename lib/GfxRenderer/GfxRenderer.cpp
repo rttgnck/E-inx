@@ -228,6 +228,9 @@ void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const
     x3CleanupRequired_ = false;
   }
   const bool turnOffScreen = SystemSetting::getInstance().sunlightFadingFix != 0;
+#ifndef SIMULATOR
+  display.setX3PageWaveform(SystemSetting::getInstance().x3PageWaveform);
+#endif
   display.displayBuffer(mode, turnOffScreen);
 }
 
@@ -277,6 +280,57 @@ void GfxRenderer::displayWithReinforcement(const ReinforcementTarget target,
   display.displayBwReinforced(fallback, turnOffScreen);
 #endif
   x3ReinforcedRefreshCount_++;
+}
+
+void GfxRenderer::displayMaintenance(const bool reinforcementEligible) const {
+  const SystemSetting& settings = SystemSetting::getInstance();
+
+  // Non-X3 panels, and pages the reinforcement bank cannot handle, get the cleanup that has
+  // always been here. Only the X3 has the alternatives.
+  if (!deviceIsX3() || !reinforcementEligible) {
+    displayBuffer(HalDisplay::HALF_REFRESH);
+    return;
+  }
+
+  switch (settings.x3MaintenanceAction) {
+    case SystemSetting::X3_MAINTENANCE_NONE:
+      // Show the page the ordinary way and reset nothing. Ghosting is unbounded by choice.
+      if (reinforcementEnabled(ReinforcementTarget::ReaderBw)) {
+        displayWithReinforcement(ReinforcementTarget::ReaderBw);
+      } else {
+        displayBuffer();
+      }
+      return;
+
+    case SystemSetting::X3_MAINTENANCE_REINFORCE: {
+      // The first pass shows the new page; the rest settle it. Passes after the first run with
+      // DTM1 == DTM2, so only the gentle WW/BB cells fire and nothing can flash.
+      const uint8_t passes = static_cast<uint8_t>(settings.x3MaintenancePasses + 1);
+      for (uint8_t i = 0; i < passes; i++) {
+        displayWithReinforcement(ReinforcementTarget::ReaderBw);
+      }
+      return;
+    }
+
+    case SystemSetting::X3_MAINTENANCE_HALF_SCRUB: {
+      const bool turnOffScreen = settings.sunlightFadingFix != 0;
+      if (Serial) Serial.printf("[%lu] [GFX] X3 maintenance: half scrub\n", millis());
+#ifdef SIMULATOR
+      display.displayBuffer(HalDisplay::HALF_REFRESH, turnOffScreen);
+#else
+      display.displayHalfScrub(HalDisplay::HALF_REFRESH, turnOffScreen);
+#endif
+      // A scrub is a real cleanup, so the periodic-clean safety net starts counting again.
+      x3ReinforcedRefreshCount_ = 0;
+      x3CleanupRequired_ = false;
+      return;
+    }
+
+    case SystemSetting::X3_MAINTENANCE_FULL_CLEAN:
+    default:
+      displayBuffer(HalDisplay::HALF_REFRESH);
+      return;
+  }
 }
 
 void GfxRenderer::allowReinforcementAfterTextAntiAliasing() const {

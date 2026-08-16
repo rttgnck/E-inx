@@ -322,6 +322,31 @@ class SystemSetting {
     X3_REINFORCE_CLEAN_INTERVAL_COUNT
   };
 
+  /** Which waveform an ordinary reader page turn uses on the X3. */
+  enum X3_PAGE_WAVEFORM {
+    X3_PAGE_WAVEFORM_REINFORCE = 0,  ///< OEM AA-pre-BW(mid) reinforcement every page (E-inx default)
+    X3_PAGE_WAVEFORM_FAST_INX = 1,   ///< The differential bank E-inx has always shipped
+    X3_PAGE_WAVEFORM_FAST_YACP = 2,  ///< YACP's per-page differential bank
+    X3_PAGE_WAVEFORM_COUNT
+  };
+
+  /**
+   * What periodic maintenance does while reading.
+   *
+   * Only FULL_CLEAN flashes. The point of the others is to bound ghosting without
+   * interrupting reading, which is what a flash does.
+   */
+  enum X3_MAINTENANCE_ACTION {
+    X3_MAINTENANCE_FULL_CLEAN = 0,  ///< Full resync — flashes (current behaviour)
+    X3_MAINTENANCE_HALF_SCRUB = 1,  ///< Scrub bank: every pixel driven to target, no white fill
+    X3_MAINTENANCE_REINFORCE = 2,   ///< Extra reinforcement passes — cannot flash by construction
+    X3_MAINTENANCE_NONE = 3,        ///< Nothing; ghosting is unbounded
+    X3_MAINTENANCE_ACTION_COUNT
+  };
+
+  /** Index into {1, 2, 3} passes. */
+  static constexpr uint8_t X3_MAINTENANCE_PASSES_COUNT = 3;
+
   /**
    * @brief Global short power button behavior (for library, home, etc.)
    */
@@ -602,6 +627,14 @@ class SystemSetting {
   /** Safety default: when any reinforcement target is enabled, periodically force an X3 full resync. */
   uint8_t x3ReinforcePeriodicClean = 1;
   uint8_t x3ReinforceCleanInterval = X3_REINFORCE_CLEAN_30;
+  /** Experimental X3 waveform choices. Defaults reproduce the behaviour shipped in 1.6.17. */
+  uint8_t x3PageWaveform = X3_PAGE_WAVEFORM_REINFORCE;
+  uint8_t x3MaintenanceAction = X3_MAINTENANCE_FULL_CLEAN;
+  /**
+   * Extra reinforcement passes per maintenance tick when the action is REINFORCE, as a 0-based
+   * index: 0 means a single pass, which is what YACP does.
+   */
+  uint8_t x3MaintenancePasses = 0;
   /** X3 only: 0=off, 1=normal direction, 2=inverted direction. */
   uint8_t shakePageTurn = 0;
   /** X3 gyro threshold: 0=low, 1=normal, 2=high sensitivity. */

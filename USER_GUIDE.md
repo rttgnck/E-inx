@@ -136,6 +136,35 @@ themselves up, so a failed send never leaves a half-written book behind — just
 
 The wire protocol is documented in [docs/BLE_FILE_TRANSFER.md](./docs/BLE_FILE_TRANSFER.md).
 
+### 3.4.3 Reducing ghosting and flashing (X3)
+
+Under **Settings → Experimental X3 Waveform**, three settings control how the reader repaints
+while you read. They only apply to the X3, and the defaults behave exactly as before.
+
+**Maintenance action** — what happens every *Refresh Frequency* pages:
+
+| Action | Flashes? | Notes |
+| --- | --- | --- |
+| Full clean | Yes | The default. Fully resets ghosting. |
+| Half scrub | Possibly | Drives every pixel to its target without first flashing to white. |
+| Reinforce | No | Extra passes of the same waveform a page turn already uses. |
+| None | No | Nothing is cleaned; ghosting keeps building. |
+
+If flashing while reading is what bothers you most, try **Reinforce**, and lower *Refresh Frequency*
+until ghosting stays acceptable. If ghosting is what bothers you most, keep **Full clean**.
+
+**Page turn waveform** — which waveform an ordinary page turn uses: *Reinforce* (what E-inx ships),
+*Fast (E-inx)*, or *Fast (YACP)*. Setting this to **Fast (YACP)** together with maintenance action
+**Reinforce** reproduces the YACP firmware's no-flash reader exactly, which is useful for comparing
+the two on the same book.
+
+**Maintenance passes** — how many reinforcement passes each maintenance tick runs. Only used when the
+action is *Reinforce*. One pass matches YACP.
+
+Note that **Periodic full clean** is a separate safety net: it forces a real clean after a number of
+updates no matter which action is selected. Turn it off for no flashing at all, accepting that only
+the maintenance action then bounds ghosting.
+
 ### 3.5 Settings
 
 The Settings screen allows you to configure the device's behavior. There are a few settings you can adjust:

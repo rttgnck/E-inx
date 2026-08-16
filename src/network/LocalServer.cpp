@@ -2761,6 +2761,9 @@ void LocalServer::handleSettingsGet() const {
   doc["x3ReinforceThumbnails"] = SETTINGS.x3ReinforceThumbnails;
   doc["x3ReinforcePeriodicClean"] = SETTINGS.x3ReinforcePeriodicClean;
   doc["x3ReinforceCleanInterval"] = SETTINGS.x3ReinforceCleanInterval;
+  doc["x3PageWaveform"] = SETTINGS.x3PageWaveform;
+  doc["x3MaintenanceAction"] = SETTINGS.x3MaintenanceAction;
+  doc["x3MaintenancePasses"] = SETTINGS.x3MaintenancePasses;
   doc["opdsServerUrl"] = SETTINGS.opdsServerUrl;
   doc["opdsUsername"] = SETTINGS.opdsUsername;
   doc["opdsPasswordSet"] = strlen(SETTINGS.opdsPassword) > 0;
@@ -3101,6 +3104,25 @@ void LocalServer::handleSettingsUpdate() const {
         interval = SystemSetting::X3_REINFORCE_CLEAN_30;
       }
       SETTINGS.x3ReinforceCleanInterval = static_cast<uint8_t>(interval);
+      changed = true;
+    } else if (strcmp(key, "x3PageWaveform") == 0) {
+      int waveform = static_cast<int>(value);
+      if (waveform < 0 || waveform >= SystemSetting::X3_PAGE_WAVEFORM_COUNT) {
+        waveform = SystemSetting::X3_PAGE_WAVEFORM_REINFORCE;
+      }
+      SETTINGS.x3PageWaveform = static_cast<uint8_t>(waveform);
+      changed = true;
+    } else if (strcmp(key, "x3MaintenanceAction") == 0) {
+      int action = static_cast<int>(value);
+      if (action < 0 || action >= SystemSetting::X3_MAINTENANCE_ACTION_COUNT) {
+        action = SystemSetting::X3_MAINTENANCE_FULL_CLEAN;
+      }
+      SETTINGS.x3MaintenanceAction = static_cast<uint8_t>(action);
+      changed = true;
+    } else if (strcmp(key, "x3MaintenancePasses") == 0) {
+      int passes = static_cast<int>(value);
+      if (passes < 0 || passes >= SystemSetting::X3_MAINTENANCE_PASSES_COUNT) passes = 0;
+      SETTINGS.x3MaintenancePasses = static_cast<uint8_t>(passes);
       changed = true;
     } else if (strcmp(key, "opdsServerUrl") == 0) {
       copySettingString(SETTINGS.opdsServerUrl, sizeof(SETTINGS.opdsServerUrl), kv.value().as<const char*>());
