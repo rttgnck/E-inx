@@ -47,7 +47,11 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
+          # firmware.bin only. Every extra asset adds roughly 1.5 KB of uploader metadata to the
+          # release JSON, and the on-device updater has to buffer that whole document in one
+          # contiguous allocation with WiFi up — six assets took it from ~10 KB to 16.7 KB and the
+          # update check started failing. bootloader.bin and partitions.bin are only needed to
+          # flash a blank device with esptool; they stay in the build artifact above, which the
+          # updater never reads.
           files: |
             .pio/build/gh_release/firmware.bin
-            .pio/build/gh_release/bootloader.bin
-            .pio/build/gh_release/partitions.bin

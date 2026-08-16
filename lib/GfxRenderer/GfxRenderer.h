@@ -104,6 +104,19 @@ class GfxRenderer {
    * FULL_CLEAN action flashes.
    */
   void displayMaintenance(bool reinforcementEligible = true) const;
+
+ private:
+  /**
+   * Runs one reinforcement pass, or a strong cleanup when the controller state cannot take one.
+   *
+   * Deliberately not gated on the Reinforce B/W reader setting: that setting chooses what an
+   * ordinary page turn does, and maintenance needs to be able to reinforce whether or not page
+   * turns do. Tying the two together is what made "maintenance = Reinforce" silently degrade to
+   * a plain fast refresh, so nothing cleaned at all.
+   */
+  void runReinforcementPass() const;
+
+ public:
   void invertScreen() const;
   void clearScreen(uint8_t color = 0xFF) const;
   void begin();
