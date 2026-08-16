@@ -10,6 +10,22 @@ E-inx is a community firmware for Xteink e-paper readers, forked from [Inx](http
 
 ![](./docs/images/cover.jpg)
 
+## What's New in E-inx 1.6.17-3
+
+- **Maintenance can reinforce even when page turns do not.** `Maintenance action: Reinforce` was
+  routed through the *Reinforce B/W reader* setting, so switching that off — which is exactly what
+  you do to compare against YACP's per-page waveform — quietly turned maintenance into an ordinary
+  fast refresh and nothing cleaned at all. The two are now independent, which makes the combination
+  1.6.17-2's notes described actually work.
+- **Opening a book always does a full clean**, regardless of the maintenance action. The countdown
+  starts at zero, which only ever happens on the first paint, so this cannot fire again mid-chapter.
+- **Releases carry `firmware.bin` and the Android APK, and nothing else.** Every extra asset adds
+  about 1.5 KB of uploader metadata to the release JSON, and the on-device updater buffers that
+  whole document in one contiguous allocation with WiFi up. Six assets took it from ~10 KB to
+  16.7 KB, and both the on-device and web update checks started reporting "could not reach GitHub".
+  `bootloader.bin` and `partitions.bin` are only needed to flash a blank device with esptool and
+  remain available as CI build artifacts.
+
 ## What's New in E-inx 1.6.17-2
 
 - **The button that opens a screen can no longer act on it twice.** `InputManager` accepted a single ADC

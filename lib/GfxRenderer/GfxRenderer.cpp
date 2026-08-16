@@ -255,6 +255,10 @@ void GfxRenderer::displayWithReinforcement(const ReinforcementTarget target,
     return;
   }
 
+  runReinforcementPass();
+}
+
+void GfxRenderer::runReinforcementPass() const {
   // A one-shot full/half request always wins. The same strong cleanup is
   // mandatory before reinforcement after a grayscale plane refresh.
   if (nextRefreshOverridePending_ || x3CleanupRequired_) {
@@ -271,13 +275,13 @@ void GfxRenderer::displayWithReinforcement(const ReinforcementTarget target,
 
   const bool turnOffScreen = settings.sunlightFadingFix != 0;
   if (Serial) {
-    Serial.printf("[%lu] [GFX] X3 B/W reinforcement target=%u count=%u\n", millis(), static_cast<unsigned>(target),
+    Serial.printf("[%lu] [GFX] X3 B/W reinforcement count=%u\n", millis(),
                   static_cast<unsigned>(x3ReinforcedRefreshCount_ + 1));
   }
 #ifdef SIMULATOR
-  display.displayBuffer(fallback, turnOffScreen);
+  display.displayBuffer(HalDisplay::FAST_REFRESH, turnOffScreen);
 #else
-  display.displayBwReinforced(fallback, turnOffScreen);
+  display.displayBwReinforced(HalDisplay::FAST_REFRESH, turnOffScreen);
 #endif
   x3ReinforcedRefreshCount_++;
 }
@@ -305,9 +309,15 @@ void GfxRenderer::displayMaintenance(const bool reinforcementEligible) const {
     case SystemSetting::X3_MAINTENANCE_REINFORCE: {
       // The first pass shows the new page; the rest settle it. Passes after the first run with
       // DTM1 == DTM2, so only the gentle WW/BB cells fire and nothing can flash.
+      //
+      // This goes straight to the pass rather than through displayWithReinforcement(), whose
+      // first act is to check the Reinforce B/W reader setting. That setting is about page
+      // turns; routing maintenance through it meant that turning page-turn reinforcement off —
+      // which is exactly what you do to compare against YACP's per-page waveform — quietly
+      // turned maintenance into an ordinary fast refresh, so nothing ever cleaned.
       const uint8_t passes = static_cast<uint8_t>(settings.x3MaintenancePasses + 1);
       for (uint8_t i = 0; i < passes; i++) {
-        displayWithReinforcement(ReinforcementTarget::ReaderBw);
+        runReinforcementPass();
       }
       return;
     }

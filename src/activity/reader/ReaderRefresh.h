@@ -48,6 +48,17 @@ inline void displayWithCycle(const GfxRenderer& renderer, int& pagesUntilFullRef
     return;
   }
 
+  // Opening a book is the one moment a flash is worth it: the panel is showing whatever the
+  // last screen left behind, and starting a chapter from a clean slate costs one refresh the
+  // reader is already expecting. The countdown only ever reads zero here on that first paint —
+  // every later reset puts back the cadence, which is at least one — so this cannot fire again
+  // mid-chapter, and it deliberately ignores the maintenance action.
+  if (pagesUntilFullRefresh <= 0) {
+    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+    pagesUntilFullRefresh = cadence;
+    return;
+  }
+
   // The countdown drives maintenance whether or not reinforcement is on. It previously did not:
   // the reinforcement branch returned before ever reaching here, so the cadence the reader had
   // configured was decremented, reset, and never acted on, and the only thing that ever cleaned

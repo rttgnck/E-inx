@@ -154,9 +154,17 @@ If flashing while reading is what bothers you most, try **Reinforce**, and lower
 until ghosting stays acceptable. If ghosting is what bothers you most, keep **Full clean**.
 
 **Page turn waveform** — which waveform an ordinary page turn uses: *Reinforce* (what E-inx ships),
-*Fast (E-inx)*, or *Fast (YACP)*. Setting this to **Fast (YACP)** together with maintenance action
-**Reinforce** reproduces the YACP firmware's no-flash reader exactly, which is useful for comparing
-the two on the same book.
+*Fast (E-inx)*, or *Fast (YACP)*.
+
+This only takes effect when **Reinforce B/W reader** is switched **off**. With that on, page turns
+use the reinforcement waveform and this setting is ignored.
+
+To reproduce the YACP firmware's no-flash reader — useful for comparing the two on the same book —
+switch **Reinforce B/W reader** off, set **Page turn waveform** to *Fast (YACP)*, and set
+**Maintenance action** to *Reinforce*.
+
+**Opening a book always does a full clean**, whatever the maintenance action is set to. The panel
+is showing whatever the last screen left behind, so a chapter starts from a clean slate.
 
 **Maintenance passes** — how many reinforcement passes each maintenance tick runs. Only used when the
 action is *Reinforce*. One pass matches YACP.
