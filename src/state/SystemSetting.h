@@ -536,6 +536,14 @@ class SystemSetting {
    * form should not quietly turn a feature off.
    */
   char otaReleaseUrl[192] = "https://api.github.com/repos/rttgnck/E-inx/releases/latest";
+
+  /**
+   * What this reader calls itself: the mDNS host (so `<name>.local` reaches the web manager)
+   * and the name it advertises over Bluetooth. One setting for both, because a reader having
+   * two different names depending on how you reach it is a thing to explain rather than a
+   * feature. Blank falls back to the default rather than leaving the device nameless.
+   */
+  char deviceName[33] = "xteink";
   uint8_t newsAutoDownload = 0;
   uint8_t newsDownloadHour = 6;
 
@@ -731,6 +739,11 @@ class SystemSetting {
    */
   int getRefreshFrequency() const;
   int getX3ReinforceCleanInterval() const;
+
+  /** The name as typed, for Bluetooth and for display. Never empty. */
+  const char* getDeviceName() const;
+  /** Lowercased and stripped to what mDNS accepts, for `<host>.local`. Never empty. */
+  std::string getDeviceHostname() const;
 
   int getTimeZoneOffsetMinutes() const;
   void formatTimeZone(char* out, size_t outSize) const;

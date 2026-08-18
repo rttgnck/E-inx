@@ -14,6 +14,7 @@
 
 #include "WifiSelectionActivity.h"
 #include "state/NetworkCredential.h"
+#include "state/SystemSetting.h"
 #include "system/Fonts.h"
 #include "system/MappedInputManager.h"
 #include "system/MenuNav.h"
@@ -21,7 +22,6 @@
 #include "system/UiTheme.h"
 
 namespace {
-constexpr const char* AP_HOSTNAME = "xteink";
 
 constexpr int CONTENT_MARGIN = 25;
 constexpr int LINE_SPACING = 28;
@@ -142,6 +142,9 @@ void LocalNetworkActivity::startSavedWifiConnection() {
   updateRequired = true;
 
   WiFi.mode(WIFI_STA);
+  // Before begin(), or DHCP never sees it: this is the name the router lists the reader under,
+  // and what WiFi.getHostname() reports back to the web dashboard.
+  WiFi.setHostname(SETTINGS.getDeviceHostname().c_str());
   WiFi.disconnect();
   delay(100);
   if (credential->password.empty()) {
@@ -156,6 +159,9 @@ void LocalNetworkActivity::startWifiSelection() {
   state = LocalNetworkState::WIFI_SELECTION;
   updateRequired = true;
   WiFi.mode(WIFI_STA);
+  // Before begin(), or DHCP never sees it: this is the name the router lists the reader under,
+  // and what WiFi.getHostname() reports back to the web dashboard.
+  WiFi.setHostname(SETTINGS.getDeviceHostname().c_str());
   enterNewActivity(
       new WifiSelectionActivity(renderer, mappedInput, [this](bool connected) { onWifiSelectionComplete(connected); }));
 }
@@ -213,8 +219,9 @@ void LocalNetworkActivity::finishConnectedNetwork() {
   state = LocalNetworkState::SERVER_STARTING;
   updateRequired = true;
 
-  if (MDNS.begin(AP_HOSTNAME)) {
-    Serial.printf("[%lu] [LOCALNET] mDNS started: http://%s.local/\n", millis(), AP_HOSTNAME);
+  if (MDNS.begin(SETTINGS.getDeviceHostname().c_str())) {
+    Serial.printf("[%lu] [LOCALNET] mDNS started: http://%s.local/\n", millis(),
+                  SETTINGS.getDeviceHostname().c_str());
   }
 
   startWebServer();
@@ -739,7 +746,9 @@ void LocalNetworkActivity::renderServerRunning() const {
 
   const char* path = updateLanding ? "/update" : (libraryLanding ? "/library" : "/");
   std::string ipUrl = "http://" + connectedIP + path;
-  std::string hostnameUrl = std::string("http://") + AP_HOSTNAME + ".local" + path;
+  // Built from the setting, not a constant: showing xteink.local while mDNS answers to
+  // something else leaves no way to discover the address the reader actually has.
+  std::string hostnameUrl = std::string("http://") + SETTINGS.getDeviceHostname() + ".local" + path;
 
   const int bodyTop = contentStart + 56;
   const int labelFont = ATKINSON_HYPERLEGIBLE_8_FONT_ID;

@@ -12,6 +12,7 @@
 #include <esp_task_wdt.h>
 #include <qrcode.h>
 
+#include "state/SystemSetting.h"
 #include "system/Fonts.h"
 #include "system/MappedInputManager.h"
 #include "system/ScreenComponents.h"
@@ -19,7 +20,6 @@
 
 namespace {
 constexpr const char* AP_SSID = "Xteink-X4";
-constexpr const char* AP_HOSTNAME = "xteink";
 constexpr uint8_t AP_CHANNEL = 1;
 constexpr uint8_t AP_MAX_CONNECTIONS = 4;
 
@@ -128,6 +128,7 @@ void HotspotActivity::startAccessPoint() {
   WiFi.mode(WIFI_AP);
   delay(100);
 
+  WiFi.softAPsetHostname(SETTINGS.getDeviceHostname().c_str());
   bool apStarted = WiFi.softAP(AP_SSID, nullptr, AP_CHANNEL, false, AP_MAX_CONNECTIONS);
 
   if (!apStarted) {
@@ -149,8 +150,9 @@ void HotspotActivity::startAccessPoint() {
   Serial.printf("[%lu] [HOTSPOT] SSID: %s\n", millis(), AP_SSID);
   Serial.printf("[%lu] [HOTSPOT] IP: %s\n", millis(), connectedIP.c_str());
 
-  if (MDNS.begin(AP_HOSTNAME)) {
-    Serial.printf("[%lu] [HOTSPOT] mDNS started: http://%s.local/\n", millis(), AP_HOSTNAME);
+  if (MDNS.begin(SETTINGS.getDeviceHostname().c_str())) {
+    Serial.printf("[%lu] [HOTSPOT] mDNS started: http://%s.local/\n", millis(),
+                  SETTINGS.getDeviceHostname().c_str());
   }
 
   dnsServer = new DNSServer();
@@ -319,7 +321,9 @@ void HotspotActivity::renderServerRunning() const {
   const int contentStart = renderActivityHeader(renderer, startY, libraryLanding ? "Library Hotspot" : "Hotspot");
 
   const char* path = libraryLanding ? "/library" : "/";
-  std::string hostnameUrl = std::string("http://") + AP_HOSTNAME + ".local" + path;
+  // Built from the setting, not a constant: showing xteink.local while mDNS answers to
+  // something else leaves no way to discover the address the reader actually has.
+  std::string hostnameUrl = std::string("http://") + SETTINGS.getDeviceHostname() + ".local" + path;
   std::string ipUrl = "http://" + connectedIP + path;
 
   const int bodyTop = contentStart + 12;

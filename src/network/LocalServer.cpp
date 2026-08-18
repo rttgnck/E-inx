@@ -1026,9 +1026,9 @@ void LocalServer::handleClient() {
         if (strcmp(buffer, "hello") == 0) {
           String hostname = WiFi.getHostname();
           if (hostname.isEmpty()) {
-            hostname = "crosspoint";
+            hostname = SETTINGS.getDeviceHostname().c_str();
           }
-          String message = "crosspoint (on " + hostname + ");" + String(wsPort);
+          String message = String(SETTINGS.getDeviceName()) + " (on " + hostname + ");" + String(wsPort);
           udp.beginPacket(udp.remoteIP(), udp.remotePort());
           udp.write(reinterpret_cast<const uint8_t*>(message.c_str()), message.length());
           udp.endPacket();
@@ -2764,6 +2764,7 @@ void LocalServer::handleSettingsGet() const {
   doc["x3PageWaveform"] = SETTINGS.x3PageWaveform;
   doc["x3MaintenanceAction"] = SETTINGS.x3MaintenanceAction;
   doc["x3MaintenancePasses"] = SETTINGS.x3MaintenancePasses;
+  doc["deviceName"] = SETTINGS.getDeviceName();
   doc["opdsServerUrl"] = SETTINGS.opdsServerUrl;
   doc["opdsUsername"] = SETTINGS.opdsUsername;
   doc["opdsPasswordSet"] = strlen(SETTINGS.opdsPassword) > 0;
@@ -3123,6 +3124,9 @@ void LocalServer::handleSettingsUpdate() const {
       int passes = static_cast<int>(value);
       if (passes < 0 || passes >= SystemSetting::X3_MAINTENANCE_PASSES_COUNT) passes = 0;
       SETTINGS.x3MaintenancePasses = static_cast<uint8_t>(passes);
+      changed = true;
+    } else if (strcmp(key, "deviceName") == 0) {
+      copySettingString(SETTINGS.deviceName, sizeof(SETTINGS.deviceName), kv.value().as<const char*>());
       changed = true;
     } else if (strcmp(key, "opdsServerUrl") == 0) {
       copySettingString(SETTINGS.opdsServerUrl, sizeof(SETTINGS.opdsServerUrl), kv.value().as<const char*>());
