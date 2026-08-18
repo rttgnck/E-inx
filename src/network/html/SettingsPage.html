@@ -340,6 +340,16 @@
     <p class="hint">Actions such as Index library, reset, updates, and About are available on the device.</p>
 
     <div class="settings-section">
+      <div class="section-header"><h3>Device Name</h3></div>
+      <div class="setting-item">
+        <div><div class="setting-label">Name</div><div class="setting-description">Used for this reader's web address (&lt;name&gt;.local) and the name it shows under in Bluetooth. Letters, numbers, spaces and hyphens; the web address lowercases it and replaces anything else with a hyphen.</div></div>
+      </div>
+      <div class="setting-item">
+        <div class="setting-control" style="width:100%"><input id="deviceName" placeholder="xteink" autocomplete="off" maxlength="32" style="width:100%"></div>
+      </div>
+    </div>
+
+    <div class="settings-section">
       <div class="section-header"><h3>WiFi Networks</h3><button type="button" class="section-add-btn" onclick="showAddWifiForm()">+ Add</button></div>
       <div class="wifi-list" id="wifiList"><div class="wifi-empty">Loading…</div></div>
       <div class="wifi-form" id="addWifiForm">
@@ -1350,6 +1360,17 @@ async function copySleepWakeTrace() {
   }
 }
 
+function populateDeviceNameSetting() {
+  var name = document.getElementById("deviceName");
+  if (name && settingsData.deviceName !== undefined) {
+    name.value = settingsData.deviceName || "";
+    name.oninput = function () {
+      pendingChanges.deviceName = name.value;
+      markChanged(name);
+    };
+  }
+}
+
 function populateFirmwareSettings() {
   var ota = document.getElementById("otaReleaseUrl");
   if (ota && settingsData.otaReleaseUrl !== undefined) {
@@ -1475,6 +1496,7 @@ function populateSettings() {
   populateSleepCustomBmp();
   populateNewsSettings();
   populateFirmwareSettings();
+  populateDeviceNameSetting();
 }
 
 function markChanged(el) {

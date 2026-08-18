@@ -157,7 +157,9 @@ std::vector<SettingInfo> buildSystemPageSettings(const bool x3) {
       SettingInfo::Toggle("Persistent sleep logs", &SystemSetting::persistentSleepLogs, GroupType::DEVICE_ADVANCED));
 
   if (x3) {
-    settings.push_back(SettingInfo::Separator("Experimental X3 waveform", GroupType::EXPERIMENTAL));
+    settings.push_back(SettingInfo::Info("Device name", SETTINGS.getDeviceName(), GroupType::DEVICE_ADVANCED));
+
+  settings.push_back(SettingInfo::Separator("Experimental X3 waveform", GroupType::EXPERIMENTAL));
     settings.push_back(
         SettingInfo::Toggle("Reinforce B/W reader", &SystemSetting::x3ReinforceReader, GroupType::EXPERIMENTAL));
     settings.push_back(

@@ -15,6 +15,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <cctype>
 #include <string>
 
 #ifndef INX_SIMULATOR_WEB_ONLY
@@ -41,7 +42,7 @@ void readAndValidate(FsFile& file, uint8_t& member, const uint8_t maxValue) {
 
 namespace {
 constexpr uint8_t SETTINGS_FILE_VERSION = 43;
-constexpr uint8_t SETTINGS_COUNT = 101;
+constexpr uint8_t SETTINGS_COUNT = 102;
 /** Last field index in v9 (1-based count of persisted pods through displayImageDither). */
 constexpr uint8_t SETTINGS_COUNT_V9 = 40;
 constexpr uint8_t LEGACY_SLEEP_IMAGE_ADVANCE_POWER = 7;
@@ -267,6 +268,7 @@ uint32_t settingsHash(const SystemSetting& settings, const uint8_t fontFamilyToS
   hashPod(hash, settings.x3PageWaveform);
   hashPod(hash, settings.x3MaintenanceAction);
   hashPod(hash, settings.x3MaintenancePasses);
+  hashString(hash, settings.deviceName);
   hashPod(hash, settings.tab2Content);
   hashPod(hash, settings.appDrawerNews);
   hashPod(hash, settings.appDrawerGames);
@@ -474,6 +476,7 @@ bool SystemSetting::saveToFile() const {
   serialization::writePod(outputFile, x3PageWaveform);
   serialization::writePod(outputFile, x3MaintenanceAction);
   serialization::writePod(outputFile, x3MaintenancePasses);
+  serialization::writeString(outputFile, std::string(deviceName));
 
   outputFile.close();
   saveUiThemeSetting(uiTheme);
@@ -998,6 +1001,15 @@ bool SystemSetting::loadFromFile() {
       readAndValidate(inputFile, x3MaintenancePasses, X3_MAINTENANCE_PASSES_COUNT);
       ++settingsRead;
     }
+    if (settingsRead < fileSettingsCount) {
+      std::string name;
+      serialization::readString(inputFile, name);
+      if (!name.empty()) {
+        strncpy(deviceName, name.c_str(), sizeof(deviceName) - 1);
+        deviceName[sizeof(deviceName) - 1] = '\0';
+      }
+      ++settingsRead;
+    }
 
   } while (false);
 
@@ -1462,4 +1474,33 @@ void SystemSetting::runHalfRefreshOnLoadIfEnabled(const GfxRenderer& renderer, c
     renderer.displayBuffer(HalDisplay::HALF_REFRESH);
   }
 #endif
+}
+
+const char* SystemSetting::getDeviceName() const {
+  const char* name = deviceName;
+  while (*name == ' ') {
+    ++name;
+  }
+  return *name == '\0' ? "xteink" : name;
+}
+
+std::string SystemSetting::getDeviceHostname() const {
+  // mDNS labels are letters, digits and hyphens; anything else becomes a hyphen and runs are
+  // collapsed, so "Nick's X3" resolves as nick-s-x3.local rather than not resolving at all.
+  std::string host;
+  bool lastWasHyphen = true;  // also suppresses a leading hyphen
+  for (const char* p = getDeviceName(); *p != '\0' && host.size() < 32; ++p) {
+    const auto c = static_cast<unsigned char>(*p);
+    if (std::isalnum(c)) {
+      host.push_back(static_cast<char>(std::tolower(c)));
+      lastWasHyphen = false;
+    } else if (!lastWasHyphen) {
+      host.push_back('-');
+      lastWasHyphen = true;
+    }
+  }
+  while (!host.empty() && host.back() == '-') {
+    host.pop_back();
+  }
+  return host.empty() ? "xteink" : host;
 }

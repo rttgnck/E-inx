@@ -16,17 +16,13 @@
 #include <lwip/sockets.h>
 
 #include "WifiSelectionActivity.h"
+#include "state/SystemSetting.h"
 #include "system/Fonts.h"
 #include "system/MappedInputManager.h"
 #include "system/ScreenComponents.h"
 #include "system/UiTheme.h"
 
 namespace {
-
-/**
- * @brief mDNS hostname for device discovery on local network
- */
-constexpr const char* HOSTNAME = "crosspoint";
 
 /**
  * @brief HTTP port for Calibre wireless connection
@@ -224,9 +220,9 @@ void CalibreConnectActivity::startWebServer() {
   state = CalibreConnectState::SERVER_STARTING;
   updateRequired = true;
 
-  if (MDNS.begin(HOSTNAME)) {
+  if (MDNS.begin(SETTINGS.getDeviceHostname().c_str())) {
     MDNS.addService("http", "tcp", HTTP_PORT);
-    Serial.printf("[CAL] mDNS started: http://%s.local:%d/\n", HOSTNAME, HTTP_PORT);
+    Serial.printf("[CAL] mDNS started: http://%s.local:%d/\n", SETTINGS.getDeviceHostname().c_str(), HTTP_PORT);
   }
 
   serverCtx = new WebServerContext();

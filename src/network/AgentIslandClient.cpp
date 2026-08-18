@@ -11,6 +11,7 @@
 #include <cstring>
 
 #include "state/NetworkCredential.h"
+#include "state/SystemSetting.h"
 
 namespace {
 /**
@@ -433,7 +434,7 @@ AgentIslandClient::Discovery AgentIslandClient::resolve(const AgentIslandPairing
   std::string byName = pairing.host;
   const size_t dotLocal = byName.size() >= 6 ? byName.rfind(".local") : std::string::npos;
   if (dotLocal != std::string::npos && dotLocal == byName.size() - 6) {
-    MDNS.begin("einx");
+    MDNS.begin(SETTINGS.getDeviceHostname().c_str());
     const IPAddress found = MDNS.queryHost(byName.substr(0, dotLocal).c_str(), 3000);
     if (static_cast<uint32_t>(found) != 0) {
       byName = found.toString().c_str();

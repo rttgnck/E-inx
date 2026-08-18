@@ -199,9 +199,13 @@ class EinxTransferClient(private val context: Context) {
       if (!writeCharacteristic(
           gatt,
           control,
-          BleProtocol.startCommand(book.name, book.size, requireNotNull(book.crc32) {
-            "The book must be checksummed before it is sent"
-          }),
+          BleProtocol.startCommand(
+            name = book.name,
+            size = book.size,
+            crc32 = requireNotNull(book.crc32) { "The book must be checksummed before it is sent" },
+            title = book.title,
+            author = book.author,
+          ),
           BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT,
         )
       ) {

@@ -52,14 +52,29 @@ class MainActivity : ComponentActivity() {
           SendApp(
             state = state,
             onChooseBook = { pickBook.launch(PICKER_MIME_TYPES) },
-            onSend = { reader ->
+            onNameChanged = viewModel::onNameChanged,
+            onTitleChanged = viewModel::onTitleChanged,
+            onAuthorChanged = viewModel::onAuthorChanged,
+            onSendToDefault = {
               ensureBluetoothPermissions()
-              viewModel.send(reader)
+              viewModel.sendToDefault()
+            },
+            onChooseReader = {
+              ensureBluetoothPermissions()
+              viewModel.chooseReader()
+            },
+            onSelectReader = { reader ->
+              ensureBluetoothPermissions()
+              viewModel.selectAndSend(reader)
             },
             onRescan = viewModel::startScan,
             onCancel = viewModel::cancel,
             onDone = viewModel::reset,
-            onChooseAnotherReader = viewModel::chooseAnotherReader,
+            onBackToPrepare = viewModel::backToPrepare,
+            onOpenSettings = viewModel::openSettings,
+            onCloseSettings = viewModel::closeSettings,
+            onForgetReader = viewModel::forgetDefaultReader,
+            onAlwaysAskChanged = viewModel::setAlwaysAsk,
           )
         }
       }

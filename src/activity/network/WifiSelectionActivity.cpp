@@ -12,6 +12,7 @@
 
 #include "activity/util/KeyboardEntryActivity.h"
 #include "state/NetworkCredential.h"
+#include "state/SystemSetting.h"
 #include "system/Fonts.h"
 #include "system/MappedInputManager.h"
 #include "system/UiTheme.h"
@@ -112,6 +113,9 @@ void WifiSelectionActivity::startWifiScan() {
   updateRequired = true;
 
   WiFi.mode(WIFI_STA);
+  // Before begin(), or DHCP never sees it: this is the name the router lists the reader under,
+  // and what WiFi.getHostname() reports back to the web dashboard.
+  WiFi.setHostname(SETTINGS.getDeviceHostname().c_str());
   WiFi.disconnect();
   delay(100);
 
@@ -230,6 +234,9 @@ void WifiSelectionActivity::attemptConnection() {
   updateRequired = true;
 
   WiFi.mode(WIFI_STA);
+  // Before begin(), or DHCP never sees it: this is the name the router lists the reader under,
+  // and what WiFi.getHostname() reports back to the web dashboard.
+  WiFi.setHostname(SETTINGS.getDeviceHostname().c_str());
 
   if (selectedRequiresPassword && !enteredPassword.empty()) {
     WiFi.begin(selectedSSID.c_str(), enteredPassword.c_str());

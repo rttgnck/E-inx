@@ -40,6 +40,7 @@ BleTransferStatus BluetoothTransferServer::status() const {
 #else
 
 #include <ArduinoJson.h>
+#include <Epub.h>
 #include <HardwareSerial.h>
 #include <NimBLEDevice.h>
 #include <SDCardManager.h>
@@ -50,6 +51,9 @@ BleTransferStatus BluetoothTransferServer::status() const {
 #include <algorithm>
 #include <cctype>
 #include <cstring>
+#include <functional>
+
+#include "state/SystemSetting.h"
 
 namespace {
 
@@ -72,6 +76,9 @@ constexpr uint32_t MAX_TRANSFER_BYTES = 64u * 1024u * 1024u;
 
 /** Long enough for a real title, short enough to stay inside FAT's 255-byte name limit with ".part". */
 constexpr size_t MAX_NAME_LENGTH = 96;
+
+/** Cap on a title or author sent with START, so neither can be used to fill the card. */
+constexpr size_t MAX_METADATA_LENGTH = 200;
 
 /** Bytes held in RAM between the radio and the card. Never the whole book — see the header. */
 constexpr size_t RING_CAPACITY = 16 * 1024;
@@ -123,6 +130,9 @@ struct SharedState {
   std::string filename;
   std::string tempPath;
   std::string finalPath;
+  /** Optional overrides from START; empty means keep whatever the book says about itself. */
+  std::string metaTitle;
+  std::string metaAuthor;
 
   uint32_t total = 0;         /**< Size promised by START */
   uint32_t accepted = 0;      /**< Bytes taken off the radio */
@@ -335,6 +345,25 @@ bool isSafeFilename(const std::string& name) {
   return true;
 }
 
+/**
+ * Where the reader keeps its per-book title/author override.
+ *
+ * Only EPUB and XTC have one; a .txt keeps its cache elsewhere and shows its file name, so a
+ * title sent with one is accepted and then ignored rather than written somewhere it would not
+ * be read back.
+ */
+std::string metadataCachePath(const std::string& bookPath) {
+  const std::string lowered = toLower(bookPath);
+  const bool isXtc = lowered.size() > 4 && (lowered.compare(lowered.size() - 4, 4, ".xtc") == 0 ||
+                                            (lowered.size() > 5 && lowered.compare(lowered.size() - 5, 5, ".xtch") == 0));
+  const bool isEpub = lowered.size() > 5 && lowered.compare(lowered.size() - 5, 5, ".epub") == 0;
+  if (!isXtc && !isEpub) {
+    return {};
+  }
+  const char* root = isXtc ? "/.metadata/xtc" : "/.metadata/epub";
+  return std::string(root) + "/" + std::to_string(std::hash<std::string>{}(bookPath));
+}
+
 // ---------------------------------------------------------------------------
 // Transfer teardown helpers (main task only — they touch the card)
 // ---------------------------------------------------------------------------
@@ -365,6 +394,8 @@ void discardPartial(const char* code, const char* message) {
     gState.filename.clear();
     gState.tempPath.clear();
     gState.finalPath.clear();
+    gState.metaTitle.clear();
+    gState.metaAuthor.clear();
     gState.total = 0;
     gState.accepted = 0;
     gState.written = 0;
@@ -433,9 +464,18 @@ void handleStart(const JsonDocument& doc) {
     return;
   }
 
+  // Optional, and additive to protocol 1: a sender that omits them is a sender that wants the
+  // book's own metadata, which is also every sender written before these existed.
+  std::string title = doc["title"] | "";
+  std::string author = doc["author"] | "";
+  if (title.size() > MAX_METADATA_LENGTH) title.resize(MAX_METADATA_LENGTH);
+  if (author.size() > MAX_METADATA_LENGTH) author.resize(MAX_METADATA_LENGTH);
+
   {
     Lock lock(gStateMutex);
     gState.filename = name;
+    gState.metaTitle = title;
+    gState.metaAuthor = author;
     gState.finalPath = std::string(BOOKS_DIR) + "/" + name;
     gState.tempPath = std::string(BOOKS_DIR) + "/." + name + ".part";
     gState.total = size;
@@ -575,11 +615,9 @@ BluetoothTransferServer::~BluetoothTransferServer() { end(); }
 bool BluetoothTransferServer::isSupported() { return true; }
 
 std::string BluetoothTransferServer::advertisedName() {
-  const uint64_t mac = ESP.getEfuseMac();
-  char suffix[5];
-  snprintf(suffix, sizeof(suffix), "%02X%02X", static_cast<unsigned>((mac >> 8) & 0xFF),
-           static_cast<unsigned>(mac & 0xFF));
-  return std::string("E-inx X3 ") + suffix;
+  // The same name the web manager answers to. A reader that is xteink.local on the network and
+  // something else entirely in a Bluetooth list is a thing to explain rather than a feature.
+  return SETTINGS.getDeviceName();
 }
 
 bool BluetoothTransferServer::begin() {
@@ -898,6 +936,27 @@ void BluetoothTransferServer::poll() {
     return;
   }
 
+  // The book is in place, so its metadata override can be written against its final path. This
+  // is the same per-book override Edit Metadata writes, not a rewrite of the file — the EPUB
+  // that arrived is byte-for-byte the one that was sent, and its CRC still matches.
+  std::string metaTitle;
+  std::string metaAuthor;
+  {
+    Lock lock(gStateMutex);
+    metaTitle = gState.metaTitle;
+    metaAuthor = gState.metaAuthor;
+  }
+  if (!metaTitle.empty() || !metaAuthor.empty()) {
+    const std::string cachePath = metadataCachePath(finalPath);
+    if (cachePath.empty()) {
+      Serial.printf("[%lu] [BLE] %s has no metadata override, ignoring title/author\n", millis(), filename.c_str());
+    } else if (!Epub::writeMetadataOverride(cachePath, metaTitle, metaAuthor)) {
+      // The book itself is fine and already in the library; losing the override is not worth
+      // failing the transfer over, so this is reported and not raised as an error.
+      Serial.printf("[%lu] [BLE] Could not write metadata override for %s\n", millis(), filename.c_str());
+    }
+  }
+
   const unsigned long elapsed = millis() - startedAt;
   {
     Lock lock(gStateMutex);
@@ -909,6 +968,8 @@ void BluetoothTransferServer::poll() {
     gState.filename.clear();
     gState.tempPath.clear();
     gState.finalPath.clear();
+    gState.metaTitle.clear();
+    gState.metaAuthor.clear();
     gState.total = 0;
     gState.accepted = 0;
     gState.written = 0;

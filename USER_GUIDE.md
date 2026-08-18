@@ -103,7 +103,7 @@ the Bluetooth Transfer screen.
 
     Device Connections → Bluetooth Transfer
 
-The screen shows the reader's name (for example `E-inx X3 A31F`) and waits. Bluetooth is only
+The screen shows the reader's name (`xteink` unless you have changed it — see below) and waits. Bluetooth is only
 on while this screen is open; going Back shuts the radio down completely.
 
 **On the phone**
@@ -113,8 +113,13 @@ on while this screen is open; going Back shuts the radio down completely.
    browser or files app the first time.
 2. Open E-inx Send and tap **Choose Book**, or share a book to it from any app:
    Files → long-press the book → **Share** → **E-inx Send**.
-3. The app lists readers that are waiting. Tap **Send** next to yours.
-4. Progress shows on both screens. When it finishes, the book is in your library under
+3. Check the details before sending. You can rename the file, and for an EPUB you can correct
+   the title and author — both start from what the book already says about itself. The file is
+   sent unchanged; the title and author are saved on the reader alongside it, the same way the
+   reader's own Edit Metadata screen does it.
+4. Tap **Send**. The first time, pick your reader from the list; after that the app sends
+   straight to it. **Settings** lets you forget that reader or ask every time.
+5. Progress shows on both screens. When it finishes, the book is in your library under
    **Books**.
 
 Grant the Bluetooth permission when asked. The app never asks for location or for access to
@@ -135,6 +140,23 @@ themselves up, so a failed send never leaves a half-written book behind — just
   reader refusing a corrupted book; send it again.
 
 The wire protocol is documented in [docs/BLE_FILE_TRANSFER.md](./docs/BLE_FILE_TRANSFER.md).
+
+### 3.4.2.1 Naming your reader
+
+Under **Settings → Device name** on the reader (read-only there) or in the web manager under
+**Device Name**, you can change what this reader calls itself. One name covers both ways of
+reaching it:
+
+- Its web address becomes `<name>.local` — so a reader named `study` is reached at
+  `study.local`.
+- It is the name the reader shows under in E-inx Send's list.
+
+Letters, numbers, spaces and hyphens work. The web address lowercases the name and replaces
+anything else with a hyphen, so "Nick's X3" is reachable at `nick-s-x3.local`. Leaving it blank
+falls back to `xteink`.
+
+This is worth setting if you have more than one reader, since two readers left on the default
+look alike both on the network and in the Bluetooth list.
 
 ### 3.4.3 Reducing ghosting and flashing (X3)
 
