@@ -19,6 +19,9 @@ data class BookFile(
   val size: Long,
   /** Filled in by the streaming pass just before START; null until then. */
   val crc32: Long? = null,
+  /** Overrides the user typed. Blank means send nothing and keep the book's own. */
+  val title: String = "",
+  val author: String = "",
 ) {
   val isSupported: Boolean get() = BleProtocol.isSupportedFilename(name)
 

@@ -28,7 +28,13 @@ object BleProtocol {
    * START. The reader replies with [Status.Receiving] once the .part file is open, or with
    * [Status.Error] if it will not take the book — nothing is sent until one of those arrives.
    */
-  fun startCommand(name: String, size: Long, crc32: Long): ByteArray =
+  fun startCommand(
+    name: String,
+    size: Long,
+    crc32: Long,
+    title: String = "",
+    author: String = "",
+  ): ByteArray =
     JSONObject()
       .put("cmd", "start")
       .put("protocol", VERSION)
@@ -36,6 +42,12 @@ object BleProtocol {
       .put("size", size)
       // Hex text, so neither side has to agree on how an unsigned 32-bit number is spelled.
       .put("crc32", String.format("%08x", crc32 and 0xFFFFFFFFL))
+      .apply {
+        // Additive to protocol 1, and omitted when blank: a reader that predates these ignores
+        // unknown fields, and a blank one means "keep whatever the book says about itself".
+        if (title.isNotBlank()) put("title", title.trim())
+        if (author.isNotBlank()) put("author", author.trim())
+      }
       .toString()
       .toByteArray(Charsets.UTF_8)
 

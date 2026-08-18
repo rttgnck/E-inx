@@ -12,10 +12,10 @@ android {
     applicationId = "com.einx.send"
     minSdk = 26
     targetSdk = 35
-    versionCode = 1
+    versionCode = 2
     // Tracks the firmware release this app ships alongside; the two halves of the
     // transfer protocol are versioned together on purpose.
-    versionName = "1.6.17"
+    versionName = "1.6.17-4"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }

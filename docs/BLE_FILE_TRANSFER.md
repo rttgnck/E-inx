@@ -81,9 +81,23 @@ Chunk size is the negotiated ATT MTU minus 3. The sender asks for MTU 517.
   "protocol": 1,
   "name": "Dune.epub",
   "size": 2184512,
-  "crc32": "a37159c2"
+  "crc32": "a37159c2",
+  "title": "Dune",
+  "author": "Frank Herbert"
 }
 ```
+
+`title` and `author` are optional and were added after protocol 1 was published. They are
+additive on purpose: a sender that omits them behaves exactly as before, and a reader that
+predates them ignores unknown fields, so neither side needs to know the other's age. Both are
+capped at 200 characters.
+
+They do **not** modify the file. The reader writes them as the same per-book override its own
+Edit Metadata screen writes, under `/.metadata/epub/<hash>` (or `/.metadata/xtc/<hash>`), so the
+book that lands on the card is byte-for-byte the one that was sent and still matches its CRC.
+A `.txt` keeps its cache elsewhere and shows its file name, so metadata sent with one is accepted
+and then ignored rather than written where nothing reads it. Failing to write an override never
+fails the transfer — the book is already in the library by then.
 
 `crc32` is lowercase hex, zero-padded to eight digits, of the complete file. It is sent as
 text so neither side has to agree on how an unsigned 32-bit number is spelled in JSON.
@@ -196,10 +210,12 @@ These are also raised by the Android app for its own failures, which never reach
 
 ## Advertised name
 
-    E-inx X3 A31F
+    xteink
 
-The suffix is the low two bytes of the chip's factory MAC, in uppercase hex. It exists so a
-user with two readers in the room can tell them apart; it is not a secret and not an identity.
+Whatever the reader's **Device name** is set to — the same name it answers to as `<name>.local`
+on the network. A reader having one name over Bluetooth and another over WiFi is a thing to
+explain rather than a feature. Two readers left on the default name will look alike in a scan;
+renaming one is the fix, which is what the setting is for.
 
 ## Security posture
 

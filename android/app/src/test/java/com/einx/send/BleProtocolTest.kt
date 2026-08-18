@@ -90,3 +90,35 @@ class ChunkSizeTest {
     assertEquals(20, chunkSizeForMtu(5))
   }
 }
+
+class StartMetadataTest {
+
+  @Test
+  fun `title and author are sent when set`() {
+    val json = JSONObject(
+      String(BleProtocol.startCommand("Dune.epub", 10L, 1L, "Dune", "Frank Herbert"))
+    )
+    assertEquals("Dune", json.getString("title"))
+    assertEquals("Frank Herbert", json.getString("author"))
+  }
+
+  @Test
+  fun `blank metadata is omitted so the reader keeps the book's own`() {
+    val json = JSONObject(String(BleProtocol.startCommand("Dune.epub", 10L, 1L, "", "   ")))
+    assertFalse(json.has("title"))
+    assertFalse(json.has("author"))
+  }
+
+  @Test
+  fun `metadata is trimmed`() {
+    val json = JSONObject(String(BleProtocol.startCommand("Dune.epub", 10L, 1L, "  Dune  ", " Herbert ")))
+    assertEquals("Dune", json.getString("title"))
+    assertEquals("Herbert", json.getString("author"))
+  }
+
+  @Test
+  fun `the protocol version is unchanged, so older readers still accept the start`() {
+    val json = JSONObject(String(BleProtocol.startCommand("Dune.epub", 10L, 1L, "Dune", "Herbert")))
+    assertEquals(1, json.getInt("protocol"))
+  }
+}

@@ -10,6 +10,22 @@ E-inx is a community firmware for Xteink e-paper readers, forked from [Inx](http
 
 ![](./docs/images/cover.jpg)
 
+## What's New in E-inx 1.6.17-4
+
+- **Name your reader.** One setting, in the web manager under Device Name and shown on the device
+  under Settings, decides both what the reader answers to on the network (`<name>.local`) and what
+  it calls itself over Bluetooth. Previously these were three separate hardcoded names —
+  `xteink`, `crosspoint` and `einx` depending on which screen you were on.
+- **Rename a book, and fix its title and author, before it is sent.** E-inx Send now shows the
+  book's details first, filled in from the EPUB itself, and lets you correct them. The file is
+  sent unchanged: the title and author travel alongside it and are stored as the same per-book
+  override the reader's own Edit Metadata screen writes, so the EPUB on the card is byte-for-byte
+  the one that was picked and still matches its checksum.
+- **The app remembers the reader you sent to** and sends straight to it next time, rather than
+  making you pick from a list every time. A Settings screen forgets it again, or asks every time.
+- The two new START fields are additive to protocol 1, so a new app and an old reader — or the
+  reverse — still work.
+
 ## What's New in E-inx 1.6.17-3
 
 - **Maintenance can reinforce even when page turns do not.** `Maintenance action: Reinforce` was
