@@ -327,7 +327,13 @@ bool EpubActivity::buildSection(int spineIndex, const ViewportInfo& info, bool s
  * @param info Viewport information for rendering
  * @return Unique pointer to the loaded section
  */
-std::unique_ptr<Section> EpubActivity::loadSection(int spineIndex, const ViewportInfo& info, const bool showProgress) {
+std::unique_ptr<Section> EpubActivity::loadSection(int spineIndex, const ViewportInfo& info, const bool showProgress,
+                                                   SectionLoadOutcome* outcome) {
+  const auto report = [outcome](const SectionLoadOutcome value) {
+    if (outcome) *outcome = value;
+  };
+  report(SectionLoadOutcome::NotRenderable);
+
   if (!epub) return nullptr;
   const int totalSpines = epub->getSpineItemsCount();
   if (spineIndex < 0 || spineIndex >= totalSpines) {
@@ -346,6 +352,7 @@ std::unique_ptr<Section> EpubActivity::loadSection(int spineIndex, const Viewpor
   if (!isCached) {
     if (!buildSection(spineIndex, info, showProgress, false)) {
       Serial.printf("[%lu] [EPA] loadSection: build failed spine=%d total=%d\n", millis(), spineIndex, totalSpines);
+      report(SectionLoadOutcome::BuildFailed);
       return nullptr;
     }
     if (!loadedSection->loadSectionFile(
@@ -354,6 +361,7 @@ std::unique_ptr<Section> EpubActivity::loadSection(int spineIndex, const Viewpor
             bookSettings.paragraphCssIndentEnabled != 0, bookSettings.bionicReadingEnabled != 0)) {
       Serial.printf("[%lu] [EPA] loadSection: load after build failed spine=%d total=%d\n", millis(), spineIndex,
                     totalSpines);
+      report(SectionLoadOutcome::BuildFailed);
       return nullptr;
     }
   }
@@ -363,6 +371,7 @@ std::unique_ptr<Section> EpubActivity::loadSection(int spineIndex, const Viewpor
     return nullptr;
   }
 
+  report(SectionLoadOutcome::Loaded);
   return loadedSection;
 }
 
@@ -543,8 +552,22 @@ void EpubActivity::loadCurrentSection(const bool showProgress) {
   int spineIndex = currentSpineIndex;
 
   while (spineIndex >= 0 && spineIndex < totalSpines) {
-    auto newSection = loadSection(spineIndex, info, showProgress);
+    SectionLoadOutcome outcome = SectionLoadOutcome::NotRenderable;
+    auto newSection = loadSection(spineIndex, info, showProgress, &outcome);
     if (!newSection) {
+      if (outcome == SectionLoadOutcome::BuildFailed) {
+        // Stop here rather than trying the neighbour. A chapter that failed to build says
+        // nothing about the one before it, and stepping on turns a single unreadable chapter
+        // into a walk backwards through the entire book — each step paying for three more
+        // failed extractions — with no indication of what went wrong. Staying on the requested
+        // spine keeps the reader where the user is and lets the same page be tried again.
+        Serial.printf("[%lu] [EPA] loadCurrentSection: build failed spine=%d, not walking further\n", millis(),
+                      spineIndex);
+        currentSpineIndex = requestedSpine;
+        readerPopup("Chapter could not be opened");
+        return;
+      }
+
       Serial.printf("[%lu] [EPA] loadCurrentSection: skipping non-renderable spine=%d direction=%d\n", millis(),
                     spineIndex, direction);
       spineIndex += direction;

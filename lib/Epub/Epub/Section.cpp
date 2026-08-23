@@ -18,7 +18,12 @@
 #include "parsers/ChapterHtmlSlimParser.h"
 
 namespace {
-constexpr uint8_t SECTION_FILE_VERSION = 62;  // 62: honor explicit block text-align outside Follow CSS mode
+// 65: retires anything cached by the build that reserved a 32 KB inflate window across the whole
+// parse — that reservation starved the parser of the heap it needed and truncated chapters.
+// 63: chapters parsed while the heap was too fragmented to inflate an image cached a layout with
+// the image missing, and a cache-first load never retried it — so the fix for that fragmentation
+// could not reach the chapters it was meant to repair. Bumping the version retires those layouts.
+constexpr uint8_t SECTION_FILE_VERSION = 65;
 constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(float) + sizeof(bool) +
                                  sizeof(uint8_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) +
                                  sizeof(bool) + sizeof(uint16_t) + sizeof(uint32_t);

@@ -128,7 +128,10 @@ void HotspotActivity::startAccessPoint() {
   WiFi.mode(WIFI_AP);
   delay(100);
 
+#ifndef SIMULATOR
+  // The simulator's WiFi shim has no softAP hostname; the device name still reaches mDNS below.
   WiFi.softAPsetHostname(SETTINGS.getDeviceHostname().c_str());
+#endif
   bool apStarted = WiFi.softAP(AP_SSID, nullptr, AP_CHANNEL, false, AP_MAX_CONNECTIONS);
 
   if (!apStarted) {

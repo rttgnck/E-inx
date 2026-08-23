@@ -19,20 +19,23 @@
 class GfxRenderer;
 
 class ParsedText {
-  std::list<std::string> words;
-  std::list<EpdFontFamily::Style> wordStyles;
-  std::list<uint8_t> bionicPrefixBytes;
-  std::list<uint8_t> wordSmallCaps;
-  std::list<uint8_t> wordUnderline;
-  std::list<uint8_t> wordVerticalAlign;
+  // Vectors for the same reason TextBlock uses them: a list node spends two pointers and its own
+  // heap allocation to carry one byte, and a chapter's worth of those fragments the heap badly
+  // enough that a later image decode cannot find a contiguous block.
+  std::vector<std::string> words;
+  std::vector<EpdFontFamily::Style> wordStyles;
+  std::vector<uint8_t> bionicPrefixBytes;
+  std::vector<uint8_t> wordSmallCaps;
+  std::vector<uint8_t> wordUnderline;
+  std::vector<uint8_t> wordVerticalAlign;
   /** True when this token was split only by an inline style boundary and should not get an inter-word gap. */
-  std::list<uint8_t> wordJoinPrevious;
+  std::vector<uint8_t> wordJoinPrevious;
   // Inline images flow as atomic "words": for an image slot the `words` entry is empty and these hold the
   // cached path + on-line display size. These lists stay EMPTY (zero overhead) until the block actually
   // contains an inline image — see hasInlineImages_ — so plain text blocks pay nothing.
-  std::list<std::string> wordImagePaths;
-  std::list<uint16_t> wordImageW;
-  std::list<uint16_t> wordImageH;
+  std::vector<std::string> wordImagePaths;
+  std::vector<uint16_t> wordImageW;
+  std::vector<uint16_t> wordImageH;
   bool hasInlineImages_ = false;
   /** Widest natural (pre-alignment) line content width seen during layout; used to size CSS border rules. */
   uint16_t maxLineContentWidth_ = 0;
@@ -61,6 +64,19 @@ class ParsedText {
                    const std::vector<size_t>& lineBreakIndices, const std::vector<uint8_t>& joinPreviousSnapshot,
                    const std::function<void(std::shared_ptr<TextBlock>)>& processLine);
   std::vector<uint16_t> calculateWordWidths(const GfxRenderer& renderer, int fontId);
+
+  /**
+   * Makes room for one more word across every parallel array, or reports that there is none.
+   *
+   * Reserving up front is what makes the appends that follow allocation-free, so a block that
+   * cannot grow stops growing instead of throwing from the middle of a push and leaving the
+   * arrays at different lengths. Before this existed, a failed append aborted the firmware and
+   * rebooted the reader mid-book.
+   */
+  bool reserveForNextWord();
+
+  /** Set once a block has refused a word, so the reason is logged once and not per word. */
+  bool truncatedForMemory_ = false;
 
  public:
   explicit ParsedText(const TextBlock::Style style, const bool extraParagraphSpacing, const bool hyphenationEnabled,

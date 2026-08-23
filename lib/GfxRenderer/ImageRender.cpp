@@ -147,6 +147,31 @@ bool ImageRender::render(int x, int y, int width, int height, const Options& opt
   return render(x, y, width, height, options, nullptr);
 }
 
+namespace {
+
+/**
+ * Whether the on-disk raster cache can serve this draw.
+ *
+ * A 1-bit image used to qualify only while the renderer was in plain BW, which quietly excluded
+ * the two grayscale plane passes — and those run the page's draw callback twice. An inline image
+ * inside a text block is drawn on both, so it was fully decoded twice per page: 1.1 seconds each
+ * for a 6922 px wide chapter banner, while the BW pass beside it served the same image from cache
+ * in milliseconds.
+ *
+ * Serving them is safe because the cache key already carries the render plane, so LSB and MSB keep
+ * their own entries rather than sharing one.
+ */
+bool displayCacheApplies(const ImageRenderMode mode, const GfxRenderer::RenderMode renderMode) {
+  if (mode == ImageRenderMode::TwoBit) {
+    return true;
+  }
+  return renderMode == GfxRenderer::BW || renderMode == GfxRenderer::GRAYSCALE_LSB ||
+         renderMode == GfxRenderer::GRAYSCALE_MSB || renderMode == GfxRenderer::GRAY2_LSB ||
+         renderMode == GfxRenderer::GRAY2_MSB;
+}
+
+}  // namespace
+
 bool ImageRender::renderDisplayCacheOnly(int x, int y, int width, int height, const Options& options) const {
   ImageDisplayCacheOptions cacheOptions;
   cacheOptions.cropToFill = options.cropToFill;
@@ -154,10 +179,7 @@ bool ImageRender::renderDisplayCacheOnly(int x, int y, int width, int height, co
   cacheOptions.renderPlane = static_cast<uint8_t>(renderer_.getRenderMode());
   cacheOptions.roundedOutside = options.roundedOutside;
   cacheOptions.quality = options.quality;
-  const bool canUseDisplayCache =
-      options.useDisplayCache &&
-      ((options.mode == ImageRenderMode::OneBit && renderer_.getRenderMode() == GfxRenderer::BW) ||
-       options.mode == ImageRenderMode::TwoBit);
+  const bool canUseDisplayCache = options.useDisplayCache && displayCacheApplies(options.mode, renderer_.getRenderMode());
   if (!canUseDisplayCache) {
     return false;
   }
@@ -172,10 +194,7 @@ bool ImageRender::render(int x, int y, int width, int height, const Options& opt
   cacheOptions.renderPlane = static_cast<uint8_t>(renderer_.getRenderMode());
   cacheOptions.roundedOutside = options.roundedOutside;
   cacheOptions.quality = options.quality;
-  const bool canUseDisplayCache =
-      options.useDisplayCache &&
-      ((options.mode == ImageRenderMode::OneBit && renderer_.getRenderMode() == GfxRenderer::BW) ||
-       options.mode == ImageRenderMode::TwoBit);
+  const bool canUseDisplayCache = options.useDisplayCache && displayCacheApplies(options.mode, renderer_.getRenderMode());
   // Skip the on-disk raster cache lookup only when replaying a capture (nothing to look up for - we
   // already have the pixels in memory). On the first (capture) call, jpegCapture->captured is still
   // false here, so a cache hit is still preferred over decoding at all.
