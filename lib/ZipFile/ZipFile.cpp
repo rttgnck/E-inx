@@ -35,48 +35,6 @@ bool inflateOneShot(const uint8_t* inputBuf, const size_t deflatedSize, uint8_t*
   return true;
 }
 
-namespace {
-
-/**
- * The shared inflate working set. Null when no InflateScratch is in scope, in which case each
- * deflated entry allocates and frees its own exactly as before.
- */
-tinfl_decompressor* gScratchInflator = nullptr;
-uint8_t* gScratchDictionary = nullptr;
-int gScratchDepth = 0;
-
-}  // namespace
-
-ZipFile::InflateScratch::InflateScratch() {
-  if (gScratchDepth++ > 0) {
-    return;  // an outer scope already owns it
-  }
-
-  gScratchInflator = static_cast<tinfl_decompressor*>(malloc(sizeof(tinfl_decompressor)));
-  gScratchDictionary = static_cast<uint8_t*>(malloc(TINFL_LZ_DICT_SIZE));
-
-  if (gScratchInflator == nullptr || gScratchDictionary == nullptr) {
-    // Not fatal: without it every entry allocates its own, which is what used to happen always.
-    Serial.printf("[%lu] [ZIP] Could not reserve inflate scratch; falling back to per-entry\n", millis());
-    free(gScratchInflator);
-    free(gScratchDictionary);
-    gScratchInflator = nullptr;
-    gScratchDictionary = nullptr;
-  }
-}
-
-ZipFile::InflateScratch::~InflateScratch() {
-  if (--gScratchDepth > 0) {
-    return;
-  }
-  free(gScratchInflator);
-  free(gScratchDictionary);
-  gScratchInflator = nullptr;
-  gScratchDictionary = nullptr;
-}
-
-bool ZipFile::InflateScratch::valid() const { return gScratchInflator != nullptr && gScratchDictionary != nullptr; }
-
 bool ZipFile::loadAllFileStatSlims() {
   const bool wasOpen = isOpen();
   if (!wasOpen && !open()) {
@@ -560,12 +518,7 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
   }
 
   if (fileStat.method == MZ_DEFLATED) {
-    // Borrowed from the enclosing InflateScratch when there is one, so a chapter's images share a
-    // single 32 KB window instead of each hunting for one mid-parse. Nothing owned is freed below.
-    const bool borrowed = gScratchInflator != nullptr && gScratchDictionary != nullptr;
-
-    const auto inflator =
-        borrowed ? gScratchInflator : static_cast<tinfl_decompressor*>(malloc(sizeof(tinfl_decompressor)));
+    const auto inflator = static_cast<tinfl_decompressor*>(malloc(sizeof(tinfl_decompressor)));
     if (!inflator) {
       Serial.printf("[%lu] [ZIP] Failed to allocate memory for inflator\n", millis());
       if (!wasOpen) {
@@ -579,17 +532,17 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
     const auto fileReadBuffer = static_cast<uint8_t*>(malloc(chunkSize));
     if (!fileReadBuffer) {
       Serial.printf("[%lu] [ZIP] Failed to allocate memory for zip file read buffer\n", millis());
-      if (!borrowed) free(inflator);
+      free(inflator);
       if (!wasOpen) {
         close();
       }
       return false;
     }
 
-    const auto outputBuffer = borrowed ? gScratchDictionary : static_cast<uint8_t*>(malloc(TINFL_LZ_DICT_SIZE));
+    const auto outputBuffer = static_cast<uint8_t*>(malloc(TINFL_LZ_DICT_SIZE));
     if (!outputBuffer) {
       Serial.printf("[%lu] [ZIP] Failed to allocate memory for dictionary\n", millis());
-      if (!borrowed) free(inflator);
+      free(inflator);
       free(fileReadBuffer);
       if (!wasOpen) {
         close();
@@ -637,9 +590,9 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
           if (!wasOpen) {
             close();
           }
-          if (!borrowed) free(outputBuffer);
+          free(outputBuffer);
           free(fileReadBuffer);
-          if (!borrowed) free(inflator);
+          free(inflator);
           return false;
         }
 
@@ -651,9 +604,9 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
         if (!wasOpen) {
           close();
         }
-        if (!borrowed) free(outputBuffer);
+        free(outputBuffer);
         free(fileReadBuffer);
-        if (!borrowed) free(inflator);
+        free(inflator);
         return false;
       }
 
@@ -663,9 +616,9 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
         if (!wasOpen) {
           close();
         }
-        if (!borrowed) free(inflator);
+        free(inflator);
         free(fileReadBuffer);
-        if (!borrowed) free(outputBuffer);
+        free(outputBuffer);
         return true;
       }
     }
@@ -674,9 +627,9 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
     if (!wasOpen) {
       close();
     }
-    if (!borrowed) free(outputBuffer);
+    free(outputBuffer);
     free(fileReadBuffer);
-    if (!borrowed) free(inflator);
+    free(inflator);
     return false;
   }
 

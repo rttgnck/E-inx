@@ -16,6 +16,28 @@
 #include <type_traits>
 #include <limits>
 #include <new>
+
+#ifndef SIMULATOR
+#include <esp_heap_caps.h>
+#endif
+
+namespace {
+/** Free bytes and the largest single block, or zeroes where the platform cannot say. */
+unsigned freeHeapBytes() {
+#ifdef SIMULATOR
+  return 0;
+#else
+  return static_cast<unsigned>(ESP.getFreeHeap());
+#endif
+}
+unsigned largestFreeBlockBytes() {
+#ifdef SIMULATOR
+  return 0;
+#else
+  return static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+#endif
+}
+}  // namespace
 #include <vector>
 
 #include "hyphenation/Hyphenator.h"
@@ -250,8 +272,8 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
   if (!reserveForNextWord()) {
     if (!truncatedForMemory_) {
       truncatedForMemory_ = true;
-      Serial.printf("[%lu] [PT] Text block truncated at %u words: no room to grow\n", millis(),
-                    static_cast<unsigned>(words.size()));
+      Serial.printf("[%lu] [PT] Text block truncated at %u words: free=%u largest=%u\n", millis(),
+                    static_cast<unsigned>(words.size()), freeHeapBytes(), largestFreeBlockBytes());
     }
     return;
   }
@@ -277,8 +299,8 @@ void ParsedText::addImage(std::string cachePath, const uint16_t displayW, const 
   if (!reserveForNextWord()) {
     if (!truncatedForMemory_) {
       truncatedForMemory_ = true;
-      Serial.printf("[%lu] [PT] Inline image dropped at %u words: no room to grow\n", millis(),
-                    static_cast<unsigned>(words.size()));
+      Serial.printf("[%lu] [PT] Inline image dropped at %u words: free=%u largest=%u\n", millis(),
+                    static_cast<unsigned>(words.size()), freeHeapBytes(), largestFreeBlockBytes());
     }
     return;
   }

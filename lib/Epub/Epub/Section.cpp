@@ -5,8 +5,6 @@
 
 #include "Section.h"
 
-#include <ZipFile.h>
-
 #include <Arduino.h>
 #include <FsHelpers.h>
 #include <SDCardManager.h>
@@ -20,11 +18,12 @@
 #include "parsers/ChapterHtmlSlimParser.h"
 
 namespace {
-// 64: same again, now that a chapter's images share one reserved inflate window.
+// 65: retires anything cached by the build that reserved a 32 KB inflate window across the whole
+// parse — that reservation starved the parser of the heap it needed and truncated chapters.
 // 63: chapters parsed while the heap was too fragmented to inflate an image cached a layout with
 // the image missing, and a cache-first load never retried it — so the fix for that fragmentation
 // could not reach the chapters it was meant to repair. Bumping the version retires those layouts.
-constexpr uint8_t SECTION_FILE_VERSION = 64;
+constexpr uint8_t SECTION_FILE_VERSION = 65;
 constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(float) + sizeof(bool) +
                                  sizeof(uint8_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) +
                                  sizeof(bool) + sizeof(uint16_t) + sizeof(uint32_t);
@@ -409,11 +408,6 @@ bool Section::createSectionFile(const int fontId, const int headerFontId, const 
 
   writeSectionFileHeader(fontId, lineCompression, wordSpacing, extraParagraphSpacing, paragraphAlignment, viewportWidth,
                          viewportHeight, hyphenationEnabled, respectCssParagraphIndent, bionicReadingEnabled);
-
-  // Claimed before parsing, not during: every deflated image in this chapter shares one 32 KB
-  // inflate window, reserved while the heap is still whole. Asking per image meant asking after
-  // the parser had fragmented it, which is how chapter images went missing with heap to spare.
-  const ZipFile::InflateScratch inflateScratch;
 
   try {
     success = visitor.parseAndBuildPages(skipImages);

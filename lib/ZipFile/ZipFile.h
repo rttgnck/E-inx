@@ -68,29 +68,4 @@ class ZipFile {
 
   uint8_t* readFileToMemory(const char* filename, size_t* size = nullptr, bool trailingNullByte = false);
   bool readFileToStream(const char* filename, Print& out, size_t chunkSize);
-
-  /**
-   * Holds the inflate working set — a 32 KB LZ window and the decompressor — for as long as it
-   * is in scope, so every deflated entry read meanwhile can share it.
-   *
-   * The window has to be 32 KB and it has to be contiguous. Allocating it per entry means asking
-   * for it in the middle of a chapter parse, which is exactly when the heap is at its most
-   * fragmented — an image would fail to extract while free heap still read over 100 KB, and the
-   * chapter cached without it. Claiming it before the parse begins moves the one hard allocation
-   * to the moment it is easy, and costs nothing at all for books with no deflated images.
-   *
-   * Scoped rather than permanent: 43 KB is worth holding for a parse, not for the reader's life.
-   * Nesting is counted, so an inner scope does not free what an outer one is still using.
-   * Deliberately not thread-safe — parsing happens on one task.
-   */
-  class InflateScratch {
-   public:
-    InflateScratch();
-    ~InflateScratch();
-    InflateScratch(const InflateScratch&) = delete;
-    InflateScratch& operator=(const InflateScratch&) = delete;
-
-    /** False when the scratch could not be claimed; readers then allocate per entry as before. */
-    bool valid() const;
-  };
 };
