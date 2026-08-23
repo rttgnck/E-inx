@@ -5,10 +5,6 @@
 
 #include "Section.h"
 
-#ifndef SIMULATOR
-#include <esp_heap_caps.h>
-#endif
-
 #include <Arduino.h>
 #include <FsHelpers.h>
 #include <SDCardManager.h>
@@ -20,17 +16,6 @@
 #include "Page.h"
 #include "hyphenation/Hyphenator.h"
 #include "parsers/ChapterHtmlSlimParser.h"
-
-namespace {
-/** Largest single allocatable block; the inflate window needs 32 KB of it in one piece. */
-unsigned largestFreeBlockBytes() {
-#ifdef SIMULATOR
-  return 0;
-#else
-  return static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
-#endif
-}
-}  // namespace
 
 namespace {
 // 65: retires anything cached by the build that reserved a 32 KB inflate window across the whole
@@ -398,9 +383,9 @@ bool Section::createSectionFile(const int fontId, const int headerFontId, const 
   if (!success) {
     Serial.printf(
         "[%lu] [SCT] createSectionFile: failed to extract chapter after retries spine=%d href=%s book=%s "
-        "title=%s heap=%u largest=%u\n",
+        "title=%s heap=%u\n",
         millis(), spineIndex, localPath.c_str(), epub->getPath().c_str(), epub->getTitle().c_str(),
-        static_cast<unsigned>(ESP.getFreeHeap()), largestFreeBlockBytes());
+        static_cast<unsigned>(ESP.getFreeHeap()));
     return false;
   }
 

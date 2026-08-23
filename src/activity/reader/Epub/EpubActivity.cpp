@@ -49,20 +49,6 @@
 #include "system/ScreenComponents.h"
 
 namespace {
-/**
- * Largest single allocatable block. Free heap on its own has been misleading here more than once:
- * the 32 KB inflate window has failed with over 150 KB free, because none of it was contiguous.
- */
-unsigned largestFreeBlock() {
-#ifdef SIMULATOR
-  return 0;
-#else
-  return static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
-#endif
-}
-}  // namespace
-
-namespace {
 /** Encodes spine and page for MenuDrawer::BookmarkNavItem::storageIndex (page < 100000). */
 constexpr int kAnnotationNavPack = 100000;
 
@@ -555,8 +541,6 @@ void EpubActivity::displayCoverOrTitle() {
  */
 void EpubActivity::loadCurrentSection(const bool showProgress) {
   section.reset();
-  Serial.printf("[%lu] [DBG] loadCurrentSection: after section release heap=%lu largest=%u\n", millis(),
-                (unsigned long)ESP.getFreeHeap(), largestFreeBlock());
   if (!epub) {
     return;
   }
@@ -1915,8 +1899,8 @@ void EpubActivity::renderContents(std::unique_ptr<Page> page, const int oriented
   if (!page) return;
   isDoingSomethingHeavy = true;
   const unsigned long rcStart = millis();
-  Serial.printf("[%lu] [DBG] renderContents start, hasImages=%d, heap=%lu largest=%u\n", rcStart, page->hasImages(),
-                (unsigned long)ESP.getFreeHeap(), largestFreeBlock());
+  Serial.printf("[%lu] [DBG] renderContents start, hasImages=%d, heap=%lu\n", rcStart, page->hasImages(),
+                (unsigned long)ESP.getFreeHeap());
   const int fontId = bookSettings.getReaderFontId();
   FontManager::ensureReaderLayoutFonts(fontId, renderer);
   const int headerFontId = FontManager::getNextFont(fontId);
@@ -2111,8 +2095,8 @@ void EpubActivity::renderContents(std::unique_ptr<Page> page, const int oriented
   }
 
   isDoingSomethingHeavy = false;
-  Serial.printf("[%lu] [DBG] renderContents done, total=%lums, heap=%lu largest=%u\n", millis(), millis() - rcStart,
-                (unsigned long)ESP.getFreeHeap(), largestFreeBlock());
+  Serial.printf("[%lu] [DBG] renderContents done, total=%lums, heap=%lu\n", millis(), millis() - rcStart,
+                (unsigned long)ESP.getFreeHeap());
 
   lastPageHadImages = pageHasImages;
   lastPageHadLargeImage = pageHasLargeImage;
