@@ -74,23 +74,17 @@ int measureWordSegment(const GfxRenderer& renderer, const int fontId, const std:
 
 std::string TextBlock::getWordAt(size_t index) const {
   if (index >= words.size()) return {};
-  auto it = words.begin();
-  std::advance(it, static_cast<std::ptrdiff_t>(index));
-  return *it;
+  return words[index];
 }
 
 uint16_t TextBlock::getWordXAt(size_t index) const {
   if (index >= wordXpos.size()) return 0;
-  auto it = wordXpos.begin();
-  std::advance(it, static_cast<std::ptrdiff_t>(index));
-  return *it;
+  return wordXpos[index];
 }
 
 EpdFontFamily::Style TextBlock::getWordStyleAt(size_t index) const {
   if (index >= wordStyles.size()) return EpdFontFamily::REGULAR;
-  auto it = wordStyles.begin();
-  std::advance(it, static_cast<std::ptrdiff_t>(index));
-  return *it;
+  return wordStyles[index];
 }
 
 void TextBlock::render(GfxRenderer& renderer, const int fontId, const int x, const int y) const {
@@ -235,16 +229,16 @@ bool TextBlock::serialize(FsFile& file) const {
 
 std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file) {
   uint16_t wc;
-  std::list<std::string> words;
-  std::list<uint16_t> wordXpos;
-  std::list<EpdFontFamily::Style> wordStyles;
-  std::list<uint8_t> bionicPrefixBytes;
-  std::list<uint8_t> wordSmallCaps;
-  std::list<uint8_t> wordUnderline;
-  std::list<uint8_t> wordVerticalAlign;
-  std::list<std::string> wordImagePaths;
-  std::list<uint16_t> wordImageW;
-  std::list<uint16_t> wordImageH;
+  std::vector<std::string> words;
+  std::vector<uint16_t> wordXpos;
+  std::vector<EpdFontFamily::Style> wordStyles;
+  std::vector<uint8_t> bionicPrefixBytes;
+  std::vector<uint8_t> wordSmallCaps;
+  std::vector<uint8_t> wordUnderline;
+  std::vector<uint8_t> wordVerticalAlign;
+  std::vector<std::string> wordImagePaths;
+  std::vector<uint16_t> wordImageW;
+  std::vector<uint16_t> wordImageH;
   Style style;
 
   serialization::readPod(file, wc);

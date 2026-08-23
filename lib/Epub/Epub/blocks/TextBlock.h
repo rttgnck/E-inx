@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <list>
+#include <vector>
 #include <memory>
 #include <string>
 
@@ -34,18 +35,22 @@ class TextBlock final : public Block {
   };
 
  private:
-  std::list<std::string> words;
-  std::list<uint16_t> wordXpos;
-  std::list<EpdFontFamily::Style> wordStyles;
-  std::list<uint8_t> bionicPrefixBytes;
-  std::list<uint8_t> wordSmallCaps;
-  std::list<uint8_t> wordUnderline;
-  std::list<uint8_t> wordVerticalAlign;
+  // Vectors, not lists. A std::list node costs two pointers plus its own heap allocation to hold
+  // one byte, and a page holds one TextBlock per rendered line — enough of them to shred the heap
+  // into fragments too small for an image decode, and eventually to fail an allocation outright
+  // and abort mid-book. Contiguous storage also makes indexed access O(1) instead of a walk.
+  std::vector<std::string> words;
+  std::vector<uint16_t> wordXpos;
+  std::vector<EpdFontFamily::Style> wordStyles;
+  std::vector<uint8_t> bionicPrefixBytes;
+  std::vector<uint8_t> wordSmallCaps;
+  std::vector<uint8_t> wordUnderline;
+  std::vector<uint8_t> wordVerticalAlign;
   // Inline image "words": for an image slot the matching `words` entry is empty and these hold the cached
   // image path and its on-line display size. Empty path / 0 size means a normal text word.
-  std::list<std::string> wordImagePaths;
-  std::list<uint16_t> wordImageW;
-  std::list<uint16_t> wordImageH;
+  std::vector<std::string> wordImagePaths;
+  std::vector<uint16_t> wordImageW;
+  std::vector<uint16_t> wordImageH;
   Style style;
 
  public:
@@ -57,9 +62,10 @@ class TextBlock final : public Block {
    * @param word_styles Font styles for each word
    * @param style Alignment style for the line
    */
-  explicit TextBlock(std::list<std::string> words, std::list<uint16_t> word_xpos,
-                     std::list<EpdFontFamily::Style> word_styles, std::list<uint8_t> word_small_caps, const Style style,
-                     std::list<uint8_t> word_underline = {}, std::list<uint8_t> word_vertical_align = {})
+  explicit TextBlock(std::vector<std::string> words, std::vector<uint16_t> word_xpos,
+                     std::vector<EpdFontFamily::Style> word_styles, std::vector<uint8_t> word_small_caps,
+                     const Style style, std::vector<uint8_t> word_underline = {},
+                     std::vector<uint8_t> word_vertical_align = {})
       : words(std::move(words)),
         wordXpos(std::move(word_xpos)),
         wordStyles(std::move(word_styles)),
@@ -68,11 +74,11 @@ class TextBlock final : public Block {
         wordVerticalAlign(std::move(word_vertical_align)),
         style(style) {}
 
-  explicit TextBlock(std::list<std::string> words, std::list<uint16_t> word_xpos,
-                     std::list<EpdFontFamily::Style> word_styles, std::list<uint8_t> bionic_prefix_bytes,
-                     std::list<uint8_t> word_small_caps, const Style style, std::list<uint8_t> word_underline = {},
-                     std::list<uint8_t> word_vertical_align = {}, std::list<std::string> word_image_paths = {},
-                     std::list<uint16_t> word_image_w = {}, std::list<uint16_t> word_image_h = {})
+  explicit TextBlock(std::vector<std::string> words, std::vector<uint16_t> word_xpos,
+                     std::vector<EpdFontFamily::Style> word_styles, std::vector<uint8_t> bionic_prefix_bytes,
+                     std::vector<uint8_t> word_small_caps, const Style style, std::vector<uint8_t> word_underline = {},
+                     std::vector<uint8_t> word_vertical_align = {}, std::vector<std::string> word_image_paths = {},
+                     std::vector<uint16_t> word_image_w = {}, std::vector<uint16_t> word_image_h = {})
       : words(std::move(words)),
         wordXpos(std::move(word_xpos)),
         wordStyles(std::move(word_styles)),
