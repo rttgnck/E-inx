@@ -314,7 +314,22 @@ class EpubActivity final : public ActivityWithSubactivity {
    * @param info Viewport information for rendering
    * @return Unique pointer to the loaded section
    */
-  std::unique_ptr<Section> loadSection(int spineIndex, const ViewportInfo& info, bool showProgress = true);
+  /**
+   * Why a section could not be produced.
+   *
+   * The distinction matters because the two call for opposite responses: a spine with nothing in
+   * it should be stepped over, while a spine that failed to build should stop the walk. Treating
+   * a failure as "nothing here" is what turned one unextractable chapter into a reader that
+   * paged backwards through the whole book retrying.
+   */
+  enum class SectionLoadOutcome : uint8_t {
+    Loaded,
+    NotRenderable,
+    BuildFailed,
+  };
+
+  std::unique_ptr<Section> loadSection(int spineIndex, const ViewportInfo& info, bool showProgress = true,
+                                       SectionLoadOutcome* outcome = nullptr);
 
   void setupOrientation();
   /** Copies device reading orientation into book settings when the book follows global defaults. */
