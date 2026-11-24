@@ -1,5 +1,7 @@
 #pragma once
 
+#include "state/SystemSetting.h"
+
 /**
  * @file Fonts.h
  * @brief Built-in bitmap font headers and numeric font IDs.
@@ -56,6 +58,16 @@
 #define ATKINSON_HYPERLEGIBLE_16_FONT_ID (2005)
 #define ATKINSON_HYPERLEGIBLE_18_FONT_ID (2006)
 
+// The interface font. E-inx's screens name the ATKINSON_* ids and upstream Inx's new screens the
+// MONTSERRAT_* ids. Montserrat itself is not in flash (it would not fit beside Atkinson and Literata), so
+// FontManager::applyUiFont() points both sets at Atkinson Hyperlegible.
+#define MONTSERRAT_8_FONT_ID (2501)
+#define MONTSERRAT_10_FONT_ID (2502)
+#define MONTSERRAT_12_FONT_ID (2503)
+#define MONTSERRAT_14_FONT_ID (2504)
+#define MONTSERRAT_16_FONT_ID (2505)
+#define MONTSERRAT_18_FONT_ID (2506)
+
 #define LITERATA_10_FONT_ID (3001)
 #define LITERATA_12_FONT_ID (3002)
 #define LITERATA_14_FONT_ID (3003)
@@ -63,3 +75,20 @@
 #define LITERATA_18_FONT_ID (3005)
 
 #define MONTSERRAT_CLOCK_70_FONT_ID (4001)
+
+/**
+ * @brief Returns the configured bitmap font used by the device UI.
+ *
+ * Reader text uses its own ReaderSetting font size and does not use this helper.
+ */
+inline int systemFontId() {
+  switch (SETTINGS.systemTextSize) {
+    case SystemSetting::SYSTEM_TEXT_MEDIUM:
+      return MONTSERRAT_12_FONT_ID;
+    case SystemSetting::SYSTEM_TEXT_LARGE:
+      return MONTSERRAT_14_FONT_ID;
+    case SystemSetting::SYSTEM_TEXT_SMALL:
+    default:
+      return MONTSERRAT_10_FONT_ID;
+  }
+}

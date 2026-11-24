@@ -2874,7 +2874,6 @@ void LocalServer::handleSettingsGet() const {
   doc["appDrawerAgentIsland"] = SETTINGS.appDrawerAgentIsland;
   doc["recentLibraryMode"] = SETTINGS.recentLibraryMode;
   doc["libraryMode"] = SETTINGS.libraryMode;
-  doc["recentVisibleCount"] = SETTINGS.recentVisibleCount;
   doc["librarySortEnabled"] = SETTINGS.librarySortEnabled;
   doc["libraryShelfEnabled"] = SETTINGS.libraryShelfEnabled;
   doc["librarySortMode"] = SETTINGS.librarySortMode;
@@ -3070,12 +3069,6 @@ void LocalServer::handleSettingsUpdate() const {
       uint8_t v = static_cast<uint8_t>(value);
       if (v >= SystemSetting::LIBRARY_MODE_COUNT) v = SystemSetting::LIBRARY_LIST;
       SETTINGS.libraryMode = v;
-      changed = true;
-    } else if (strcmp(key, "recentVisibleCount") == 0) {
-      int v = static_cast<int>(value);
-      if (v < 1) v = 1;
-      if (v > 8) v = 8;
-      SETTINGS.recentVisibleCount = static_cast<uint8_t>(v);
       changed = true;
     } else if (strcmp(key, "librarySortEnabled") == 0) {
       SETTINGS.librarySortEnabled = (uint8_t)value ? 1 : 0;

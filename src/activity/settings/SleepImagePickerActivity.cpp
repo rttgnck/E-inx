@@ -16,6 +16,7 @@
 #include <iterator>
 
 #include "state/SleepImageSelection.h"
+#include "activity/page/SubPage.h"
 #include "state/SystemSetting.h"
 #include "system/Fonts.h"
 #include "system/MappedInputManager.h"
@@ -30,7 +31,7 @@ constexpr int GRID_ITEMS = GRID_COLS * GRID_ROWS;
 constexpr int GRID_MARGIN_X = 18;
 constexpr int GRID_GAP_X = 12;
 constexpr int GRID_GAP_Y = 12;
-constexpr int GRID_TOP = 12;
+constexpr int GRID_TOP = 88;
 constexpr int THUMB_INSET_X = 18;
 constexpr int THUMB_INSET_Y = 12;
 constexpr int RANDOM_BUTTON_W = 178;
@@ -133,6 +134,7 @@ void SleepImagePickerActivity::drawPickerChrome(const int pageStart, const int r
                                                 const bool localRandomEnabled, const bool drawCells) {
   const int pageWidth = renderer.getScreenWidth();
   const int pageHeight = renderer.getScreenHeight();
+  SubPage::header(renderer, "Choose sleep image");
   const int buttonX = pageWidth - RANDOM_BUTTON_W - FOOTER_SIDE_PAD;
   const int buttonY = pageHeight - 76;
   const int gridBottom = buttonY - 14;
@@ -162,7 +164,7 @@ void SleepImagePickerActivity::drawPickerChrome(const int pageStart, const int r
     const int emptyH = gridBottom - GRID_TOP;
     renderer.rectangle.render(emptyX, emptyY, emptyW, emptyH, true);
     const char* msg = "No sleep images";
-    const int msgFont = ATKINSON_HYPERLEGIBLE_10_FONT_ID;
+    const int msgFont = MONTSERRAT_10_FONT_ID;
     const int msgW = renderer.text.getWidth(msgFont, msg);
     renderer.text.render(msgFont, emptyX + (emptyW - msgW) / 2,
                          emptyY + (emptyH - renderer.text.getLineHeight(msgFont)) / 2, msg, true);
@@ -174,7 +176,7 @@ void SleepImagePickerActivity::drawPickerChrome(const int pageStart, const int r
     char pageText[16];
     std::snprintf(pageText, sizeof(pageText), "%d - %d", currentPage, totalPages);
 
-    const int pageFont = ATKINSON_HYPERLEGIBLE_8_FONT_ID;
+    const int pageFont = MONTSERRAT_8_FONT_ID;
     const int pagePadX = 8;
     const int pageTextW = renderer.text.getWidth(pageFont, pageText);
     const int pageLineH = renderer.text.getLineHeight(pageFont);
@@ -190,11 +192,11 @@ void SleepImagePickerActivity::drawPickerChrome(const int pageStart, const int r
   renderer.rectangle.fill(buttonX, buttonY, RANDOM_BUTTON_W, RANDOM_BUTTON_H, false);
   renderer.rectangle.render(buttonX, buttonY, RANDOM_BUTTON_W, RANDOM_BUTTON_H, true);
   const char* buttonText = localRandomEnabled ? "Random: On" : "Random: Off";
-  const int buttonTextW = renderer.text.getWidth(ATKINSON_HYPERLEGIBLE_10_FONT_ID, buttonText);
+  const int buttonTextW = renderer.text.getWidth(MONTSERRAT_10_FONT_ID, buttonText);
   const int buttonTextX = buttonX + (RANDOM_BUTTON_W - buttonTextW) / 2;
   const int buttonTextY =
-      buttonY + (RANDOM_BUTTON_H - renderer.text.getLineHeight(ATKINSON_HYPERLEGIBLE_10_FONT_ID)) / 2;
-  renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, buttonTextX, buttonTextY, buttonText, true,
+      buttonY + (RANDOM_BUTTON_H - renderer.text.getLineHeight(MONTSERRAT_10_FONT_ID)) / 2;
+  renderer.text.render(MONTSERRAT_10_FONT_ID, buttonTextX, buttonTextY, buttonText, true,
                        EpdFontFamily::BOLD);
 
   const auto labels = mappedInput.mapLabels("\xC2\xAB Back", "Toggle", "Random", "Next");
@@ -237,7 +239,7 @@ void SleepImagePickerActivity::drawPickerThumbnails(const int pageStart, const i
 
     if (!rendered) {
       const char* msg = "No preview";
-      const int msgFont = ATKINSON_HYPERLEGIBLE_8_FONT_ID;
+      const int msgFont = MONTSERRAT_8_FONT_ID;
       const int msgW = renderer.text.getWidth(msgFont, msg);
       renderer.text.render(msgFont, cellX + (cellW - msgW) / 2,
                            cellY + (cellH - renderer.text.getLineHeight(msgFont)) / 2, msg, true);

@@ -30,6 +30,8 @@ std::vector<SettingInfo> buildSystemPageSettings(const bool x3) {
 
   settings.push_back(SettingInfo::Separator("Display ", GroupType::DEVICE_DISPLAY));
   settings.push_back(SettingInfo::Toggle("Dark Mode", &SystemSetting::darkMode, GroupType::DEVICE_DISPLAY));
+  settings.push_back(SettingInfo::Toggle("New UI", &SystemSetting::newUi, GroupType::DEVICE_DISPLAY));
+  settings.push_back(SettingInfo::Toggle("New reader", &SystemSetting::newReader, GroupType::DEVICE_DISPLAY));
   settings.push_back(
       SettingInfo::Toggle("Sunlight Fading Fix", &SystemSetting::sunlightFadingFix, GroupType::DEVICE_DISPLAY));
   settings.push_back(
@@ -139,10 +141,6 @@ std::vector<SettingInfo> buildSystemPageSettings(const bool x3) {
   settings.push_back(SettingInfo::Separator("Device ", GroupType::DEVICE_ADVANCED));
   settings.push_back(SettingInfo::Enum("Time to Sleep", &SystemSetting::sleepTimeout,
                                        {"1 min", "5 min", "10 min", "15 min", "30 min"}, GroupType::DEVICE_ADVANCED));
-  settings.push_back(
-      SettingInfo::Toggle("Use Index for Library", &SystemSetting::useLibraryIndex, GroupType::DEVICE_ADVANCED));
-  settings.push_back(
-      SettingInfo::Toggle("Library custom sort", &SystemSetting::librarySortEnabled, GroupType::DEVICE_ADVANCED));
   settings.push_back(SettingInfo::Enum("Boot Mode", &SystemSetting::bootSetting, {"Recent Books", "Home Page"},
                                        GroupType::DEVICE_ADVANCED));
   settings.push_back(
@@ -195,8 +193,6 @@ std::vector<SettingInfo> buildSystemPageSettings(const bool x3) {
   settings.push_back(SettingInfo::Action("Delete Cache", GroupType::DEVICE_ACTIONS));
   settings.push_back(SettingInfo::Action("Index your library", GroupType::DEVICE_ACTIONS));
   settings.push_back(SettingInfo::Action("Generate thumbnails", GroupType::DEVICE_ACTIONS));
-  settings.push_back(SettingInfo::Action("About", GroupType::NONE));
-
   return settings;
 }
 
@@ -211,7 +207,7 @@ void SettingsActivity::onEnter() {
   Activity::onEnter();
 
   tabSelectorIndex = 3;
-  currentPanel = SettingsPanel::System;
+  currentPanel = SettingsActivityPanel::System;
   panelSwapPending = false;
 
   isIndexing = false;
@@ -307,13 +303,13 @@ void SettingsActivity::loop() {
   }
 }
 
-const char* SettingsActivity::panelBackLabel(const SettingsPanel panel) {
-  return panel == SettingsPanel::System ? "\xC2\xAB Reader" : "\xC2\xAB System";
+const char* SettingsActivity::panelBackLabel(const SettingsActivityPanel panel) {
+  return panel == SettingsActivityPanel::System ? "\xC2\xAB Reader" : "\xC2\xAB System";
 }
 
 void SettingsActivity::swapPanelAndReopen() {
   SETTINGS.saveToFile();
-  currentPanel = (currentPanel == SettingsPanel::System) ? SettingsPanel::Reader : SettingsPanel::System;
+  currentPanel = (currentPanel == SettingsActivityPanel::System) ? SettingsActivityPanel::Reader : SettingsActivityPanel::System;
   exitActivity();
   openCurrentPanel();
 }
@@ -329,7 +325,7 @@ void SettingsActivity::processPendingPanelSwap() {
 }
 
 void SettingsActivity::openCurrentPanel() {
-  if (currentPanel == SettingsPanel::Reader) {
+  if (currentPanel == SettingsActivityPanel::Reader) {
     // The Reader panel is now a list of named presets (with a live-preview editor) instead of a flat list.
     enterNewActivity(new ReaderPresetsActivity(
         renderer, mappedInput, [this] { requestPanelSwap(); },
@@ -460,7 +456,7 @@ void SettingsActivity::showIndexingProgress() {
   } else {
     snprintf(countMsg, sizeof(countMsg), "Found %d files...", indexingProgress);
   }
-  renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, popupX + 20, progressBarY + 50, countMsg);
+  renderer.text.render(MONTSERRAT_10_FONT_ID, popupX + 20, progressBarY + 50, countMsg);
 
   renderer.displayWithReinforcement(GfxRenderer::ReinforcementTarget::MonochromeUi);
 }

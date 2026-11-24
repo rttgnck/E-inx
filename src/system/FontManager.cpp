@@ -1,5 +1,7 @@
 #include "FontManager.h"
 
+#include "FontPreviews.h"
+
 #include <Arduino.h>
 
 #include <algorithm>
@@ -86,6 +88,29 @@ static std::string extractStyleFromFilename(const std::string& filename) {
 /**
  * @brief Initializes the font manager with built-in fonts
  */
+namespace {
+// Atkinson Hyperlegible for every interface size; filled in by initialize().
+const EpdFontFamily* g_uiFonts[6] = {};
+constexpr int kAtkinsonUiIds[6] = {ATKINSON_HYPERLEGIBLE_8_FONT_ID,  ATKINSON_HYPERLEGIBLE_10_FONT_ID,
+                                   ATKINSON_HYPERLEGIBLE_12_FONT_ID, ATKINSON_HYPERLEGIBLE_14_FONT_ID,
+                                   ATKINSON_HYPERLEGIBLE_16_FONT_ID, ATKINSON_HYPERLEGIBLE_18_FONT_ID};
+constexpr int kMontserratUiIds[6] = {MONTSERRAT_8_FONT_ID,  MONTSERRAT_10_FONT_ID, MONTSERRAT_12_FONT_ID,
+                                     MONTSERRAT_14_FONT_ID, MONTSERRAT_16_FONT_ID, MONTSERRAT_18_FONT_ID};
+}  // namespace
+
+void FontManager::applyUiFont(GfxRenderer& renderer, const bool modern) {
+  // Both the classic and the new screens draw in Atkinson Hyperlegible; `modern` is kept so a second
+  // interface face can be added back here if flash ever allows it.
+  (void)modern;
+  for (int i = 0; i < 6; ++i) {
+    if (!g_uiFonts[i]) {
+      continue;
+    }
+    renderer.insertFont(kAtkinsonUiIds[i], *g_uiFonts[i]);
+    renderer.insertFont(kMontserratUiIds[i], *g_uiFonts[i]);
+  }
+}
+
 void FontManager::initialize(GfxRenderer& renderer) {
   g_renderer = &renderer;
 
@@ -184,15 +209,17 @@ void FontManager::initialize(GfxRenderer& renderer) {
   renderer.insertFont(LITERATA_16_FONT_ID, literata16RegularFontFamily);
   renderer.insertFont(LITERATA_18_FONT_ID, literata18RegularFontFamily);
 
-  renderer.insertFont(ATKINSON_HYPERLEGIBLE_8_FONT_ID, atkinson_hyperlegible8FontFamily);
-  renderer.insertFont(ATKINSON_HYPERLEGIBLE_10_FONT_ID, atkinson_hyperlegible10FontFamily);
-  renderer.insertFont(ATKINSON_HYPERLEGIBLE_12_FONT_ID, atkinson_hyperlegible12FontFamily);
-  renderer.insertFont(ATKINSON_HYPERLEGIBLE_14_FONT_ID, atkinson_hyperlegible14FontFamily);
-  renderer.insertFont(ATKINSON_HYPERLEGIBLE_16_FONT_ID, atkinson_hyperlegible16FontFamily);
-  renderer.insertFont(ATKINSON_HYPERLEGIBLE_18_FONT_ID, atkinson_hyperlegible18FontFamily);
+  g_uiFonts[0] = &atkinson_hyperlegible8FontFamily;
+  g_uiFonts[1] = &atkinson_hyperlegible10FontFamily;
+  g_uiFonts[2] = &atkinson_hyperlegible12FontFamily;
+  g_uiFonts[3] = &atkinson_hyperlegible14FontFamily;
+  g_uiFonts[4] = &atkinson_hyperlegible16FontFamily;
+  g_uiFonts[5] = &atkinson_hyperlegible18FontFamily;
+  applyUiFont(renderer, false);  // main.cpp applies the saved choice once settings are loaded
   renderer.insertFont(MONTSERRAT_CLOCK_70_FONT_ID, montserratClock70FontFamily);
 
-  Serial.println("[FontManager] Initialized (Literata + Atkinson + Montserrat clock + SD streaming)");
+  FontPreviews::initialize(renderer);
+  Serial.println("[FontManager] Initialized (Literata + Atkinson + clock + SD streaming)");
 }
 
 /**

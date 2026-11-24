@@ -18,6 +18,8 @@
 #include "../Menu.h"
 #include "activity/ActivityWithSubactivity.h"
 #include "state/SystemSetting.h"
+#include "activity/page/navigation/Menu.h"
+#include "system/UiLayout.h"
 #include "system/UiTheme.h"
 
 class SystemSetting;
@@ -39,6 +41,7 @@ enum class GroupType {
   DEVICE_ACTIONS,
   IMAGE,
   APP_DRAWER,
+  THEME,
   // Keep IF_FOUND last: kGroupCount is derived from it, so a group added after
   // it would index past the end of groupExpanded_.
   IF_FOUND,
@@ -182,7 +185,10 @@ class CategorySettingsActivity final : public ActivityWithSubactivity, public Me
   bool halfRefreshOnLoadApplied_ = false;
   bool forceFullRefreshNext_ = false;  ///< One-shot: next render uses FULL_REFRESH (e.g. after a dark-mode toggle)
   bool selectorOpen = false;
+  bool groupOpen = false;
   uint8_t selectorMode = 0;
+  GroupType detailGroup = GroupType::NONE;
+  int detailScroll = 0;
   int selectedIndex = 0;
   int scrollOffset = 0;
   int itemsPerPage = 0;
@@ -201,6 +207,7 @@ class CategorySettingsActivity final : public ActivityWithSubactivity, public Me
   const std::function<void()> onTabLibrary;
   const std::function<void()> onTabSync;
   const std::function<void()> onTabStatistics;
+  bool embedded = false;
 
   struct MenuEntry {
     const char* name;
@@ -256,6 +263,11 @@ class CategorySettingsActivity final : public ActivityWithSubactivity, public Me
   void applySelectedOption(MenuEntry& entry, int optionIndex);
   /** Toggles expansion state of a settings group. */
   void toggleGroup(GroupType group);
+  void openGroup(GroupType group);
+  void closeGroup();
+  void detailRows(std::vector<int>& rows) const;
+  bool groupInput();
+  void renderGroupPage();
 
   /** Handles tab-bar navigation to another top-level activity. */
   void navigateToSelectedMenu() override;
@@ -268,7 +280,8 @@ class CategorySettingsActivity final : public ActivityWithSubactivity, public Me
                            std::function<void()> tabNavigateRecent = nullptr,
                            std::function<void()> tabNavigateLibrary = nullptr,
                            std::function<void()> tabNavigateSync = nullptr,
-                           std::function<void()> tabNavigateStatistics = nullptr)
+                           std::function<void()> tabNavigateStatistics = nullptr,
+                           bool embeddedMode = false)
       : ActivityWithSubactivity("CategorySettings", renderer, mappedInput),
         Menu(),
         categoryName(categoryName),
@@ -282,12 +295,17 @@ class CategorySettingsActivity final : public ActivityWithSubactivity, public Me
         onTabRecent(std::move(tabNavigateRecent)),
         onTabLibrary(std::move(tabNavigateLibrary)),
         onTabSync(std::move(tabNavigateSync)),
-        onTabStatistics(std::move(tabNavigateStatistics)) {
-    tabSelectorIndex = 3;
-    const int contentTop = mainContentTop() + mainHeaderHeight();
-    const int contentBottom = INX_THEME.mainTabsAtBottom() ? mainContentBottom(renderer) - kBottomButtonHintsHeight
-                                                           : renderer.getScreenHeight() - 80;
-    itemsPerPage = (contentBottom - contentTop) / UiTheme::DRAWER_LIST_ITEM_HEIGHT;
+        onTabStatistics(std::move(tabNavigateStatistics)),
+        embedded(embeddedMode) {
+    tabSelectorIndex = 3;  // E-inx's tab bar: Settings is the fourth tab
+    const int contentTop = embedded
+                               ? navigation::Menu::height + 20 + UiLayout::LIST_ITEM_HEIGHT + 10 + 30
+                               : mainContentTop() + mainHeaderHeight();
+    const int contentBottom = embedded
+                                  ? renderer.getScreenHeight() - navigation::Menu::bottomHeight - 10
+                                  : (INX_THEME.mainTabsAtBottom() ? mainContentBottom(renderer) - kBottomButtonHintsHeight
+                                                                   : renderer.getScreenHeight() - 80);
+    itemsPerPage = (contentBottom - contentTop) / UiLayout::LIST_ITEM_HEIGHT;
     if (itemsPerPage < 1) itemsPerPage = 1;
 
     groupExpanded_.fill(false);
@@ -295,4 +313,15 @@ class CategorySettingsActivity final : public ActivityWithSubactivity, public Me
   void onEnter() override;
   void onExit() override;
   void loop() override;
+  void renderEmbedded();
+  bool takeRenderRequest();
+  bool isDetailOpen() const { return isSubPageOpen() || isOverlayOpen(); }
+  bool isSubPageOpen() const { return embedded && (groupOpen || subActivity != nullptr); }
+  bool isOverlayOpen() const { return embedded && selectorOpen; }
+  bool isFirstItemSelected() const {
+    return embedded && !groupOpen && !selectorOpen && !subActivity && selectedIndex == 0;
+  }
+  void clearItemSelection() {
+    if (embedded && !groupOpen && !selectorOpen && !subActivity) selectedIndex = -1;
+  }
 };

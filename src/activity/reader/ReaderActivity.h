@@ -140,4 +140,5 @@ class ReaderActivity final : public ActivityWithSubactivity {
    */
   void onEnter() override;
   bool allowGlobalPowerRefresh() override { return false; }
+  bool isReadingActivity() const override { return true; }
 };

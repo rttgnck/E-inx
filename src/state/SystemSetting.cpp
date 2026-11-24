@@ -43,8 +43,10 @@ void readAndValidate(FsFile& file, uint8_t& member, const uint8_t maxValue) {
 }
 
 namespace {
-// E-inx: 44 is upstream's 37 layout (below, unchanged) with the E-inx fields appended after it.
-constexpr uint8_t SETTINGS_FILE_VERSION = 44;
+// E-inx: 44 is upstream's 37 layout (below, unchanged) with the E-inx fields appended after it. 45 appends
+// upstream 1.0.20's systemTextSize and E-inx's New UI / New reader switches; a v44 file reads as before and
+// gets their defaults.
+constexpr uint8_t SETTINGS_FILE_VERSION = 45;
 // E-inx files up to 43 are the pre-split layout, and loadLegacyEinxSettings() migrates them.
 constexpr uint8_t LEGACY_SETTINGS_FILE_VERSION = 43;
 constexpr uint8_t LEGACY_SETTINGS_COUNT = 102;
@@ -59,13 +61,13 @@ constexpr uint8_t LEGACY_SLEEP_IMAGE_ADVANCE_POWER = 7;
 // ReaderSetting.cpp for the new reader_settings.bin format (independently versioned from 1).
 constexpr uint8_t MIN_SUPPORTED_SETTINGS_VERSION = 44;
 // Must equal the number of data fields read by the do-while loop in loadFromFile() (currently 74:
-// upstream's 40 through showMenuClock, then 33 E-inx fields through deviceName - NOT counting the version/count header
+// upstream's 40 through showMenuClock, then 36 E-inx fields through newReader - NOT counting the version/count header
 // fields read separately before the loop). This is written into the file as its own "how many fields do I contain"
 // header and read back as fileSettingsCount; the loop's `settingsRead < fileSettingsCount` checks use it to know
 // whether the tail fields are actually present. If it's wrong, either the tail fields never get read back even though
 // they were written (undercount), or the file never triggers the self-healing rewrite on old-format files (overcount,
 // since fileSettingsCount can never reach it).
-constexpr uint8_t SETTINGS_COUNT = 73;
+constexpr uint8_t SETTINGS_COUNT = 76;
 constexpr uint8_t LEGACY_IMAGE_PRESENTATION_COUNT = 4;
 constexpr char SETTINGS_FILE[] = "/.system/settings.bin";
 constexpr char UI_THEME_FILE[] = "/.system/ui_theme.bin";
@@ -260,6 +262,9 @@ uint32_t settingsHash(const SystemSetting& settings) {
   hashPod(hash, settings.x3MaintenanceAction);
   hashPod(hash, settings.x3MaintenancePasses);
   hashString(hash, settings.deviceName);
+  hashPod(hash, settings.systemTextSize);
+  hashPod(hash, settings.newUi);
+  hashPod(hash, settings.newReader);
   return hash;
 }
 
@@ -270,7 +275,8 @@ const char* SystemSetting::readerButtonActionLabel(const uint8_t action) {
                                         "Open Settings", "Annotate",          "Dictionary",
                                         "Page Refresh",  "Chapter Skip Next", "Chapter Skip Previous",
                                         "Bookmark",      "Table of Contents", "Change Orientation",
-                                        "Apply Preset",  "Quick Actions"};
+                                        "Apply Preset",  "Quick Actions",     "Footnotes",
+                                        "Go to Percent"};
   if (action >= SystemSetting::READER_BUTTON_ACTION_COUNT) {
     return "None";
   }
@@ -406,6 +412,9 @@ bool SystemSetting::saveToFile() const {
   serialization::writePod(outputFile, x3MaintenanceAction);
   serialization::writePod(outputFile, x3MaintenancePasses);
   serialization::writeString(outputFile, std::string(deviceName));
+  serialization::writePod(outputFile, systemTextSize);
+  serialization::writePod(outputFile, newUi);
+  serialization::writePod(outputFile, newReader);
 
   outputFile.close();
   saveUiThemeSetting(uiTheme);
@@ -685,6 +694,15 @@ bool SystemSetting::loadFromFile() {
       strncpy(deviceName, value.c_str(), sizeof(deviceName) - 1);
       deviceName[sizeof(deviceName) - 1] = '\0';
     }
+    if (++settingsRead >= fileSettingsCount) break;
+
+    serialization::readPod(inputFile, systemTextSize);
+    if (++settingsRead >= fileSettingsCount) break;
+
+    serialization::readPod(inputFile, newUi);
+    if (++settingsRead >= fileSettingsCount) break;
+
+    serialization::readPod(inputFile, newReader);
     ++settingsRead;
 
   } while (false);
@@ -819,6 +837,9 @@ void SystemSetting::sanitizeEinxFields() {
   if (statusBarInnerRight >= STATUS_BAR_ITEM_COUNT) statusBarInnerRight = STATUS_ITEM_NONE;
   if (newsDownloadHour > 23) newsDownloadHour = 6;
   if (newsAutoDownload > 1) newsAutoDownload = 0;
+  if (systemTextSize >= SYSTEM_TEXT_SIZE_COUNT) systemTextSize = SYSTEM_TEXT_SMALL;
+  if (newUi > 1) newUi = 0;
+  if (newReader > 1) newReader = 0;
 }
 
 uint8_t SystemSetting::getSleepImageRotationMinutes() const {

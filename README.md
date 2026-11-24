@@ -10,6 +10,33 @@ E-inx is a community firmware for Xteink e-paper readers, forked from [Inx](http
 
 ![](./docs/images/cover.jpg)
 
+## What's New in E-inx 1.20.8-2
+
+Catches up with upstream Inx 1.0.20 (its `release/1.0.20` branch; upstream has not tagged 1.0.20 yet).
+
+- **Try upstream's new screens, or keep yours.** Two switches under Settings → Display, both off after the
+  update:
+  - **New UI** opens upstream's redesigned Home (with widgets), Library, Settings and Search. Off: the
+    6-tab screens, as before. Both use Atkinson Hyperlegible: upstream's Montserrat does not fit in flash
+    beside the built-in reading fonts.
+  - **New reader** makes Confirm open upstream's contents sidebar (hold it for KOReader sync). Off:
+    Confirm opens the reader menu and holding it adds a bookmark, as before.
+  - With New UI on, E-inx-only settings (Tab 2, App Drawer, X3 waveform, If Found) and the Games, News
+    and Stats tabs are reached by switching New UI off. Upstream's Library needs "Build library" once.
+- **Footnotes** open in a popup: bind a button to Footnotes under Settings → Buttons, or add it to Quick
+  Actions.
+- **Finished books** are marked at the last page instead of staying at 99%.
+- **Faster dictionary lookups**, matched from the book's markup and across hyphen-split words.
+- **Highlights** are drawn on every page they cover. **Go to Percent** no longer jumps twice. Numbered
+  lists show their numbers, and a stray first-line indent mid-paragraph is gone.
+- **Holding Power** no longer lets another button through, so going to sleep can't open the selected
+  book. Games that use Power with other buttons (PaperBoy's Select and save-and-exit) are unaffected.
+- **Calibre wireless transfer** is upstream's rewrite; it answers at your device name.
+- **Cleaning up:** Delete Cache can also clear thumbnails and the library index.
+- **Dark mode:** the screen after "Restarting to open this chapter" is no longer white.
+- Literata and Atkinson Hyperlegible stay built in for reading. Upstream's downloadable font packs are
+  extra choices.
+
 ## What's New in E-inx 1.19.8
 
 Catches up with upstream Inx 1.0.18 and 1.0.19.
@@ -603,7 +630,7 @@ Only uncompressed `.dict` files are supported. Compressed `.dict.dz` dictionarie
 
 ## Fonts
 
-E-inx includes built-in **Literata** and **Atkinson Hyperlegible** reader fonts.
+E-inx includes built-in **Literata** and **Atkinson Hyperlegible** reader fonts. The interface uses Atkinson Hyperlegible.
 
 You can also install fonts on the SD card:
 

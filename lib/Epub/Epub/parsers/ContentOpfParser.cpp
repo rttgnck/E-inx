@@ -10,6 +10,7 @@
 #include <Serialization.h>
 
 #include <cstring>
+#include <algorithm>
 
 #include "../BookMetadataCache.h"
 
@@ -25,6 +26,7 @@ const char* localName(const XML_Char* name) {
 bool xmlNameIs(const XML_Char* name, const char* expectedLocalName) {
   return strcmp(localName(name), expectedLocalName) == 0;
 }
+constexpr size_t kMaxDescriptionLength = 1024;
 }  // namespace
 
 bool ContentOpfParser::setup() {
@@ -120,6 +122,12 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
 
   if (self->state == IN_METADATA && xmlNameIs(name, "creator")) {
     self->state = IN_BOOK_AUTHOR;
+    return;
+  }
+
+  if (self->state == IN_METADATA &&
+      xmlNameIs(name, "description")) {
+    self->state = IN_BOOK_DESCRIPTION;
     return;
   }
 
@@ -287,6 +295,12 @@ void XMLCALL ContentOpfParser::characterData(void* userData, const XML_Char* s, 
     return;
   }
 
+  if (self->state == IN_BOOK_DESCRIPTION && self->description.size() < kMaxDescriptionLength) {
+    const size_t remaining = kMaxDescriptionLength - self->description.size();
+    self->description.append(s, std::min(static_cast<size_t>(len), remaining));
+    return;
+  }
+
   if (self->state == IN_BOOK_LANGUAGE) {
     self->language.append(s, len);
     return;
@@ -321,6 +335,12 @@ void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) 
   }
 
   if (self->state == IN_BOOK_AUTHOR && xmlNameIs(name, "creator")) {
+    self->state = IN_METADATA;
+    return;
+  }
+
+  if (self->state == IN_BOOK_DESCRIPTION &&
+      xmlNameIs(name, "description")) {
     self->state = IN_METADATA;
     return;
   }

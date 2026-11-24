@@ -31,6 +31,9 @@ class FontManager {
 
   static void initialize(GfxRenderer& renderer);
 
+  /** Points every interface font id, E-inx's and upstream's, at Atkinson Hyperlegible. */
+  static void applyUiFont(GfxRenderer& renderer, bool modern);
+
   static int getNextFont(int currentFontId);
 
   static int getMaxFontId(int currentFontId);

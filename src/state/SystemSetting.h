@@ -237,6 +237,18 @@ class SystemSetting {
   };
 
   /**
+   * @brief System UI text size options.
+   *
+   * These affect device UI text only; reader text sizing remains in ReaderSetting.
+   */
+  enum SYSTEM_TEXT_SIZE {
+    SYSTEM_TEXT_SMALL = 0,
+    SYSTEM_TEXT_MEDIUM = 1,
+    SYSTEM_TEXT_LARGE = 2,
+    SYSTEM_TEXT_SIZE_COUNT
+  };
+
+  /**
    * @brief Reader menu button assignment
    */
   enum READER_MENU_BUTTON {
@@ -255,6 +267,9 @@ class SystemSetting {
     LITERATA = 0,               ///< Literata (default body font)
     ATKINSON_HYPERLEGIBLE = 1,  ///< Atkinson Hyperlegible
     FONT_FAMILY_BUILTIN_COUNT,
+    // Upstream Inx 1.0.20 dropped Literata and made Montserrat its only built-in reading font. E-inx keeps
+    // both of its built-ins, so upstream code that asks for "the built-in sans" gets Atkinson.
+    MONTSERRAT = ATKINSON_HYPERLEGIBLE,
     FONT_FAMILY_COUNT = FONT_FAMILY_BUILTIN_COUNT  ///< Built-in count; reader option count includes SD families
   };
 
@@ -398,6 +413,8 @@ class SystemSetting {
     BTN_ACTION_CHANGE_ORIENTATION,
     BTN_ACTION_APPLY_PRESET,
     BTN_ACTION_QUICK_ACTIONS,
+    BTN_ACTION_FOOTNOTE,
+    BTN_ACTION_GO_TO_PERCENT,
     READER_BUTTON_ACTION_COUNT
   };
 
@@ -427,6 +444,13 @@ class SystemSetting {
     RECENT_ICONS = 5,            ///< 3x3 icon grid; scroll for more books
     RECENT_COVER = 6,            ///< Latest recent book cover with title, author, and progress
     RECENT_STATS = 7,            ///< Current book stats (reading time/pages/chapters/avg) + book list below
+    // Upstream Inx numbers the widgets below from 7; E-inx had already shipped RECENT_STATS as 7.
+    RECENT_CAROUSEL = 8,             ///< Left-layout recent carousel widget
+    RECENT_DASHBOARD = 9,            ///< inx-pro Recent widget above a left recent carousel
+    RECENT_GRID_2X2 = 10,            ///< Two-column, two-row recent widget
+    RECENT_DESCRIPTION = 11,         ///< Left cover carousel with title, author, and description
+    RECENT_BOOKSHELF = 12,           ///< Two-tier bookshelf of recent covers
+    RECENT_VERTICAL_BOOKSHELF = 13,  ///< Two-tier vertical-spine shelf with newest cover facing forward
     RECENT_LIBRARY_MODE_COUNT
   };
 
@@ -436,6 +460,7 @@ class SystemSetting {
   enum LIBRARY_MODE {
     LIBRARY_LIST = 0,  ///< Compact list browser
     LIBRARY_GRID = 1,  ///< 3x4 icon grid browser
+    LIBRARY_THUMBNAIL = 2,  ///< Inx-pro 2x2 thumbnail browser
     LIBRARY_MODE_COUNT
   };
 
@@ -576,10 +601,8 @@ class SystemSetting {
   uint8_t libraryMode = LIBRARY_GRID;            ///< Library browser display mode
   uint8_t libraryViewMode = LIBRARY_VIEW_SHELF;  ///< Last Library browser content view
   uint8_t libraryShelfEnabled = 1;               ///< Allow cover shelf view in Library
-  /** Hide on-screen button-hint bar on tabbed hub screens (experienced users). */
+  /** Hide on-screen button-hint chrome everywhere (hub, settings, reader overlays, side buttons). */
   uint8_t hideButtonHints = 0;
-  /** How many recent books to show on the Recent hub (1–8). */
-  uint8_t recentVisibleCount = 9;
   /** Library: 0 = folders and books A-Z only; 1 = use librarySortMode (favorites / groups / reading / tags). */
   uint8_t librarySortEnabled = 1;
   /** Library sort mode persisted when leaving Library (0=Title A–Z … 5=Read Z–A). */
@@ -644,6 +667,14 @@ class SystemSetting {
   uint8_t shakePageTurn = 0;
   /** X3 gyro threshold: 0=low, 1=normal, 2=high sensitivity. */
   uint8_t shakePageTurnSensitivity = 1;
+  /** System UI text size: Small=10pt, Medium=12pt, Large=14pt. */
+  uint8_t systemTextSize = SYSTEM_TEXT_SMALL;
+  /** How many recent books to show on the Recent hub (1–8). Upstream 1.0.20 dropped it; E-inx's screens use it. */
+  uint8_t recentVisibleCount = 9;
+  /** Upstream Inx 1.0.20's Home, Library, Settings and Search screens. Off: E-inx's tabs. */
+  uint8_t newUi = 0;
+  /** Upstream Inx 1.0.20's reader navigation (contents sidebar, Go to Percent). Off: E-inx's reader menu. */
+  uint8_t newReader = 0;
 
   ~SystemSetting() = default;
 

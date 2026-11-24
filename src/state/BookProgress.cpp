@@ -7,6 +7,7 @@
 
 #include <SDCardManager.h>
 
+#include <cstdint>
 #include <cstring>
 
 namespace {
@@ -63,11 +64,13 @@ bool BookProgress::validate(const Data& data, int totalSpines) const {
 }
 
 void BookProgress::sanitize(Data& data, int totalSpines) const {
-  if (totalSpines > 0) {
-    if (data.spineIndex >= totalSpines) {
-      data.spineIndex = 0;
-      data.pageNumber = 0;
-      data.chapterPageCount = 0;
-    }
+  if (totalSpines <= 0) {
+    return;
+  }
+  // Spine == total is the end-of-book sentinel. Clamp to the last real page instead of
+  // wiping back to chapter 0, which made finished books reopen at the start.
+  if (data.spineIndex >= static_cast<unsigned int>(totalSpines)) {
+    data.spineIndex = static_cast<unsigned int>(totalSpines - 1);
+    data.pageNumber = 0xFFFFu;
   }
 }

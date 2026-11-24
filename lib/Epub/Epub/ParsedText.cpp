@@ -268,7 +268,7 @@ bool ParsedText::reserveForNextWord() {
 
 void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle, const bool smallCaps,
                          const bool underline, const bool joinPrevious, const uint8_t verticalAlign,
-                         const int16_t xOffset) {
+                         const int16_t xOffset, std::string footnoteTarget) {
   if (word.empty()) return;
 
   if (!reserveForNextWord()) {
@@ -297,6 +297,15 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
     wordImagePaths.emplace_back();
     wordImageW.push_back(0);
     wordImageH.push_back(0);
+  }
+  // Same lazy-backfill as inline images: first footnote-marker word backfills empty targets for every
+  // word already added, so the list only exists at all once a block actually has one.
+  if (!footnoteTarget.empty() && !hasFootnoteLinks_) {
+    wordFootnoteTargets.assign(words.size() - 1, std::string());
+    hasFootnoteLinks_ = true;
+  }
+  if (hasFootnoteLinks_) {
+    wordFootnoteTargets.push_back(std::move(footnoteTarget));
   }
 }
 
@@ -339,6 +348,10 @@ void ParsedText::addImage(std::string cachePath, const uint16_t displayW, const 
   wordVerticalAlign.push_back(TextBlock::BASELINE);
   wordXOffset.push_back(0);
   wordJoinPrevious.push_back(0);
+  // An image slot is never itself a footnote marker, but the list must stay aligned with `words` once started.
+  if (hasFootnoteLinks_) {
+    wordFootnoteTargets.emplace_back();
+  }
   wordImagePaths.push_back(std::move(cachePath));
   wordImageW.push_back(displayW);
   wordImageH.push_back(displayH);
@@ -352,6 +365,10 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
   }
 
   applyParagraphIndent(renderer, fontId);
+
+  // A streaming pass is still inside the same paragraph even when it cannot extract a complete line yet.
+  // Set this before the early-return cases so the next pass never resolves a new first-line indent.
+  paragraphContinues_ = !includeLastLine;
 
   const int pageWidth = viewportWidth;
   // The word-spacing setting scales the natural inter-word space; it is baked into the line layout (xpos).
@@ -589,6 +606,11 @@ void ParsedText::applyParagraphIndent(const GfxRenderer& renderer, const int fon
     return;
   }
 
+  // Mid-paragraph continuation: keep the remaining indent state instead of resolving a fresh first-line indent.
+  if (paragraphContinues_) {
+    return;
+  }
+
   if (leftIndentWidth > 0 && leftIndentLineCount > 0) {
     return;
   }
@@ -750,6 +772,10 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   wordVerticalAlign.insert(at(wordVerticalAlign), verticalAlign);
   wordXOffset.insert(at(wordXOffset), 0);
   wordJoinPrevious.insert(at(wordJoinPrevious), 0);
+  // The second half of a split word is not a footnote marker; keep the list aligned with `words`.
+  if (hasFootnoteLinks_) {
+    wordFootnoteTargets.insert(at(wordFootnoteTargets), std::string());
+  }
   // The split halves are plain text — keep the parallel image lists aligned (only when this block has any).
   if (blockHasImages) {
     wordImagePaths.insert(at(wordImagePaths), std::string());
@@ -897,6 +923,12 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     }
   }
 
+  // Footnote targets exist only once this block has a footnote-marker word.
+  std::vector<std::string> lineWordFootnoteTargets;
+  if (!wordFootnoteTargets.empty()) {
+    lineWordFootnoteTargets = takeFront(wordFootnoteTargets);
+  }
+
   // Upstream Inx's compact TextBlock: a line whose styles are all regular stores none, and a byte
   // field with one value across the line stores that value instead of a per-word array.
   if (std::all_of(lineWordStyles.begin(), lineWordStyles.end(),
@@ -923,5 +955,5 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
                         std::move(lineBionicPrefixBytes), smallCapsDefault, std::move(lineWordSmallCaps), style,
                         underlineDefault, std::move(lineWordUnderline), verticalAlignDefault,
                         std::move(lineWordVerticalAlign), std::move(lineWordImagePaths), std::move(lineWordImageW),
-                        std::move(lineWordImageH)));
+                        std::move(lineWordImageH), std::move(lineWordFootnoteTargets)));
 }
