@@ -107,7 +107,13 @@ namespace crossplay {
  * bitmaps to a shared `images.dat`, which grows into the megabytes.
  */
 inline bool openFileForAppend(const char* moduleName, const char* path, FsFile& file) {
+#ifdef SIMULATOR
+  // The simulator's HalFile has no open(); its Storage.open() takes the same flags.
+  file = Storage.open(path, O_RDWR | O_CREAT | O_AT_END);
+  if (!file) {
+#else
   if (!file.open(path, O_RDWR | O_CREAT | O_AT_END)) {
+#endif
     LOG_ERR(moduleName, "Failed to open file for append: %s", path);
     return false;
   }

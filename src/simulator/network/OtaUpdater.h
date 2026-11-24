@@ -29,7 +29,17 @@ class OtaUpdater {
   const std::string& getLatestVersion() const;
   OtaUpdaterError checkForUpdate();
   OtaUpdaterError installUpdate(ProgressCallback onProgress, void* ctx);
-  OtaUpdaterError installUpdate() {
+  /** E-inx API: release notes and failure detail are empty in the simulator. */
+  const std::string& getReleaseNotes() const {
+    static const std::string empty;
+    return empty;
+  }
+  const std::string& getFailureDetail() const {
+    static const std::string detail = "OTA is not available in the simulator";
+    return detail;
+  }
+  OtaUpdaterError installUpdate(bool allowSameVersion = false) {
+    (void)allowSameVersion;
     processedSize = 1;
     totalSize = 1;
     return INTERNAL_UPDATE_ERROR;
