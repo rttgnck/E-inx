@@ -16,11 +16,11 @@
 class SystemSetting;
 struct SettingInfo;
 
-enum class SettingsPanel : uint8_t { System, Reader };
+enum class SettingsActivityPanel : uint8_t { System, Reader };
 
 class SettingsActivity final : public ActivityWithSubactivity, public Menu {
   bool updateRequired = false;
-  SettingsPanel currentPanel = SettingsPanel::System;
+  SettingsActivityPanel currentPanel = SettingsActivityPanel::System;
 
   bool isIndexing = false;
   int indexingProgress = 0;
@@ -84,7 +84,7 @@ class SettingsActivity final : public ActivityWithSubactivity, public Menu {
  private:
   AboutPage* aboutPage = nullptr;
 
-  static const char* panelBackLabel(SettingsPanel panel);
+  static const char* panelBackLabel(SettingsActivityPanel panel);
 
  public:
   SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,

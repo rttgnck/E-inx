@@ -519,6 +519,8 @@ void SleepActivity::onEnter() {
       sleepImageRenderSucceeded = renderCustomSleepScreen();
       break;
     case SystemSetting::SLEEP_SCREEN_MODE::COVER:
+      // Always the cover. Upstream Inx 1.0.20 shows the custom image when not sleeping from a reader;
+      // E-inx already offers that as HYBRID, so Cover keeps meaning "always the cover".
       renderCoverSleepScreen();
       break;
     case SystemSetting::SLEEP_SCREEN_MODE::HYBRID:

@@ -1,5 +1,7 @@
 #include "FontManager.h"
 
+#include "FontPreviews.h"
+
 #include <Arduino.h>
 
 #include <algorithm>
@@ -86,6 +88,30 @@ static std::string extractStyleFromFilename(const std::string& filename) {
 /**
  * @brief Initializes the font manager with built-in fonts
  */
+namespace {
+struct UiFontPair {
+  const EpdFontFamily* classic;  // Atkinson Hyperlegible, E-inx's interface font
+  const EpdFontFamily* modern;   // Montserrat, upstream Inx's new interface font
+};
+UiFontPair g_uiFonts[6] = {};
+constexpr int kAtkinsonUiIds[6] = {ATKINSON_HYPERLEGIBLE_8_FONT_ID,  ATKINSON_HYPERLEGIBLE_10_FONT_ID,
+                                   ATKINSON_HYPERLEGIBLE_12_FONT_ID, ATKINSON_HYPERLEGIBLE_14_FONT_ID,
+                                   ATKINSON_HYPERLEGIBLE_16_FONT_ID, ATKINSON_HYPERLEGIBLE_18_FONT_ID};
+constexpr int kMontserratUiIds[6] = {MONTSERRAT_8_FONT_ID,  MONTSERRAT_10_FONT_ID, MONTSERRAT_12_FONT_ID,
+                                     MONTSERRAT_14_FONT_ID, MONTSERRAT_16_FONT_ID, MONTSERRAT_18_FONT_ID};
+}  // namespace
+
+void FontManager::applyUiFont(GfxRenderer& renderer, const bool modern) {
+  for (int i = 0; i < 6; ++i) {
+    const EpdFontFamily* family = modern ? g_uiFonts[i].modern : g_uiFonts[i].classic;
+    if (!family) {
+      continue;
+    }
+    renderer.insertFont(kAtkinsonUiIds[i], *family);
+    renderer.insertFont(kMontserratUiIds[i], *family);
+  }
+}
+
 void FontManager::initialize(GfxRenderer& renderer) {
   g_renderer = &renderer;
 
@@ -173,6 +199,44 @@ void FontManager::initialize(GfxRenderer& renderer) {
       &atkinson_hyperlegible18RegularFont, &atkinson_hyperlegible18BoldFont, &atkinson_hyperlegible18ItalicFont,
       &atkinson_hyperlegible18BoldItalicFont);
 
+  static EpdFont montserrat8RegularFont(&montserrat_8_regular);
+  static EpdFontFamily montserrat8FontFamily(&montserrat8RegularFont, nullptr, nullptr, nullptr);
+
+  static EpdFont montserrat10RegularFont(&montserrat_10_regular);
+  static EpdFont montserrat10BoldFont(&montserrat_10_bold);
+  static EpdFont montserrat10ItalicFont(&montserrat_10_italic);
+  static EpdFont montserrat10BoldItalicFont(&montserrat_10_bolditalic);
+  static EpdFontFamily montserrat10FontFamily(&montserrat10RegularFont, &montserrat10BoldFont,
+                                              &montserrat10ItalicFont, &montserrat10BoldItalicFont);
+
+  static EpdFont montserrat12RegularFont(&montserrat_12_regular);
+  static EpdFont montserrat12BoldFont(&montserrat_12_bold);
+  static EpdFont montserrat12ItalicFont(&montserrat_12_italic);
+  static EpdFont montserrat12BoldItalicFont(&montserrat_12_bolditalic);
+  static EpdFontFamily montserrat12FontFamily(&montserrat12RegularFont, &montserrat12BoldFont,
+                                              &montserrat12ItalicFont, &montserrat12BoldItalicFont);
+
+  static EpdFont montserrat14RegularFont(&montserrat_14_regular);
+  static EpdFont montserrat14BoldFont(&montserrat_14_bold);
+  static EpdFont montserrat14ItalicFont(&montserrat_14_italic);
+  static EpdFont montserrat14BoldItalicFont(&montserrat_14_bolditalic);
+  static EpdFontFamily montserrat14FontFamily(&montserrat14RegularFont, &montserrat14BoldFont,
+                                              &montserrat14ItalicFont, &montserrat14BoldItalicFont);
+
+  static EpdFont montserrat16RegularFont(&montserrat_16_regular);
+  static EpdFont montserrat16BoldFont(&montserrat_16_bold);
+  static EpdFont montserrat16ItalicFont(&montserrat_16_italic);
+  static EpdFont montserrat16BoldItalicFont(&montserrat_16_bolditalic);
+  static EpdFontFamily montserrat16FontFamily(&montserrat16RegularFont, &montserrat16BoldFont,
+                                              &montserrat16ItalicFont, &montserrat16BoldItalicFont);
+
+  static EpdFont montserrat18RegularFont(&montserrat_18_regular);
+  static EpdFont montserrat18BoldFont(&montserrat_18_bold);
+  static EpdFont montserrat18ItalicFont(&montserrat_18_italic);
+  static EpdFont montserrat18BoldItalicFont(&montserrat_18_bolditalic);
+  static EpdFontFamily montserrat18FontFamily(&montserrat18RegularFont, &montserrat18BoldFont,
+                                              &montserrat18ItalicFont, &montserrat18BoldItalicFont);
+
   static EpdFont montserratClock70RegularFont(&montserrat_clock_70_regular);
   static EpdFont montserratClock70BoldFont(&montserrat_clock_70_bold);
   static EpdFontFamily montserratClock70FontFamily(&montserratClock70RegularFont, &montserratClock70BoldFont, nullptr,
@@ -184,15 +248,17 @@ void FontManager::initialize(GfxRenderer& renderer) {
   renderer.insertFont(LITERATA_16_FONT_ID, literata16RegularFontFamily);
   renderer.insertFont(LITERATA_18_FONT_ID, literata18RegularFontFamily);
 
-  renderer.insertFont(ATKINSON_HYPERLEGIBLE_8_FONT_ID, atkinson_hyperlegible8FontFamily);
-  renderer.insertFont(ATKINSON_HYPERLEGIBLE_10_FONT_ID, atkinson_hyperlegible10FontFamily);
-  renderer.insertFont(ATKINSON_HYPERLEGIBLE_12_FONT_ID, atkinson_hyperlegible12FontFamily);
-  renderer.insertFont(ATKINSON_HYPERLEGIBLE_14_FONT_ID, atkinson_hyperlegible14FontFamily);
-  renderer.insertFont(ATKINSON_HYPERLEGIBLE_16_FONT_ID, atkinson_hyperlegible16FontFamily);
-  renderer.insertFont(ATKINSON_HYPERLEGIBLE_18_FONT_ID, atkinson_hyperlegible18FontFamily);
+  g_uiFonts[0] = {&atkinson_hyperlegible8FontFamily, &montserrat8FontFamily};
+  g_uiFonts[1] = {&atkinson_hyperlegible10FontFamily, &montserrat10FontFamily};
+  g_uiFonts[2] = {&atkinson_hyperlegible12FontFamily, &montserrat12FontFamily};
+  g_uiFonts[3] = {&atkinson_hyperlegible14FontFamily, &montserrat14FontFamily};
+  g_uiFonts[4] = {&atkinson_hyperlegible16FontFamily, &montserrat16FontFamily};
+  g_uiFonts[5] = {&atkinson_hyperlegible18FontFamily, &montserrat18FontFamily};
+  applyUiFont(renderer, false);  // main.cpp applies the saved choice once settings are loaded
   renderer.insertFont(MONTSERRAT_CLOCK_70_FONT_ID, montserratClock70FontFamily);
 
-  Serial.println("[FontManager] Initialized (Literata + Atkinson + Montserrat clock + SD streaming)");
+  FontPreviews::initialize(renderer);
+  Serial.println("[FontManager] Initialized (Literata + Atkinson/Montserrat UI + clock + SD streaming)");
 }
 
 /**

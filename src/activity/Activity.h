@@ -98,4 +98,9 @@ class Activity {
 
   // Games with modifier controls own Power; main retains emergency restart.
   virtual bool handlesPowerButton() { return false; }
+  /**
+   * True while a book (or other document) is actually open. Sleep-from-home must not
+   * load the last book's cover as if the reader had been opened.
+   */
+  virtual bool isReadingActivity() const { return false; }
 };

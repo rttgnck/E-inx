@@ -28,26 +28,31 @@ class ClearCacheActivity final : public ActivityWithSubactivity {
   enum CacheGroup : uint8_t {
     GROUP_DISPLAY = 0,
     GROUP_BOOK = 1,
-    GROUP_RECENT = 2,
-    GROUP_READING_STATS = 3,
-    GROUP_NETWORK = 4,
-    GROUP_COUNT = 5
+    GROUP_THUMBNAILS = 2,
+    GROUP_RECENT = 3,
+    GROUP_READING_STATS = 4,  // E-inx
+    GROUP_LIBRARY_INDEX = 5,
+    GROUP_NETWORK = 6,
+    GROUP_COUNT = 7
   };
 
   State state = WARNING;
   TaskHandle_t displayTaskHandle = nullptr;
+  TaskHandle_t clearTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
   bool updateRequired = false;
   const std::function<void()> goBack;
 
   int clearedCount = 0;
   int failedCount = 0;
-  int selectedGroup = 0;
-  bool selectedGroups[GROUP_COUNT] = {true, true, true, false, false};
+  int selectedGroup = -1;
+  bool selectedGroups[GROUP_COUNT] = {true, true, false, true, false, false, false};
 
   static void taskTrampoline(void* param);
+  static void clearTaskTrampoline(void* param);
   [[noreturn]] void displayTaskLoop();
   void render();
+  void startClearTask();
   void clearCache();
   bool anyGroupSelected() const;
 };

@@ -28,7 +28,9 @@ namespace {
 // the image missing, and a cache-first load never retried it — so the fix for that fragmentation
 // could not reach the chapters it was meant to repair. Bumping the version retires those layouts.
 // 77: upstream Inx 1.0.19 merged in (its own history reached 76: natural-size CSS background HRs).
-constexpr uint8_t SECTION_FILE_VERSION = 77;
+// 82: upstream Inx 1.0.20 merged in (its own history reached 81: fixed paragraph alignment overrides CSS
+// text-align), with footnote markers in the layout.
+constexpr uint8_t SECTION_FILE_VERSION = 82;
 constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(float) + sizeof(bool) +
                                  sizeof(uint8_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) +
                                  sizeof(bool) + sizeof(uint16_t) + sizeof(uint32_t);

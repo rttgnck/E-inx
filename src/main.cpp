@@ -23,8 +23,10 @@
 #include <cctype>
 #include <cstring>
 #include <ctime>
+#include <functional>
 #include <new>
 #include <string>
+
 
 #include "activity/OpdsServerListActivity.h"
 #include "activity/games/AppsActivity.h"
@@ -33,10 +35,16 @@
 #include "activity/network/CalibreConnectActivity.h"
 #include "activity/network/HotspotActivity.h"
 #include "activity/network/LocalNetworkActivity.h"
+#include "activity/page/SettingsActivity.h"
+#include "activity/page/Home.h"
+#include "activity/page/HomeDescription.h"
+#include "activity/page/HomeSubPage.h"
+#include "activity/page/Library.h"
 #include "activity/page/LibraryActivity.h"
 #include "activity/page/NewsActivity.h"
 #include "activity/page/RecentActivity.h"
-#include "activity/page/SettingsActivity.h"
+#include "activity/page/Search.h"
+#include "activity/page/Settings.h"
 #include "activity/page/StatisticActivity.h"
 #include "activity/page/SyncActivity.h"
 #include "activity/reader/ImageViewerActivity.h"
@@ -353,6 +361,8 @@ void onGoToReader(std::string path);
 void onGoToReaderNavigation(std::string path);
 void onSelectBook(std::string path);
 void onSelectBookNavigation(std::string path);
+void onGoToDescription(const std::string& path);
+void openHomeSubPage(HomeSubPage::Section section);
 void onGoToRecent();
 void onGoToNews();
 void onGoToTab2();
@@ -367,6 +377,7 @@ void onGoToLibraryHotspot();
 void onGoToSettings();
 void onGoToLibrary(std::string path = "/");
 void onEditBookMetadata(std::string bookPath, std::string returnPath);
+void openSearchFromCallback(std::function<void()> returnToCaller);
 void setupDisplayAndFonts();
 void onNetworkModeSelected(NetworkMode mode);
 void openReaderFromCallback(std::string path);
@@ -408,6 +419,14 @@ T* switchTo(Args&&... args) {
  */
 void onGoToReader(std::string path) {
   switchTo<ReaderActivity>(render, input, path, [](const std::string&) { onGoToRecent(); });
+}
+
+void onGoToDescription(const std::string& path) {
+  switchTo<HomeDescription>(render, input, path, onGoToRecent);
+}
+
+void openHomeSubPage(const HomeSubPage::Section section) {
+  switchTo<HomeSubPage>(render, input, section, onGoToRecent);
 }
 
 bool isExportedNoteImage(const std::string& path) {
@@ -453,7 +472,7 @@ void onSelectBookNavigation(std::string path) { onGoToReaderNavigation(path); }
 /**
  * @brief Navigates to the statistics activity.
  */
-void onGoToStatistics() { switchTo<StatisticActivity>(render, input, onGoToRecent, onGoToFileTransfer); }
+void onGoToStatistics() { switchTo<StatisticActivity>(render, input, onGoToRecent); }
 
 /**
  * @brief Navigates to the recent books activity.
@@ -492,9 +511,18 @@ void onGoToTab2() {
 }
 
 void onGoToRecent() {
+  // Settings → Display → New UI picks upstream Inx's Home page or E-inx's Recent tab.
+  if (SETTINGS.newUi) {
+    switchTo<Home>(render, input);
+    return;
+  }
   switchTo<RecentActivity>(
       render, input, onGoToTab2, []() { onGoToLibrary("/"); }, onGoToStatistics, onSelectBook, onSelectBookNavigation,
       onGoToRecent);
+}
+
+void openSearchFromCallback(std::function<void()> returnToCaller) {
+  switchTo<Search>(render, input, std::move(returnToCaller));
 }
 
 void onGoToLibraryServer() {
@@ -545,6 +573,10 @@ void onGoToFileTransfer() {
  * @brief Navigates to the settings activity.
  */
 void onGoToSettings() {
+  if (SETTINGS.newUi) {
+    switchTo<Settings>(render, input);
+    return;
+  }
   switchTo<SettingsActivity>(
       render, input, onGoToRecent, []() { onGoToLibrary("/"); }, onGoToFileTransfer, onGoToStatistics);
 }
@@ -553,6 +585,11 @@ void onGoToSettings() {
  * @brief Navigates to the library activity.
  */
 void onGoToLibrary(std::string path) {
+  if (SETTINGS.newUi) {
+    // `class Library`: E-inx's tab icon is also called Library (images/Library.h).
+    switchTo<class Library>(render, input, path);
+    return;
+  }
   switchTo<LibraryActivity>(render, input, onGoToRecent, openReaderFromCallback, onGoToRecent, onGoToTab2,
                             onGoToSettings, onEditBookMetadata, path);
 }
@@ -905,10 +942,17 @@ void enterDeepSleep(const bool forceSleepImageAdvance, const bool continueExisti
   startDeepSleepCycle(sleptFromReader, continueExistingSleep, sleepActivity->didRenderSleepImage());
 }
 
+void setupDisplayAndHintsPolicy() {
+  // Honor Settings → "Hide button hints" for every call site (hub, settings, reader
+  // dictionary/annotation overlays, side-button chrome, etc.).
+  UiRender::setHintsHiddenFn([]() { return SETTINGS.hideButtonHints != 0; });
+}
+
 void setupDisplayAndFonts() {
   display.begin();
   render.begin();
   FontManager::initialize(render);
+  setupDisplayAndHintsPolicy();
 }
 
 bool handleGlobalPowerRefresh() {
@@ -929,6 +973,7 @@ bool handleGlobalPowerRefresh() {
 /**
  * @brief Set up application.
  */
+
 void setup() {
   t1 = millis();
   constexpr uint8_t POWER_BUTTON_GPIO = 3;
@@ -990,6 +1035,7 @@ void setup() {
   // reader_settings.bin, which READER_SETTINGS then reads.
   SETTINGS.loadFromFile();
   READER_SETTINGS.loadFromFile();
+  FontManager::applyUiFont(render, SETTINGS.newUi != 0);
   Serial.printf("[%lu] [BOOT] Settings OK, darkMode=%u, heap=%lu\n", millis(), SETTINGS.darkMode,
                 (unsigned long)esp_get_free_heap_size());
   OPDS_STORE.loadOrMigrate({"Default", SETTINGS.opdsServerUrl, SETTINGS.opdsUsername, SETTINGS.opdsPassword});
@@ -1104,6 +1150,15 @@ void loop() {
       enterDeepSleep();
       return;
     }
+  }
+
+  // Upstream Inx 1.0.20: ignore other input while Power is held, so a long press to sleep can't also fire
+  // Confirm and open the selected book. Screens that use Power with other buttons (the games: Power+Up is
+  // Select, Power+Confirm+Up saves and exits) keep receiving input.
+  if (gpio.isPressed(HalGPIO::BTN_POWER) && !gamePowerClaimed &&
+      (!currentActivity || !currentActivity->handlesPowerButton())) {
+    delay(10);
+    return;
   }
 
   if (handleGlobalPowerRefresh()) {
