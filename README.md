@@ -22,6 +22,8 @@ E-inx is a community firmware for Xteink e-paper readers, forked from [Inx](http
   once into that chapter on fresh memory and reopens the book there. If it still fails, the message
   stays up long enough to read. A repeat failure no longer deletes the book's cache, reading
   position, bookmarks and statistics.
+- Opening a book from the Library no longer reads its path after the Library screen is freed. It
+  worked only while that memory hadn't been reused.
 - Version jumps from 1.6.17-5 to 1.17.8 so the updater offers it over the 1.17.7-2 PaperBoy beta.
 
 ## What's New in E-inx 1.6.17-4
