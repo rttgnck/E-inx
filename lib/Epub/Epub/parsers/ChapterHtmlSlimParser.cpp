@@ -2231,12 +2231,28 @@ bool ChapterHtmlSlimParser::ensureImageCached(const std::string& internalPath, c
     }
     Serial.printf("[%lu] [EBP-IMG] post-extract BMP unreadable: %s\n", static_cast<unsigned long>(millis()),
                   cacheImgPath.c_str());
+    noteImageCacheFailure(internalPath);
     return false;
   }
 
   Serial.printf("[%lu] [EBP-IMG] ensureImageCached failed href=%s\n", static_cast<unsigned long>(millis()),
                 internalPath.c_str());
+  noteImageCacheFailure(internalPath);
   return false;
+}
+
+/**
+ * Counts an image the layout had to leave out, so the section can be rebuilt later instead of keeping
+ * the gap for good. Only the layout pass counts (the prefetch pass is retried by the layout pass), and
+ * only formats this reader can draw — an SVG or GIF will never extract, and retrying it would rebuild
+ * the chapter for nothing.
+ */
+void ChapterHtmlSlimParser::noteImageCacheFailure(const std::string& internalPath) {
+  if (imagePrefetchPassOnly_) return;
+  if (!hasJpegExt(internalPath) && !hasPngExt(internalPath) && !StringUtils::checkFileExtension(internalPath, ".bmp")) {
+    return;
+  }
+  ++imageCacheFailures_;
 }
 
 /**

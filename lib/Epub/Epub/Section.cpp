@@ -10,6 +10,7 @@
 #include <SDCardManager.h>
 #include <Serialization.h>
 
+#include <algorithm>
 #include <exception>
 #include <new>
 
@@ -18,16 +19,35 @@
 #include "parsers/ChapterHtmlSlimParser.h"
 
 namespace {
+// 66: chapters keep being cached without their images whenever the inflate window cannot be had at
+// parse time, and nothing ever built them again. Those layouts now carry a retry marker (below); this
+// retires the ones cached before the marker existed.
 // 65: retires anything cached by the build that reserved a 32 KB inflate window across the whole
 // parse — that reservation starved the parser of the heap it needed and truncated chapters.
 // 63: chapters parsed while the heap was too fragmented to inflate an image cached a layout with
 // the image missing, and a cache-first load never retried it — so the fix for that fragmentation
 // could not reach the chapters it was meant to repair. Bumping the version retires those layouts.
-constexpr uint8_t SECTION_FILE_VERSION = 65;
+constexpr uint8_t SECTION_FILE_VERSION = 66;
 constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(float) + sizeof(bool) +
                                  sizeof(uint8_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) +
                                  sizeof(bool) + sizeof(uint16_t) + sizeof(uint32_t);
 constexpr uint16_t MAX_CACHED_PAGE_OFFSETS = 2048;
+/**
+ * A chapter whose layout is missing images is rebuilt on later visits, up to this many times. The bound
+ * matters for a book whose image is simply broken — after that the layout without it is the answer.
+ */
+constexpr uint8_t kImageRetryLimit = 3;
+
+std::string imageRetryMarkerPath(const std::string& sectionPath) { return sectionPath + ".retry"; }
+
+uint8_t readImageRetryAttempts(const std::string& markerPath) {
+  FsFile marker;
+  if (!SdMan.openFileForRead("SCT", markerPath, marker)) return 0;
+  uint8_t attempts = 0;
+  if (marker.read(&attempts, 1) != 1) attempts = 0;
+  marker.close();
+  return attempts;
+}
 }  // namespace
 
 Section::~Section() {
@@ -426,6 +446,7 @@ bool Section::createSectionFile(const int fontId, const int headerFontId, const 
   }
 
   SdMan.remove(tmpHtmlPath.c_str());
+  const unsigned missingImages = visitor.imageCacheFailures();
 
   if (!success) {
     Serial.printf(
@@ -465,7 +486,35 @@ bool Section::createSectionFile(const int fontId, const int headerFontId, const 
   serialization::writePod(file, pageCount);
   serialization::writePod(file, lutOffset);
   file.close();
+  recordImageCompleteness(missingImages);
   return true;
+}
+
+/**
+ * The layout is cached cache-first, so a chapter parsed while an image could not be extracted would
+ * otherwise keep that gap permanently. A marker beside the layout, holding how many builds have come
+ * up short, tells the reader to build it again on a later visit; a complete build removes it.
+ */
+void Section::recordImageCompleteness(const unsigned missingImages) const {
+  const std::string markerPath = imageRetryMarkerPath(filePath);
+  if (missingImages == 0) {
+    if (SdMan.exists(markerPath.c_str())) SdMan.remove(markerPath.c_str());
+    return;
+  }
+  const uint8_t attempts = static_cast<uint8_t>(std::min<unsigned>(readImageRetryAttempts(markerPath) + 1u, 255u));
+  FsFile marker;
+  if (SdMan.openFileForWrite("SCT", markerPath, marker)) {
+    marker.write(&attempts, 1);
+    marker.close();
+  }
+  Serial.printf("[%lu] [SCT] spine=%d cached without %u image(s); build %u of %u\n", millis(), spineIndex,
+                missingImages, static_cast<unsigned>(attempts), static_cast<unsigned>(kImageRetryLimit));
+}
+
+bool Section::needsImageRetry() const {
+  const std::string markerPath = imageRetryMarkerPath(filePath);
+  if (!SdMan.exists(markerPath.c_str())) return false;
+  return readImageRetryAttempts(markerPath) < kImageRetryLimit;
 }
 
 /**
