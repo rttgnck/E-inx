@@ -1044,6 +1044,17 @@ void setup() {
 void loop() {
   gpio.update();
 
+  // Keep a game-owned Power press claimed through exit until physical release.
+  // Otherwise the 3-second Start+Select exit immediately triggers reader sleep.
+  static bool gamePowerClaimed = false;
+  static bool powerWasDown = false;
+  static unsigned long powerPressedAt = 0;
+  const bool powerDown = gpio.isPressed(HalGPIO::BTN_POWER);
+  if (powerDown && !powerWasDown) powerPressedAt = millis();
+  powerWasDown = powerDown;
+  if (!powerDown) gamePowerClaimed = false;
+  if (powerDown && currentActivity && currentActivity->handlesPowerButton()) gamePowerClaimed = true;
+
   if (lastActivityTime == 0) {
     markActivityNow();
   }
@@ -1062,14 +1073,17 @@ void loop() {
   }
 
   if (!powerSleepGuardActive() && gpio.isPressed(HalGPIO::BTN_POWER)) {
-    const unsigned long heldMs = gpio.getHeldTime();
-    Serial.printf("[%lu] [DBG] PRE-LOOP power held %lums (need %lums)\n", millis(), heldMs,
-                  (unsigned long)SETTINGS.getPowerButtonDuration());
+    const unsigned long heldMs = gamePowerClaimed ? millis() - powerPressedAt : gpio.getHeldTime();
+    if (!gamePowerClaimed) {
+      Serial.printf("[%lu] [DBG] PRE-LOOP power held %lums (need %lums)\n", millis(), heldMs,
+                    (unsigned long)SETTINGS.getPowerButtonDuration());
+    }
     if (heldMs >= 10000) {
       esp_restart();
       return;
     }
-    if (heldMs > SETTINGS.getPowerButtonDuration()) {
+    if (!gamePowerClaimed && (!currentActivity || !currentActivity->handlesPowerButton()) &&
+        heldMs > SETTINGS.getPowerButtonDuration()) {
       Serial.printf("[%lu] [DBG] PRE-LOOP -> enterDeepSleep\n", millis());
       enterDeepSleep();
       return;
@@ -1089,13 +1103,14 @@ void loop() {
   }
 
   if (!powerSleepGuardActive() && gpio.isPressed(HalGPIO::BTN_POWER)) {
-    const unsigned long heldMs = gpio.getHeldTime();
-    Serial.printf("[%lu] [DBG] POST-LOOP power held %lums\n", millis(), heldMs);
+    const unsigned long heldMs = gamePowerClaimed ? millis() - powerPressedAt : gpio.getHeldTime();
+    if (!gamePowerClaimed) Serial.printf("[%lu] [DBG] POST-LOOP power held %lums\n", millis(), heldMs);
     if (heldMs >= 10000) {
       esp_restart();
       return;
     }
-    if (heldMs > SETTINGS.getPowerButtonDuration()) {
+    if (!gamePowerClaimed && (!currentActivity || !currentActivity->handlesPowerButton()) &&
+        heldMs > SETTINGS.getPowerButtonDuration()) {
       Serial.printf("[%lu] [DBG] POST-LOOP -> enterDeepSleep\n", millis());
       enterDeepSleep();
       return;

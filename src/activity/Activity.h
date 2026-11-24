@@ -95,4 +95,7 @@ class Activity {
    * ReaderActivity opts out because book readers have their own short-power behavior setting.
    */
   virtual bool allowGlobalPowerRefresh() { return true; }
+
+  // Games with modifier controls own Power; main retains emergency restart.
+  virtual bool handlesPowerButton() { return false; }
 };

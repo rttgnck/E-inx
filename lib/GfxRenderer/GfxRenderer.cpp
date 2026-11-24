@@ -234,6 +234,21 @@ void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const
   display.displayBuffer(mode, turnOffScreen);
 }
 
+void GfxRenderer::displayGameBuffer() const {
+  HalDisplay::RefreshMode mode = HalDisplay::FAST_REFRESH;
+  if (nextRefreshOverridePending_) {
+    nextRefreshOverridePending_ = false;
+    mode = nextRefreshOverride_;
+  }
+  x3ReinforcedRefreshCount_ = 0;
+  x3CleanupRequired_ = false;
+#ifndef SIMULATOR
+  // Use the existing fast waveform without changing the user's reader settings.
+  display.setX3PageWaveform(2);
+#endif
+  display.displayBuffer(mode, false);
+}
+
 bool GfxRenderer::reinforcementEnabled(const ReinforcementTarget target) const {
   if (!deviceIsX3()) return false;
   const SystemSetting& settings = SystemSetting::getInstance();
