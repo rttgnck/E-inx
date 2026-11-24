@@ -19,6 +19,9 @@ class SystemSetting {
   SystemSetting() = default;
   static SystemSetting instance;
 
+  bool loadLegacyEinxSettings();
+  void sanitizeEinxFields();
+
  public:
   SystemSetting(const SystemSetting&) = delete;
   SystemSetting& operator=(const SystemSetting&) = delete;
@@ -150,6 +153,9 @@ class SystemSetting {
     STATUS_ITEM_SESSION_MINUTES_GOAL = 16,       ///< Session minutes / daily goal minutes
     STATUS_ITEM_SESSION_DAILY_GOAL = 17,         ///< Session minutes / today's minutes / daily goal minutes
     STATUS_ITEM_SESSION_DAILY = 18,              ///< Session minutes / today's minutes
+    // Upstream Inx numbers these 13 and 14; E-inx had already shipped 13-18 above, and the values are saved.
+    STATUS_ITEM_TIME_LEFT_CHAPTER = 19,  ///< Estimated time left in the current chapter (ETA feature)
+    STATUS_ITEM_TIME_LEFT_BOOK = 20,     ///< Estimated time left in the complete book (ETA feature)
     STATUS_BAR_ITEM_COUNT
   };
 
@@ -187,6 +193,7 @@ class SystemSetting {
     LEFT_RIGHT_BACK_CONFIRM = 1,  ///< Prev/Next on left, Back/Confirm on right
     LEFT_BACK_CONFIRM_RIGHT = 2,  ///< Prev on left, Back/Confirm in middle, Next on right
     BACK_CONFIRM_RIGHT_LEFT = 3,  ///< Back/Confirm on right, Prev/Next on left
+    LEFT_RIGHT_CONFIRM_BACK = 4,  ///< Prev/Next on left, Confirm/Back on right
     FRONT_BUTTON_LAYOUT_COUNT
   };
 
@@ -364,10 +371,39 @@ class SystemSetting {
     READER_PAGE_TURN = 0,     ///< Turn page
     READER_PAGE_REFRESH = 1,  ///< Refresh screen
     READER_ANNOTATE = 2,      ///< Enter EPUB highlight / annotation mode
+    READER_DICTIONARY = 3,    ///< Enter EPUB dictionary lookup mode
     READER_SHORT_PWRBTN_COUNT
   };
 
   enum XTC_SHORT_PWRBTN { XTC_POWER_NEXT = 0, XTC_POWER_PAGE_REFRESH = 1, XTC_SHORT_PWRBTN_COUNT };
+
+  /**
+   * @brief Action assignable to a reader button's short or long press. Supersedes the older, more
+   * bespoke readerDirectionMapping/longPressChapterSkip/readerMenuButton settings, which stay for
+   * serialization backward-compat but are no longer surfaced in the settings UI or consulted by the
+   * reader - see ReaderButtonBindings.
+   */
+  enum READER_BUTTON_ACTION {
+    BTN_ACTION_NONE = 0,
+    BTN_ACTION_PAGE_NEXT,
+    BTN_ACTION_PAGE_PREVIOUS,
+    BTN_ACTION_OPEN_SETTINGS,
+    BTN_ACTION_ANNOTATE,
+    BTN_ACTION_DICTIONARY,
+    BTN_ACTION_PAGE_REFRESH,
+    BTN_ACTION_CHAPTER_SKIP_NEXT,
+    BTN_ACTION_CHAPTER_SKIP_PREVIOUS,
+    BTN_ACTION_BOOKMARK,
+    BTN_ACTION_TABLE_OF_CONTENTS,
+    BTN_ACTION_CHANGE_ORIENTATION,
+    BTN_ACTION_APPLY_PRESET,
+    BTN_ACTION_QUICK_ACTIONS,
+    READER_BUTTON_ACTION_COUNT
+  };
+
+  /** Human-readable label for a READER_BUTTON_ACTION value - shared by the button-action pickers in
+   *  ReaderPresetsActivity, the Quick Actions checklist screen, and the in-reader quick-actions popup. */
+  static const char* readerButtonActionLabel(uint8_t action);
 
   /**
    * @brief Battery percentage display options
@@ -386,7 +422,7 @@ class SystemSetting {
     RECENT_GRID = 0,             ///< Grid view
     RECENT_LIST_DEPRECATED = 1,  ///< Removed mode; kept as a saved-settings alias for Flow
     RECENT_FLOW = 2,             ///< Flow carousel
-    RECENT_SIMPLE = 3,           ///< Simple: recent cover on top, favorites list below
+    RECENT_SIMPLE = 3,           ///< Legacy Simple mode; mapped to Flow
     RECENT_BOOK_LIST = 4,        ///< Vertical list: thumb left, title/author/progress (5 visible, scrollable)
     RECENT_ICONS = 5,            ///< 3x3 icon grid; scroll for more books
     RECENT_COVER = 6,            ///< Latest recent book cover with title, author, and progress
@@ -475,50 +511,23 @@ class SystemSetting {
   /** UTC offset in 15-minute steps, biased by +12h. 0=UTC-12:00, 80=UTC+08:00, 104=UTC+14:00. */
   uint8_t timeZoneQuarterOffset = 80;
 
-  uint8_t statusBar = FULL;  ///< Legacy status bar mode
-
-  uint8_t statusBarLeft = STATUS_ITEM_BATTERY_ICON_WITH_PERCENT;  ///< Left status bar section
-  uint8_t statusBarInnerLeft = STATUS_ITEM_NONE;                  ///< Inner-left status bar section
-  uint8_t statusBarMiddle = STATUS_ITEM_CHAPTER_TITLE;            ///< Middle status bar section
-  uint8_t statusBarInnerRight = STATUS_ITEM_NONE;                 ///< Inner-right status bar section
-  uint8_t statusBarRight = STATUS_ITEM_PAGE_NUMBERS;              ///< Right status bar section
-  uint8_t showBottomBarClock = 0;                                 ///< Show current time beside main-menu battery
-
-  uint8_t extraParagraphSpacing = 1;  ///< Extra paragraph spacing enabled
-  uint8_t textAntiAliasing = 0;       ///< Text anti-aliasing enabled
+  // E-inx status-bar slots between upstream's three, which live in ReaderSetting.
+  uint8_t statusBarInnerLeft = STATUS_ITEM_NONE;   ///< Inner-left status bar section
+  uint8_t statusBarInnerRight = STATUS_ITEM_NONE;  ///< Inner-right status bar section
+  /** X3 only: show the ambient clock (ScreenComponents::drawMenuClock) in the tab-bar chrome. */
+  uint8_t showMenuClock = 1;
 
   uint8_t shortPwrBtn = PAGE_REFRESH;  ///< Short power button behavior
-
-  uint8_t readerShortPwrBtn = READER_PAGE_TURN;  ///< Reader short power button behavior
-  uint8_t xtcShortPwrBtn = XTC_POWER_NEXT;       ///< XTC short power button behavior
-  uint8_t xtcPageAutoTurnSeconds = 0;            ///< XTC auto page turn interval, 0=off
-
-  uint8_t orientation = PORTRAIT;  ///< Screen orientation
 
   uint8_t frontButtonLayout = BACK_CONFIRM_LEFT_RIGHT;  ///< Front button layout
   uint8_t sideButtonLayout = PREV_NEXT;                 ///< Side button layout
 
-  uint8_t readerDirectionMapping = MAP_NONE;  ///< Reader direction mapping
-  uint8_t readerMenuButton = MENU_UP;         ///< Reader menu button assignment
   uint8_t mainMenuNav = MAIN_MENU_NAV_FRONT;  ///< Main-menu tab vs item navigation buttons
   uint8_t uiTheme = UI_THEME_CLASSIC;         ///< UI chrome theme
 
-  uint8_t fontFamily = LITERATA;           ///< Font family
-  uint8_t fontSize = SMALL;                ///< Font size
-  uint8_t lineHeight = 100;                ///< Reader line height, % of natural (10-200)
-  uint8_t textSpace = 100;                 ///< Reader word spacing, % of natural (10-200)
-  uint8_t paragraphAlignment = JUSTIFIED;  ///< Paragraph alignment
-  /** When set, EPUB/CSS `text-indent` is applied (reader "Indent"; passed to Section as respectCssParagraphIndent). */
-  uint8_t paragraphCssIndentEnabled = 0;
-
   uint8_t sleepTimeout = SLEEP_10_MIN;  ///< Sleep timeout
 
-  uint8_t refreshFrequency = REFRESH_15;  ///< Refresh frequency
-  uint8_t readerRefreshMode = READER_REFRESH_AUTO;
-  uint8_t hyphenationEnabled = 1;    ///< Hyphenation enabled
-  uint8_t bionicReadingEnabled = 0;  ///< Bionic Reading enabled
-
-  uint8_t screenMargin = 20;  ///< Screen margin in pixels
+  uint8_t readerRefreshMode = READER_REFRESH_AUTO;  ///< E-inx; the cadence itself is READER_SETTINGS.refreshFrequency
 
   char opdsServerUrl[128] = "";  ///< OPDS server URL
   char opdsUsername[64] = "";    ///< OPDS username
@@ -548,11 +557,12 @@ class SystemSetting {
   uint8_t newsDownloadHour = 6;
 
   uint8_t hideBatteryPercentage = HIDE_NEVER;  ///< Hide battery percentage setting
-  /** Long-press on prev/next: 0=off, 1=chapter skip (EPUB), 2=skip 5 pages (EPUB). Legacy files used 0/1 only. */
+  /** Long-press on prev/next: 0=off, 1=chapter skip (EPUB), 2=skip 5 pages (EPUB). Legacy files used 0/1 only.
+   *  The persisted value (ReaderSetting::longPressChapterSkip) moved to ReaderSetting; these named
+   *  constants stay here since BookSetting.h references them extensively as SystemSetting::XXX. */
   static constexpr uint8_t LONG_PRESS_OFF = 0;
   static constexpr uint8_t LONG_PRESS_CHAPTER_SKIP = 1;
   static constexpr uint8_t LONG_PRESS_PAGE_SKIP_5 = 2;
-  uint8_t longPressChapterSkip = LONG_PRESS_CHAPTER_SKIP;
   uint8_t useLibraryIndex = 0;  ///< Use library index enabled
   /** Half refresh once after first paint on hub screens (ghosting cleanup). */
   uint8_t refreshOnLoadRecent = 0;
@@ -566,6 +576,8 @@ class SystemSetting {
   uint8_t libraryMode = LIBRARY_GRID;            ///< Library browser display mode
   uint8_t libraryViewMode = LIBRARY_VIEW_SHELF;  ///< Last Library browser content view
   uint8_t libraryShelfEnabled = 1;               ///< Allow cover shelf view in Library
+  /** Hide on-screen button-hint bar on tabbed hub screens (experienced users). */
+  uint8_t hideButtonHints = 0;
   /** How many recent books to show on the Recent hub (1–8). */
   uint8_t recentVisibleCount = 9;
   /** Library: 0 = folders and books A-Z only; 1 = use librarySortMode (favorites / groups / reading / tags). */
@@ -592,12 +604,6 @@ class SystemSetting {
   uint8_t appDrawerAgentIsland = 1;
   ///@}
 
-  /**
-   * @brief Page auto-turn interval in seconds
-   * @details Values: 0 = off, increments of 10 (10, 20, 30, 40, 50, 60)
-   */
-  uint8_t pageAutoTurnSeconds = 0;
-
   /** Book image quality (READER_IMAGE_QUALITY): 0=Low(1-bit), 1=Medium(fast 2-bit grayscale),
    *  2=High(quality 2-bit grayscale with text preserved). */
   enum READER_IMAGE_QUALITY {
@@ -606,15 +612,6 @@ class SystemSetting {
     READER_IMAGE_HIGH = 2,    ///< 2-bit grayscale, quality LUT, text preserved
     READER_IMAGE_QUALITY_COUNT
   };
-  uint8_t readerImageGrayscale = READER_IMAGE_LOW;
-  uint8_t xtcImageQuality = READER_IMAGE_LOW;
-  uint8_t xtcRefreshFrequency = 15;  ///< XTC full refresh cadence in pages
-  /** When set, image-heavy EPUB pages use a gentler (half) refresh before/after transitions. */
-  uint8_t readerSmartRefreshOnImages = 1;
-  /** Legacy ignored value retained for settings-file compatibility. */
-  uint8_t legacyReaderImagePresentation = 1;
-  /** Legacy ignored value retained for settings-file compatibility. */
-  uint8_t readerImageDither = IMAGE_DITHER_ATKINSON;
   /** Legacy ignored value retained for settings-file compatibility. */
   uint8_t displayImageDither = IMAGE_DITHER_ATKINSON;
   /** Legacy ignored value retained for settings-file compatibility. */
@@ -670,22 +667,6 @@ class SystemSetting {
   uint16_t getPowerButtonDuration() const { return (shortPwrBtn == SystemSetting::SHORT_PWRBTN::SLEEP) ? 10 : 400; }
 
   /**
-   * @brief Gets reader font ID based on font family and size
-   * @return Font identifier for rendering
-   */
-  int getReaderFontId() const;
-
-  /**
-   * @brief Reader font ID for a given family and size (e.g. settings previews).
-   */
-  int getReaderFontIdForFamilyAndSize(uint8_t family, uint8_t size) const;
-
-  /**
-   * @brief Font ID for reader **settings UI** previews only (built-in; avoids loading SD streaming fonts in menus).
-   */
-  int getReaderFontIdForSettingsUi(uint8_t familySlot, uint8_t sizeIndex) const;
-
-  /**
    * @brief Validates and stores the fixed custom sleep image choice (basename under /sleep/ or SD-root sleep file).
    * @param s nullptr or empty string clears (random selection each sleep).
    */
@@ -702,15 +683,6 @@ class SystemSetting {
    * @return true if load successful, false otherwise
    */
   bool loadFromFile();
-
-  /**
-   * @brief Gets reader line compression factor based on font and spacing
-   * @return Line compression multiplier
-   */
-  float getReaderLineCompression() const;
-
-  /** Word-spacing multiplier (textSpace/100, 100 = natural inter-word space). */
-  float getReaderWordSpacingFactor() const;
 
   /**
    * @brief Gets sleep timeout in milliseconds
@@ -733,11 +705,6 @@ class SystemSetting {
   uint16_t getSleepImagePowerFirstPressMinMs() const;
   uint16_t getSleepImagePowerSecondPressMaxMs() const;
 
-  /**
-   * @brief Gets screen refresh frequency in pages
-   * @return Number of pages between refreshes
-   */
-  int getRefreshFrequency() const;
   int getX3ReinforceCleanInterval() const;
 
   /** The name as typed, for Bluetooth and for display. Never empty. */

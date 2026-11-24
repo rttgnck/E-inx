@@ -27,14 +27,12 @@
 #include <string>
 
 #include "activity/OpdsServerListActivity.h"
+#include "activity/games/AppsActivity.h"
+#include "activity/games/GamesActivity.h"
 #include "activity/network/BluetoothTransferActivity.h"
 #include "activity/network/CalibreConnectActivity.h"
 #include "activity/network/HotspotActivity.h"
 #include "activity/network/LocalNetworkActivity.h"
-#include "activity/games/AppsActivity.h"
-#include "activity/games/GamesActivity.h"
-#include "agentisland/AgentIslandActivity.h"
-#include "crossplay/CrossPlayActivity.h"
 #include "activity/page/LibraryActivity.h"
 #include "activity/page/NewsActivity.h"
 #include "activity/page/RecentActivity.h"
@@ -47,8 +45,11 @@
 #include "activity/system/BootActivity.h"
 #include "activity/system/SleepActivity.h"
 #include "activity/util/FullScreenMessageActivity.h"
+#include "agentisland/AgentIslandActivity.h"
+#include "crossplay/CrossPlayActivity.h"
 #include "state/BookState.h"
 #include "state/OpdsServerStore.h"
+#include "state/ReaderSetting.h"
 #include "state/RecentBooks.h"
 #include "state/Session.h"
 #include "state/SystemSetting.h"
@@ -66,6 +67,8 @@ HalDisplay display;
 HalGPIO gpio;
 #endif
 MappedInputManager input(gpio);
+// Upstream Inx's home screen reads this. E-inx stops at an SD error, so past boot it is always true.
+bool sdCardAvailable = false;
 GfxRenderer renderer(display);
 GfxRenderer& render = renderer;
 
@@ -559,10 +562,11 @@ void onEditBookMetadata(std::string bookPath, std::string returnPath) {
   std::string author;
   std::string language;
   bool favorite = false;
-  if (const BookState::Book* b = BOOK_STATE.findBookByPath(bookPath)) {
-    title = b->title;
-    author = b->author;
-    favorite = b->isFavorite;
+  BookState::Book tracked;
+  if (BOOK_STATE.findBook(bookPath, tracked)) {
+    title = tracked.title;
+    author = tracked.author;
+    favorite = tracked.isFavorite;
   }
   for (const auto& recent : RECENT_BOOKS.getBooks()) {
     if (recent.path == bookPath) {
@@ -975,13 +979,17 @@ void setup() {
     switchTo<FullScreenMessageActivity>(render, input, "SD card error", EpdFontFamily::BOLD);
     return;
   }
+  sdCardAvailable = true;
   Serial.printf("[%lu] [BOOT] SD OK\n", millis());
   APP_STATE.loadFromFile();
   Serial.printf("[%lu] [BOOT] APP_STATE.lastRead = \"%s\", rtcLastReadPath = \"%s\"\n", millis(),
                 APP_STATE.lastRead.c_str(), rtcLastReadPath);
 
   Serial.printf("[%lu] [BOOT] Loading settings\n", millis());
+  // System settings first: an E-inx 1.17.x settings.bin is migrated there, and the migration writes
+  // reader_settings.bin, which READER_SETTINGS then reads.
   SETTINGS.loadFromFile();
+  READER_SETTINGS.loadFromFile();
   Serial.printf("[%lu] [BOOT] Settings OK, darkMode=%u, heap=%lu\n", millis(), SETTINGS.darkMode,
                 (unsigned long)esp_get_free_heap_size());
   OPDS_STORE.loadOrMigrate({"Default", SETTINGS.opdsServerUrl, SETTINGS.opdsUsername, SETTINGS.opdsPassword});

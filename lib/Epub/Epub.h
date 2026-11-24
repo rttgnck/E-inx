@@ -90,7 +90,13 @@ class Epub {
   std::string getThumbBmpPath() const;
   std::string getThumbJpegPath() const;
   std::string getSmallThumbBmpPath() const;
-  bool generateThumbBmp() const;
+  /**
+   * @param skipCoverFallback When true, skip the "extract the cover image fresh and resize it" fallback -
+   * the caller already knows cover extraction just failed for this book, so retrying the same zip entry
+   * here would only waste time re-failing. The packaged META-INF/thumbnail.jpg path is independent of the
+   * cover and is still tried either way.
+   */
+  bool generateThumbBmp(bool skipCoverFallback = false) const;
 
   uint8_t* readItemContentsToBytes(const std::string& itemHref, size_t* size = nullptr,
                                    bool trailingNullByte = false) const;
@@ -113,7 +119,9 @@ class Epub {
   std::vector<std::string> getAllCssPaths() const;
   std::string getCombinedCss() const;
   /** Parsed book-level CSS dictionary shared by every chapter parser. Null when heap is too low. */
-  const CssParser* getParsedCssParser() const;
+  const CssParser* getParsedCssParser(const CssParser::UsageFilter* usageFilter = nullptr) const;
+  /** Releases the parsed CSS dictionary heap after a section build; the SD binary cache remains available. */
+  void releaseParsedCssParser() const;
 
   size_t getCumulativeSpineItemSize(int spineIndex) const;
   size_t getBookSize() const;

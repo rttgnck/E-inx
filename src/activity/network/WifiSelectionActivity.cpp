@@ -318,16 +318,12 @@ void WifiSelectionActivity::loop() {
   if (state == WifiSelectionState::SAVE_PROMPT) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
         mappedInput.wasPressed(MappedInputManager::Button::Left)) {
-      if (savePromptSelection > 0) {
-        savePromptSelection--;
-        updateRequired = true;
-      }
+      savePromptSelection = (savePromptSelection + 1) % 2;
+      updateRequired = true;
     } else if (mappedInput.wasPressed(MappedInputManager::Button::Down) ||
                mappedInput.wasPressed(MappedInputManager::Button::Right)) {
-      if (savePromptSelection < 1) {
-        savePromptSelection++;
-        updateRequired = true;
-      }
+      savePromptSelection = (savePromptSelection + 1) % 2;
+      updateRequired = true;
     } else if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       if (savePromptSelection == 0) {
         xSemaphoreTake(renderingMutex, portMAX_DELAY);
@@ -346,16 +342,12 @@ void WifiSelectionActivity::loop() {
   if (state == WifiSelectionState::FORGET_PROMPT) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
         mappedInput.wasPressed(MappedInputManager::Button::Left)) {
-      if (forgetPromptSelection > 0) {
-        forgetPromptSelection--;
-        updateRequired = true;
-      }
+      forgetPromptSelection = (forgetPromptSelection + 1) % 2;
+      updateRequired = true;
     } else if (mappedInput.wasPressed(MappedInputManager::Button::Down) ||
                mappedInput.wasPressed(MappedInputManager::Button::Right)) {
-      if (forgetPromptSelection < 1) {
-        forgetPromptSelection++;
-        updateRequired = true;
-      }
+      forgetPromptSelection = (forgetPromptSelection + 1) % 2;
+      updateRequired = true;
     } else if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       if (forgetPromptSelection == 1) {
         xSemaphoreTake(renderingMutex, portMAX_DELAY);
@@ -411,13 +403,14 @@ void WifiSelectionActivity::loop() {
     }
 
     if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
-      if (selectedNetworkIndex > 0) {
-        selectedNetworkIndex--;
+      if (!networks.empty()) {
+        selectedNetworkIndex =
+            (selectedNetworkIndex + static_cast<int>(networks.size()) - 1) % static_cast<int>(networks.size());
         updateRequired = true;
       }
     } else if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
-      if (!networks.empty() && selectedNetworkIndex < static_cast<int>(networks.size()) - 1) {
-        selectedNetworkIndex++;
+      if (!networks.empty()) {
+        selectedNetworkIndex = (selectedNetworkIndex + 1) % static_cast<int>(networks.size());
         updateRequired = true;
       }
     }

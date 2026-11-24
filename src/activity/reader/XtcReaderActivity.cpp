@@ -21,6 +21,7 @@
 #include <string>
 
 #include "activity/reader/ReaderRefresh.h"
+#include "state/ReaderSetting.h"
 #include "state/ReadingDailyStats.h"
 #include "state/RecentBooks.h"
 #include "state/Session.h"
@@ -112,28 +113,29 @@ const char* qualityLabel(const uint8_t quality) {
 
 const char* autoTurnLabel() {
   static char buf[12];
-  if (SETTINGS.xtcPageAutoTurnSeconds == 0) {
+  if (READER_SETTINGS.xtcPageAutoTurnSeconds == 0) {
     return "Off";
   }
-  snprintf(buf, sizeof(buf), "%u sec", SETTINGS.xtcPageAutoTurnSeconds);
+  snprintf(buf, sizeof(buf), "%u sec", READER_SETTINGS.xtcPageAutoTurnSeconds);
   return buf;
 }
 
 const char* refreshLabel() {
   static char buf[12];
-  snprintf(buf, sizeof(buf), "%u page%s", SETTINGS.xtcRefreshFrequency, SETTINGS.xtcRefreshFrequency == 1 ? "" : "s");
+  snprintf(buf, sizeof(buf), "%u page%s", READER_SETTINGS.xtcRefreshFrequency,
+           READER_SETTINGS.xtcRefreshFrequency == 1 ? "" : "s");
   return buf;
 }
 
 const char* powerLabel() {
-  return SETTINGS.xtcShortPwrBtn == SystemSetting::XTC_POWER_PAGE_REFRESH ? "Page Refresh" : "Next";
+  return READER_SETTINGS.xtcShortPwrBtn == SystemSetting::XTC_POWER_PAGE_REFRESH ? "Page Refresh" : "Next";
 }
 
 void changeAutoTurn(const int delta) {
-  int value = static_cast<int>(SETTINGS.xtcPageAutoTurnSeconds) + delta * 10;
+  int value = static_cast<int>(READER_SETTINGS.xtcPageAutoTurnSeconds) + delta * 10;
   if (value < 0) value = 60;
   if (value > 60) value = 0;
-  SETTINGS.xtcPageAutoTurnSeconds = static_cast<uint8_t>(value);
+  READER_SETTINGS.xtcPageAutoTurnSeconds = static_cast<uint8_t>(value);
 }
 
 void changeRefreshFrequency(const int delta) {
@@ -141,26 +143,26 @@ void changeRefreshFrequency(const int delta) {
   constexpr int count = static_cast<int>(sizeof(values) / sizeof(values[0]));
   int idx = 3;
   for (int i = 0; i < count; ++i) {
-    if (values[i] == SETTINGS.xtcRefreshFrequency) {
+    if (values[i] == READER_SETTINGS.xtcRefreshFrequency) {
       idx = i;
       break;
     }
   }
   idx = (idx + (delta >= 0 ? 1 : count - 1)) % count;
-  SETTINGS.xtcRefreshFrequency = values[idx];
+  READER_SETTINGS.xtcRefreshFrequency = values[idx];
 }
 
 void changeQuality(const int delta) {
   const int count = SystemSetting::READER_IMAGE_QUALITY_COUNT;
-  int value = static_cast<int>(SETTINGS.xtcImageQuality) + delta;
+  int value = static_cast<int>(READER_SETTINGS.xtcImageQuality) + delta;
   value = (value % count + count) % count;
-  SETTINGS.xtcImageQuality = static_cast<uint8_t>(value);
+  READER_SETTINGS.xtcImageQuality = static_cast<uint8_t>(value);
 }
 
 void changePowerButton() {
-  SETTINGS.xtcShortPwrBtn = SETTINGS.xtcShortPwrBtn == SystemSetting::XTC_POWER_NEXT
-                                ? SystemSetting::XTC_POWER_PAGE_REFRESH
-                                : SystemSetting::XTC_POWER_NEXT;
+  READER_SETTINGS.xtcShortPwrBtn = READER_SETTINGS.xtcShortPwrBtn == SystemSetting::XTC_POWER_NEXT
+                                       ? SystemSetting::XTC_POWER_PAGE_REFRESH
+                                       : SystemSetting::XTC_POWER_NEXT;
 }
 }  // namespace
 
@@ -263,7 +265,7 @@ void XtcReaderActivity::loop() {
     return;
   }
 
-  const bool usePressForPageTurn = SETTINGS.longPressChapterSkip == SystemSetting::LONG_PRESS_OFF;
+  const bool usePressForPageTurn = READER_SETTINGS.longPressChapterSkip == SystemSetting::LONG_PRESS_OFF;
   const MappedInputManager::MotionGesture motionGesture = mappedInput.readMotionGesture(
       static_cast<uint8_t>(renderer.getOrientation()), SETTINGS.shakePageTurn, SETTINGS.shakePageTurnSensitivity);
   const bool prevTriggered = motionGesture == MappedInputManager::MotionGesture::Previous ||
@@ -271,13 +273,13 @@ void XtcReaderActivity::loop() {
                                                      mappedInput.wasPressed(MappedInputManager::Button::Left))
                                                   : (mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
                                                      mappedInput.wasReleased(MappedInputManager::Button::Left)));
-  if (SETTINGS.xtcShortPwrBtn == SystemSetting::XTC_POWER_PAGE_REFRESH &&
+  if (READER_SETTINGS.xtcShortPwrBtn == SystemSetting::XTC_POWER_PAGE_REFRESH &&
       mappedInput.wasReleased(MappedInputManager::Button::Power)) {
     renderer.displayBuffer(HalDisplay::MANUAL_REFRESH);
     return;
   }
 
-  const bool powerPageTurn = SETTINGS.xtcShortPwrBtn == SystemSetting::XTC_POWER_NEXT &&
+  const bool powerPageTurn = READER_SETTINGS.xtcShortPwrBtn == SystemSetting::XTC_POWER_NEXT &&
                              mappedInput.wasReleased(MappedInputManager::Button::Power);
   const bool nextTriggered =
       motionGesture == MappedInputManager::MotionGesture::Next ||
@@ -287,9 +289,9 @@ void XtcReaderActivity::loop() {
                               mappedInput.wasReleased(MappedInputManager::Button::Right)));
 
   if (!prevTriggered && !nextTriggered) {
-    if (SETTINGS.xtcPageAutoTurnSeconds > 0 && xtc && xtc->getPageCount() > 0 && currentPage < xtc->getPageCount() &&
-        pageStartTime > 0 &&
-        millis() - pageStartTime >= static_cast<uint32_t>(SETTINGS.xtcPageAutoTurnSeconds) * 1000UL) {
+    if (READER_SETTINGS.xtcPageAutoTurnSeconds > 0 && xtc && xtc->getPageCount() > 0 &&
+        currentPage < xtc->getPageCount() && pageStartTime > 0 &&
+        millis() - pageStartTime >= static_cast<uint32_t>(READER_SETTINGS.xtcPageAutoTurnSeconds) * 1000UL) {
       turnPage(true);
     }
     return;
@@ -307,9 +309,9 @@ void XtcReaderActivity::loop() {
   }
 
   const bool skipPages =
-      SETTINGS.longPressChapterSkip != SystemSetting::LONG_PRESS_OFF && mappedInput.getHeldTime() > skipPageMs;
+      READER_SETTINGS.longPressChapterSkip != SystemSetting::LONG_PRESS_OFF && mappedInput.getHeldTime() > skipPageMs;
   const int skipAmount =
-      !skipPages ? 1 : (SETTINGS.longPressChapterSkip == SystemSetting::LONG_PRESS_PAGE_SKIP_5 ? 5 : 10);
+      !skipPages ? 1 : (READER_SETTINGS.longPressChapterSkip == SystemSetting::LONG_PRESS_PAGE_SKIP_5 ? 5 : 10);
 
   if (prevTriggered) {
     turnPage(false, skipAmount);
@@ -414,8 +416,8 @@ void XtcReaderActivity::handleMenuDrawerInput() {
       if (menuSelectedIndex == 2) changeRefreshFrequency(settingDelta);
       if (menuSelectedIndex == 3) changeQuality(settingDelta);
       if (menuSelectedIndex == 4) changePowerButton();
-      SETTINGS.saveToFile();
-      pagesUntilFullRefresh = SETTINGS.xtcRefreshFrequency;
+      READER_SETTINGS.saveToFile();
+      pagesUntilFullRefresh = READER_SETTINGS.xtcRefreshFrequency;
       renderMenuDrawer();
       return;
     }
@@ -430,20 +432,20 @@ void XtcReaderActivity::handleMenuDrawerInput() {
         }
       } else if (menuSelectedIndex == 1) {
         changeAutoTurn(1);
-        SETTINGS.saveToFile();
+        READER_SETTINGS.saveToFile();
         renderMenuDrawer();
       } else if (menuSelectedIndex == 2) {
         changeRefreshFrequency(1);
-        SETTINGS.saveToFile();
-        pagesUntilFullRefresh = SETTINGS.xtcRefreshFrequency;
+        READER_SETTINGS.saveToFile();
+        pagesUntilFullRefresh = READER_SETTINGS.xtcRefreshFrequency;
         renderMenuDrawer();
       } else if (menuSelectedIndex == 3) {
         changeQuality(1);
-        SETTINGS.saveToFile();
+        READER_SETTINGS.saveToFile();
         renderMenuDrawer();
       } else if (menuSelectedIndex == 4) {
         changePowerButton();
-        SETTINGS.saveToFile();
+        READER_SETTINGS.saveToFile();
         renderMenuDrawer();
       } else if (menuSelectedIndex == 5) {
         closeMenuDrawer(false);
@@ -513,7 +515,7 @@ void XtcReaderActivity::renderMenuMain() {
   const char* labels[itemCount] = {"Table of Contents", "Auto Page Turn", "Page Until Refresh",
                                    "Image Quality",     "Power Button",   "Go Home"};
   const char* values[itemCount] = {
-      "", autoTurnLabel(), refreshLabel(), qualityLabel(SETTINGS.xtcImageQuality), powerLabel(), ""};
+      "", autoTurnLabel(), refreshLabel(), qualityLabel(READER_SETTINGS.xtcImageQuality), powerLabel(), ""};
 
   for (int i = 0; i < visibleRows && menuScrollOffset + i < itemCount; ++i) {
     const int idx = menuScrollOffset + i;
@@ -735,19 +737,19 @@ void XtcReaderActivity::renderPage() {
 
     auto updateRefreshCadence = [&] {
       if (pagesUntilFullRefresh <= 1) {
-        pagesUntilFullRefresh = SETTINGS.xtcRefreshFrequency;
+        pagesUntilFullRefresh = READER_SETTINGS.xtcRefreshFrequency;
       } else {
         pagesUntilFullRefresh--;
       }
     };
 
-    const uint8_t imageQuality = SETTINGS.xtcImageQuality < SystemSetting::READER_IMAGE_QUALITY_COUNT
-                                     ? SETTINGS.xtcImageQuality
+    const uint8_t imageQuality = READER_SETTINGS.xtcImageQuality < SystemSetting::READER_IMAGE_QUALITY_COUNT
+                                     ? READER_SETTINGS.xtcImageQuality
                                      : SystemSetting::READER_IMAGE_LOW;
 
     if (imageQuality == SystemSetting::READER_IMAGE_LOW) {
       renderBwPreview();
-      ReaderRefresh::displayWithCycle(renderer, pagesUntilFullRefresh, SETTINGS.xtcRefreshFrequency,
+      ReaderRefresh::displayWithCycle(renderer, pagesUntilFullRefresh, READER_SETTINGS.xtcRefreshFrequency,
                                       SETTINGS.readerRefreshMode, false);
 
       free(pageBuffer);
@@ -782,7 +784,7 @@ void XtcReaderActivity::renderPage() {
     }
 
     renderBwPreview();
-    ReaderRefresh::displayWithCycle(renderer, pagesUntilFullRefresh, SETTINGS.xtcRefreshFrequency,
+    ReaderRefresh::displayWithCycle(renderer, pagesUntilFullRefresh, READER_SETTINGS.xtcRefreshFrequency,
                                     SETTINGS.readerRefreshMode, false);
 
     renderer.clearScreen(0x00);
@@ -844,7 +846,7 @@ void XtcReaderActivity::renderPage() {
 
   free(pageBuffer);
 
-  ReaderRefresh::displayWithCycle(renderer, pagesUntilFullRefresh, SETTINGS.xtcRefreshFrequency,
+  ReaderRefresh::displayWithCycle(renderer, pagesUntilFullRefresh, READER_SETTINGS.xtcRefreshFrequency,
                                   SETTINGS.readerRefreshMode, bitDepth == 1);
 
   Serial.printf("[%lu] [XTR] Rendered page %lu/%lu (%u-bit)\n", millis(), currentPage + 1, xtc->getPageCount(),

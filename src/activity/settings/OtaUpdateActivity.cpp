@@ -111,6 +111,25 @@ void drawUpdateProgressCard(const GfxRenderer& renderer, const int pageWidth, co
   }
   renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, barY + 26, metaLine.c_str(), true, EpdFontFamily::REGULAR);
 }
+
+void drawUpdateListRow(const GfxRenderer& renderer, const int pageWidth, const int itemY, const char* title,
+                       const char* value, const bool selected) {
+  if (selected) {
+    renderer.rectangle.fill(0, itemY, pageWidth, kFirmwareItemHeight, static_cast<int>(GfxRenderer::FillTone::Ink));
+  }
+
+  constexpr int labelFont = ATKINSON_HYPERLEGIBLE_8_FONT_ID;
+  constexpr int valueFont = ATKINSON_HYPERLEGIBLE_10_FONT_ID;
+  const int labelY = itemY + 7;
+  const int valueY = itemY + 25;
+  const int valueMaxW = pageWidth - 40;
+  const std::string clippedValue = renderer.text.truncate(valueFont, value ? value : "", valueMaxW);
+
+  renderer.text.render(labelFont, 20, labelY, title, !selected, EpdFontFamily::BOLD);
+  renderer.text.render(valueFont, 20, valueY, clippedValue.c_str(), !selected, EpdFontFamily::REGULAR);
+  renderer.line.render(0, itemY + kFirmwareItemHeight - 1, pageWidth, itemY + kFirmwareItemHeight - 1, true,
+                       LineRender::Style::Dotted);
+}
 }  // namespace
 
 void OtaUpdateActivity::taskTrampoline(void* param) {
@@ -134,8 +153,6 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
   xSemaphoreGive(renderingMutex);
   updateRequired = true;
   vTaskDelay(pdMS_TO_TICKS(450));
-  Serial.printf("[%lu] [OTA] free heap before update check: %u bytes\n", millis(),
-                static_cast<unsigned>(ESP.getFreeHeap()));
 
   const auto res = updater.checkForUpdate();
   if (res != OtaUpdater::OK) {
@@ -369,13 +386,13 @@ void OtaUpdateActivity::render() {
                            LineRender::Style::Dotted);
     }
     const auto labels = mappedInput.mapLabels("« Back", "Select", "", "");
-    renderButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else if (state == WIFI_SELECTION) {
     const int centerY = dividerY + (screenHeight - dividerY - 80) / 2;
     renderer.text.centered(ATKINSON_HYPERLEGIBLE_10_FONT_ID, centerY, "Choose a network above.", true,
                            EpdFontFamily::REGULAR);
     const auto labels = mappedInput.mapLabels("« Back", "", "", "");
-    renderButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else if (state == CHECKING_FOR_UPDATE) {
     const int centerY = dividerY + (screenHeight - dividerY - 80) / 2;
     renderer.text.centered(ATKINSON_HYPERLEGIBLE_10_FONT_ID, centerY, "Checking GitHub releases...", true,
@@ -422,7 +439,7 @@ void OtaUpdateActivity::render() {
       renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, 20, bodyTop + 32, "Put .bin files in / or /firmware.",
                            true, EpdFontFamily::REGULAR);
       const auto labels = mappedInput.mapLabels("« Back", "", "", "");
-      renderButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+      renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     } else {
       const int listBottom = screenHeight - 44;
       const int visibleRows = std::max(1, (listBottom - bodyTop) / kFirmwareItemHeight);
@@ -452,7 +469,7 @@ void OtaUpdateActivity::render() {
                              LineRender::Style::Dotted);
       }
       const auto labels = mappedInput.mapLabels("« Back", "Select", "Up", "Down");
-      renderButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+      renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     }
   } else if (state == WAITING_SD_CONFIRMATION) {
     const std::string& firmwarePath = selectedSdFirmwarePath();
@@ -476,13 +493,13 @@ void OtaUpdateActivity::render() {
       renderer.text.centered(ATKINSON_HYPERLEGIBLE_8_FONT_ID, centerY + 58,
                              "Keep the device powered on during install.", true, EpdFontFamily::REGULAR);
       const auto labels = mappedInput.mapLabels("Cancel", "Install", "", "");
-      renderButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+      renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     } else {
       const int centerY = dividerY + (screenHeight - dividerY - 80) / 2;
       renderer.text.centered(ATKINSON_HYPERLEGIBLE_10_FONT_ID, centerY, "Firmware file is missing.", true,
                              EpdFontFamily::REGULAR);
       const auto labels = mappedInput.mapLabels("« Back", "", "", "");
-      renderButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+      renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     }
   } else if (state == UPDATE_IN_PROGRESS) {
     drawUpdateProgressCard(renderer, pageWidth, bodyTop, screenHeight, updaterProgress, updater.getProcessedSize(),
@@ -507,7 +524,7 @@ void OtaUpdateActivity::render() {
     const int centerY = dividerY + (screenHeight - dividerY - 80) / 2;
     renderer.text.centered(ATKINSON_HYPERLEGIBLE_10_FONT_ID, centerY, "Update failed", true, EpdFontFamily::BOLD);
     const auto labels = mappedInput.mapLabels("« Back", "", "", "");
-    renderButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else if (state == FINISHED) {
     const int centerY = dividerY + (screenHeight - dividerY - 80) / 2;
     renderer.text.centered(ATKINSON_HYPERLEGIBLE_10_FONT_ID, centerY, "Update complete", true, EpdFontFamily::BOLD);

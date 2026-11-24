@@ -59,6 +59,7 @@ constexpr const char* kPackagedDeviceThumbnailPath = "META-INF/thumbnail.jpg";
 constexpr const char* kBookMetadataCacheFile = "/book.bin";
 constexpr int kThumbWidth = 225;
 constexpr int kThumbHeight = 340;
+const std::string kEmptyString;
 
 }  // namespace
 
@@ -402,7 +403,7 @@ bool Epub::generateCoverBmp(bool cropped) const {
 /**
  * @brief Builds cache thumbnails: prefers packaged `META-INF/thumbnail.jpg`, else creates a real cover thumbnail.
  */
-bool Epub::generateThumbBmp() const {
+bool Epub::generateThumbBmp(const bool skipCoverFallback) const {
   const std::string thumbJpegPath = getThumbJpegPath();
   const std::string thumbBmpPath = getThumbBmpPath();
   if (SdMan.exists(thumbJpegPath.c_str()) || SdMan.exists(thumbBmpPath.c_str())) {
@@ -431,26 +432,43 @@ bool Epub::generateThumbBmp() const {
     Serial.printf("[EBP] Packaged thumbnail present but extract failed: %s\n", kPackagedDeviceThumbnailPath);
   }
 
+  if (skipCoverFallback) {
+    Serial.printf("[EBP] Thumbnail fallback skipped: cover extraction already failed for %s\n", coverHref.c_str());
+    return false;
+  }
+
+  if (!isJpegFile(coverHref)) {
+    Serial.printf("[EBP] Thumbnail fallback skipped for non-JPEG cover: %s\n", coverHref.c_str());
+    return false;
+  }
+
+  // generateCoverBmp() already extracted this exact JPEG entry as a raw copy at getCoverJpegPath() when it
+  // succeeded - reuse it instead of extracting the same zip entry a second time.
+  const std::string cachedCoverJpegPath = getCoverJpegPath(false);
+  const bool haveCachedCover = SdMan.exists(cachedCoverJpegPath.c_str());
   const std::string tempPath = cachePath + "/.thumb_extract.tmp";
-  FsFile tempFile;
-
-  if (!SdMan.openFileForWrite("EBP", tempPath, tempFile)) {
-    return false;
-  }
-
-  bool extracted = readItemContentsToStream(coverHref, tempFile, 2048);
-  tempFile.sync();
-  tempFile.close();
-
-  if (!extracted) {
-    SdMan.remove(tempPath.c_str());
-    return false;
-  }
 
   FsFile sourceFile;
-  if (!SdMan.openFileForRead("EBP", tempPath, sourceFile)) {
-    SdMan.remove(tempPath.c_str());
-    return false;
+  if (haveCachedCover) {
+    if (!SdMan.openFileForRead("EBP", cachedCoverJpegPath, sourceFile)) {
+      return false;
+    }
+  } else {
+    FsFile tempFile;
+    if (!SdMan.openFileForWrite("EBP", tempPath, tempFile)) {
+      return false;
+    }
+    const bool extracted = readItemContentsToStream(coverHref, tempFile, 2048);
+    tempFile.sync();
+    tempFile.close();
+    if (!extracted) {
+      SdMan.remove(tempPath.c_str());
+      return false;
+    }
+    if (!SdMan.openFileForRead("EBP", tempPath, sourceFile)) {
+      SdMan.remove(tempPath.c_str());
+      return false;
+    }
   }
 
   bool success = true;
@@ -508,9 +526,12 @@ bool Epub::generateThumbBmp() const {
     Serial.printf("[EBP] Thumbnail unsupported cover type: %s\n", coverHref.c_str());
     success = false;
   }
+  Serial.printf("[EBP] Thumbnail JPEG resize %s: %s\n", success ? "ok" : "failed", thumbJpegPath.c_str());
 
   sourceFile.close();
-  SdMan.remove(tempPath.c_str());
+  if (!haveCachedCover) {
+    SdMan.remove(tempPath.c_str());
+  }
 
   return success;
 }
@@ -667,7 +688,15 @@ bool Epub::load(const bool buildIfMissing) {
   bookMetadataCache->endContentOpfPass();
 
   bookMetadataCache->beginCssPass();
-  if (!bookMetadataCache->extractAndCacheCssFiles(filepath)) {
+  bool cssExtracted = false;
+  try {
+    cssExtracted = bookMetadataCache->extractAndCacheCssFiles(filepath);
+  } catch (const std::bad_alloc&) {
+    Serial.printf("[EBP] Warning: Skipping CSS extraction due to low heap\n");
+  } catch (...) {
+    Serial.printf("[EBP] Warning: Skipping CSS extraction due to parser error\n");
+  }
+  if (!cssExtracted) {
     Serial.printf("[EBP] Warning: Failed to extract CSS files\n");
   }
   bookMetadataCache->endCssPass();
@@ -800,8 +829,7 @@ const std::string& Epub::getPath() const { return filepath; }
  * @return Book title string, empty if not loaded
  */
 const std::string& Epub::getTitle() const {
-  static std::string s;
-  return (bookMetadataCache && bookMetadataCache->isLoaded()) ? bookMetadataCache->coreMetadata.title : s;
+  return (bookMetadataCache && bookMetadataCache->isLoaded()) ? bookMetadataCache->coreMetadata.title : kEmptyString;
 }
 
 /**
@@ -810,8 +838,7 @@ const std::string& Epub::getTitle() const {
  * @return Author name string, empty if not loaded
  */
 const std::string& Epub::getAuthor() const {
-  static std::string s;
-  return (bookMetadataCache && bookMetadataCache->isLoaded()) ? bookMetadataCache->coreMetadata.author : s;
+  return (bookMetadataCache && bookMetadataCache->isLoaded()) ? bookMetadataCache->coreMetadata.author : kEmptyString;
 }
 
 /**
@@ -820,8 +847,7 @@ const std::string& Epub::getAuthor() const {
  * @return Language code string, empty if not loaded
  */
 const std::string& Epub::getLanguage() const {
-  static std::string s;
-  return (bookMetadataCache && bookMetadataCache->isLoaded()) ? bookMetadataCache->coreMetadata.language : s;
+  return (bookMetadataCache && bookMetadataCache->isLoaded()) ? bookMetadataCache->coreMetadata.language : kEmptyString;
 }
 
 /**
@@ -1048,13 +1074,18 @@ bool Epub::saveParsedCssCache() const {
   return renamed;
 }
 
-const CssParser* Epub::getParsedCssParser() const {
-  if (parsedCssLoaded_) {
+const CssParser* Epub::getParsedCssParser(const CssParser::UsageFilter* usageFilter) const {
+  const bool filtered = usageFilter != nullptr && !usageFilter->empty();
+  if (!filtered && parsedCssLoaded_) {
     return parsedCssParser_.get();
+  }
+  if (filtered) {
+    parsedCssParser_.reset();
+    parsedCssLoaded_ = false;
   }
   parsedCssLoaded_ = true;
 
-  if (loadParsedCssCache()) {
+  if (!filtered && loadParsedCssCache()) {
     return parsedCssParser_.get();
   }
 
@@ -1076,13 +1107,19 @@ const CssParser* Epub::getParsedCssParser() const {
     return parsedCssParser_.get();
   }
 
-  Serial.printf("[EBP] Building shared CSS dictionary from %d CSS files\n", cssCount);
+  Serial.printf("[EBP] Building %sCSS dictionary from %d CSS files\n", filtered ? "filtered " : "shared ", cssCount);
 
   constexpr size_t kMaxTotalCssSize = 192 * 1024;
-  constexpr uint32_t kCssReserveHeapBytes = 80 * 1024;
+  constexpr uint32_t kCssReserveHeapBytes = 96 * 1024;
+  constexpr uint32_t kCssEntryReadHeadroom = 56 * 1024;
   size_t totalCssSize = 0;
 
   for (int i = 0; i < cssCount && totalCssSize < kMaxTotalCssSize; ++i) {
+    if (ESP.getFreeHeap() < kCssReserveHeapBytes + kCssEntryReadHeadroom) {
+      Serial.printf("[EBP] CSS load stopped to reserve heap before file %d (free=%u, rules=%zu)\n", i,
+                    static_cast<unsigned>(ESP.getFreeHeap()), parsedCssParser_->getRuleCount());
+      break;
+    }
     try {
       const auto cssEntry = getCssItem(i);
       if (cssEntry.content.empty()) {
@@ -1094,7 +1131,12 @@ const CssParser* Epub::getParsedCssParser() const {
         continue;
       }
       totalCssSize += cssEntry.content.size();
-      parsedCssParser_->parse(cssEntry.content, cssEntry.path, kCssReserveHeapBytes);
+      parsedCssParser_->parse(cssEntry.content, cssEntry.path, kCssReserveHeapBytes, usageFilter);
+      if (ESP.getFreeHeap() < kCssReserveHeapBytes + kCssEntryReadHeadroom) {
+        Serial.printf("[EBP] CSS load stopped to reserve heap after file %d (free=%u, rules=%zu)\n", i,
+                      static_cast<unsigned>(ESP.getFreeHeap()), parsedCssParser_->getRuleCount());
+        break;
+      }
     } catch (const std::exception& e) {
       Serial.printf("[EBP] Shared CSS load aborted at file %d (%s); keeping %zu rules\n", i, e.what(),
                     parsedCssParser_->getRuleCount());
@@ -1106,12 +1148,23 @@ const CssParser* Epub::getParsedCssParser() const {
     }
   }
 
-  Serial.printf("[EBP] Shared CSS dictionary: %zu rules from %d bytes\n", parsedCssParser_->getRuleCount(),
-                static_cast<int>(totalCssSize));
-  if (!saveParsedCssCache()) {
+  Serial.printf("[EBP] %sCSS dictionary: %zu rules from %d bytes\n", filtered ? "Filtered " : "Shared ",
+                parsedCssParser_->getRuleCount(), static_cast<int>(totalCssSize));
+  if (filtered && parsedCssParser_->getRuleCount() == 0) {
+    parsedCssParser_.reset();
+    parsedCssLoaded_ = false;
+    return nullptr;
+  }
+  if (filtered) {
+  } else if (!saveParsedCssCache()) {
     Serial.printf("[EBP] Parsed CSS cache was not saved\n");
   }
   return parsedCssParser_.get();
+}
+
+void Epub::releaseParsedCssParser() const {
+  parsedCssParser_.reset();
+  parsedCssLoaded_ = false;
 }
 
 /**

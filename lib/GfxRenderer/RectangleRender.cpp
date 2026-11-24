@@ -11,7 +11,7 @@ int RoundedRectCornerRadius(const int width, const int height, const bool subtle
   if (m < 5) {
     return 1;
   }
-  int r = m / (subtle ? 20 : 10);
+  int r = m / (subtle ? 20 : 14);
   if (r < 2) {
     r = 2;
   }
@@ -132,16 +132,24 @@ void RectangleRender::fill(const int x, const int y, const int width, const int 
                            const bool rounded, const bool subtle) const {
   const auto fillTone = static_cast<GfxRenderer::FillTone>(tone);
   if (fillTone == GfxRenderer::FillTone::Gray) {
-    if (rounded) {
-      fill(x, y, width, height, static_cast<int>(GfxRenderer::FillTone::Ink), true, subtle);
-      return;
-    }
     const int x1 = std::max(0, x);
     const int y1 = std::max(0, y);
     const int x2 = std::min(gfx.getScreenWidth(), x + width);
     const int y2 = std::min(gfx.getScreenHeight(), y + height);
+    const int radius = rounded ? RoundedRectCornerRadius(width, height, subtle) : 0;
     for (int fy = y1; fy < y2; fy++) {
       for (int fx = x1; fx < x2; fx++) {
+        if (rounded && radius > 0) {
+          const int localX = fx - x;
+          const int localY = fy - y;
+          const int cx = localX < radius ? radius : (localX >= width - radius ? width - radius - 1 : localX);
+          const int cy = localY < radius ? radius : (localY >= height - radius ? height - radius - 1 : localY);
+          const int dx = localX - cx;
+          const int dy = localY - cy;
+          if (dx * dx + dy * dy > radius * radius) {
+            continue;
+          }
+        }
         gfx.drawPixel(fx, fy, ((fx + fy) & 1) == 0);
       }
     }

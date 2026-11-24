@@ -25,6 +25,8 @@ constexpr int kPngDitherSolidBlackMax = 32;
 constexpr int kPngDitherSolidWhiteMin = 255 - kPngDitherSolidBlackMax;
 constexpr int kPngTwoBitSolidBlackMax = 6;
 constexpr int kPngTwoBitSolidWhiteMin = 255;
+constexpr uint32_t kPngMaxSourceWidth = 4096;
+constexpr uint32_t kPngMaxSourceHeight = 4096;
 constexpr uint8_t kPngSignature[8] = {137, 80, 78, 71, 13, 10, 26, 10};
 
 enum PngColorType : uint8_t {
@@ -216,7 +218,8 @@ bool beginPng(FsFile& pngFile, PngContext& ctx) {
   const uint8_t interlace = ihdrRest[4];
   pngFile.seekCur(4);
 
-  if (compression != 0 || filter != 0 || interlace != 0 || width == 0 || height == 0 || width > 2048 || height > 3072) {
+  if (compression != 0 || filter != 0 || interlace != 0 || width == 0 || height == 0 || width > kPngMaxSourceWidth ||
+      height > kPngMaxSourceHeight) {
     return false;
   }
 
@@ -638,8 +641,8 @@ bool PngRender::getDimensions(FsFile& pngFile, int* outW, int* outH) {
   uint8_t ihdrType[4];
   const bool ok = pngFile.read(sig, 8) == 8 && memcmp(sig, kPngSignature, 8) == 0 && readBE32(pngFile, ihdrLen) &&
                   pngFile.read(ihdrType, 4) == 4 && memcmp(ihdrType, "IHDR", 4) == 0 && ihdrLen >= 13 &&
-                  readBE32(pngFile, width) && readBE32(pngFile, height) && width > 0 && height > 0 && width <= 2048 &&
-                  height <= 3072;
+                  readBE32(pngFile, width) && readBE32(pngFile, height) && width > 0 && height > 0 &&
+                  width <= kPngMaxSourceWidth && height <= kPngMaxSourceHeight;
   if (ok) {
     *outW = static_cast<int>(width);
     *outH = static_cast<int>(height);

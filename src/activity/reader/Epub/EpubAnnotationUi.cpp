@@ -50,10 +50,11 @@ void EpubAnnotationUi::clearWordIndexCache() {
 
 void EpubAnnotationUi::clearSessionAndCapture() {
   annotations_.clearSession();
-  pendingSpans_.clear();
+  std::vector<std::pair<size_t, size_t>>().swap(pendingSpans_);
   for (auto& ch : captureChunks_) {
     ch.reset();
   }
+  std::vector<std::unique_ptr<uint8_t[]>>().swap(captureChunks_);
   captureMonolithic_.reset();
   captureUsesMonolithic_ = false;
   captureBytes_ = 0;
@@ -123,7 +124,12 @@ void EpubAnnotationUi::clearAllStoredHighlightsOnCurrentPage(EpubActivity& act) 
   // Force full word-index rebuild so merge/geometry cannot reuse state tied to the deleted highlights.
   clearWordIndexCache();
   // Full redraw clears lattice from the framebuffer; then re-capture for annotation repaint path.
+  // Suppress drawUiOverlay() during this specific render - otherwise it redraws a cursor box at
+  // focus_ (word 0) before the capture, baking a stale highlight permanently into the "clean"
+  // snapshot that every later repaint() restores from, regardless of where focus_ moves next.
+  suppressOverlayDraw_ = true;
   act.renderScreen(true);
+  suppressOverlayDraw_ = false;
   captureFramebuffer(act);
   act.updateRequired = true;
 }
@@ -151,6 +157,10 @@ void EpubAnnotationUi::enter(EpubActivity& act) {
   if (!act.section || !act.epub) {
     return;
   }
+  // The Down+Right entry chord (and a plain long-press Down) leave the button held while
+  // handleInput() is about to stop running for the whole overlay session - reset its per-button
+  // state now so it doesn't misfire a stale long-press the instant this overlay exits.
+  act.btnBindings_.reset();
   mode_ = true;
   selectingStarted_ = false;
   pendingSpans_.clear();
@@ -178,16 +188,20 @@ void EpubAnnotationUi::enter(EpubActivity& act) {
 void EpubAnnotationUi::exit(EpubActivity& act) {
   mode_ = false;
   selectingStarted_ = false;
-  pendingSpans_.clear();
-  storedRanges_.clear();
-  words_.clear();
-  lineFirst_.clear();
+  // swap, not .clear() - .clear() empties the contents but keeps the heap capacity reserved for
+  // reuse; a page with many highlights/words can grow these well past what's needed once the UI
+  // closes (same fix as EpubDictionaryUi's releaseDefinitionMemory()).
+  std::vector<std::pair<size_t, size_t>>().swap(pendingSpans_);
+  std::vector<std::pair<size_t, size_t>>().swap(storedRanges_);
+  std::vector<PageWordHit>().swap(words_);
+  std::vector<size_t>().swap(lineFirst_);
   clearWordIndexCache();
   annLastNavEdgeDir_ = -1;
   annNavRepeatDir_ = -1;
   for (auto& ch : captureChunks_) {
     ch.reset();
   }
+  std::vector<std::unique_ptr<uint8_t[]>>().swap(captureChunks_);
   captureMonolithic_.reset();
   captureUsesMonolithic_ = false;
   captureBytes_ = 0;
@@ -258,8 +272,12 @@ bool EpubAnnotationUi::tryNavigationHoldRepeat(EpubActivity& act) {
   } else if (annNavRepeatDir_ == 1 && rightHeld) {
     moveFocusWord(1);
   } else if (annNavRepeatDir_ == 2 && upHeld) {
+    // Auto-repeat covers 2 lines/tick (vs. 1 for the initial press) - holding Up/Down would
+    // otherwise take forever to cross a full page at kNavRepeatIntervalMs.
+    moveFocusLine(-1);
     moveFocusLine(-1);
   } else if (annNavRepeatDir_ == 3 && downHeld) {
+    moveFocusLine(1);
     moveFocusLine(1);
   } else {
     annNavRepeatDir_ = -1;
@@ -524,7 +542,7 @@ void EpubAnnotationUi::drawHighlights(EpubActivity& act) {
 }
 
 void EpubAnnotationUi::drawUiOverlay(EpubActivity& act) {
-  if (!mode_) {
+  if (!mode_ || suppressOverlayDraw_) {
     return;
   }
   const GfxRenderer::Orientation o = act.renderer.getOrientation();
@@ -572,8 +590,7 @@ void EpubAnnotationUi::moveFocusLine(const int delta) {
       return;
     }
     lineIdx--;
-    const size_t end = lineFirst_[lineIdx + 1];
-    focus_ = end - 1;
+    focus_ = lineFirst_[lineIdx];
   } else {
     if (lineIdx + 1 >= lineFirst_.size()) {
       return;

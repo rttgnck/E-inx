@@ -9,6 +9,7 @@
 #include <cstdio>
 
 #include "Epub.h"
+#include "state/ReaderSetting.h"
 #include "state/SystemSetting.h"
 #include "system/Fonts.h"
 #include "system/UiTheme.h"
@@ -19,8 +20,9 @@ constexpr int LIST_ITEM_HEIGHT = UiTheme::DRAWER_LIST_ITEM_HEIGHT;
 constexpr float TOC_DRAWER_HEIGHT_PERCENT = 0.8f;
 
 namespace {
-constexpr int kDrawerHeaderHeight = UiTheme::DRAWER_HEADER_HEIGHT;
-constexpr int kDrawerListTop = kDrawerHeaderHeight + 1;
+int drawerHeaderHeight() { return INX_THEME.drawerHeaderHeight(); }
+
+int drawerListTop() { return drawerHeaderHeight() + 1; }
 constexpr int kDrawerListBottomPadding = UiTheme::DRAWER_LIST_BOTTOM_PADDING;
 
 bool isLandscapeReader(const GfxRenderer& gfx) {
@@ -36,10 +38,10 @@ bool readDrawerListPrev(const MappedInputManager& in, const GfxRenderer& r) {
   if (isLandscapeReader(r)) {
     return in.wasPressed(MappedInputManager::Button::Right) || in.wasPressed(MappedInputManager::Button::Up);
   }
-  if (SETTINGS.readerDirectionMapping == SystemSetting::READER_DIRECTION_MAPPING::MAP_NONE) {
+  if (READER_SETTINGS.readerDirectionMapping == SystemSetting::READER_DIRECTION_MAPPING::MAP_NONE) {
     return in.wasPressed(MappedInputManager::Button::Up) || in.wasPressed(MappedInputManager::Button::Left);
   }
-  switch (SETTINGS.readerDirectionMapping) {
+  switch (READER_SETTINGS.readerDirectionMapping) {
     case SystemSetting::READER_DIRECTION_MAPPING::MAP_RIGHT_LEFT:
       return in.wasPressed(MappedInputManager::Button::Right);
     case SystemSetting::READER_DIRECTION_MAPPING::MAP_UP_DOWN:
@@ -56,10 +58,10 @@ bool readDrawerListNext(const MappedInputManager& in, const GfxRenderer& r) {
   if (isLandscapeReader(r)) {
     return in.wasPressed(MappedInputManager::Button::Left) || in.wasPressed(MappedInputManager::Button::Down);
   }
-  if (SETTINGS.readerDirectionMapping == SystemSetting::READER_DIRECTION_MAPPING::MAP_NONE) {
+  if (READER_SETTINGS.readerDirectionMapping == SystemSetting::READER_DIRECTION_MAPPING::MAP_NONE) {
     return in.wasPressed(MappedInputManager::Button::Down) || in.wasPressed(MappedInputManager::Button::Right);
   }
-  switch (SETTINGS.readerDirectionMapping) {
+  switch (READER_SETTINGS.readerDirectionMapping) {
     case SystemSetting::READER_DIRECTION_MAPPING::MAP_RIGHT_LEFT:
       return in.wasPressed(MappedInputManager::Button::Left);
     case SystemSetting::READER_DIRECTION_MAPPING::MAP_UP_DOWN:
@@ -109,9 +111,11 @@ MenuDrawer::MenuDrawer(GfxRenderer& renderer, ActionCallback onAction, DismissCa
 
   menuItems.push_back({"Table of Contents", MenuAction::SELECT_CHAPTER});
   menuItems.push_back({"Go To Page", MenuAction::GO_TO_PAGE});
+  menuItems.push_back({"Apply Preset", MenuAction::APPLY_PRESET});
   menuItems.push_back({"Go To Percent", MenuAction::GO_TO_PERCENT});
   menuItems.push_back({"Show Bookmarks", MenuAction::SHOW_BOOKMARKS});
   menuItems.push_back({"Annotations", MenuAction::SHOW_ANNOTATIONS});
+  menuItems.push_back({"Dictionary", MenuAction::ENTER_DICTIONARY});
   menuItems.push_back({"KOReader Sync", MenuAction::KOREADER_SYNC});
   menuItems.push_back({"Delete Cache", MenuAction::DELETE_CACHE});
   menuItems.push_back({"Delete Progress", MenuAction::DELETE_PROGRESS});
@@ -157,7 +161,7 @@ void MenuDrawer::syncLayoutFromRenderer() {
     tocDrawerHeight = static_cast<int>(sh * TOC_DRAWER_HEIGHT_PERCENT);
     tocDrawerY = sh - tocDrawerHeight;
   }
-  itemsPerPage = std::max(1, (drawerHeight - kDrawerListTop - kDrawerListBottomPadding) / itemHeight);
+  itemsPerPage = std::max(1, (drawerHeight - drawerListTop() - kDrawerListBottomPadding) / itemHeight);
 }
 
 void MenuDrawer::relayoutForRendererChange() { syncLayoutFromRenderer(); }
@@ -229,6 +233,23 @@ void MenuDrawer::show() {
 }
 
 /**
+ * @brief Jumps straight to the Table of Contents view, skipping the main menu list.
+ */
+void MenuDrawer::showToc() {
+  showingToc = true;
+  int preferredTocIndex = -1;
+  if (epub && readerSpineIndex_ >= 0) {
+    const int ti = epub->getTocIndexForSpineIndex(readerSpineIndex_);
+    if (ti >= 0) {
+      preferredTocIndex = ti;
+    }
+  }
+  prepareTocForOpen(preferredTocIndex);
+  lastInputTime = xTaskGetTickCount();
+  renderWithRefresh();
+}
+
+/**
  * @brief Hides the menu drawer
  */
 void MenuDrawer::hide() {
@@ -284,7 +305,7 @@ void MenuDrawer::drawBackground() {
   renderer.rectangle.render(drawerX, drawerY, drawerWidth, drawerHeight, true);
 
   // Header band is the same height as a list item, title vertically centered, with a divider beneath it.
-  const int headerH = kDrawerHeaderHeight;
+  const int headerH = drawerHeaderHeight();
   const int titleY = drawerY + (headerH - renderer.text.getLineHeight(ATKINSON_HYPERLEGIBLE_12_FONT_ID)) / 2;
   renderer.text.render(ATKINSON_HYPERLEGIBLE_12_FONT_ID, drawerX + 20, titleY, "Reader Menu", true,
                        EpdFontFamily::BOLD);
@@ -309,7 +330,7 @@ void MenuDrawer::drawMenuItemRow(int visibleRow, int menuIndex) {
     return;
   }
 
-  const int startY = drawerY + kDrawerListTop;
+  const int startY = drawerY + drawerListTop();
   const int itemY = startY + (visibleRow * itemHeight);
   const auto& item = menuItems[static_cast<size_t>(menuIndex)];
   const bool isSelected = (menuIndex == selectedIndex);
@@ -334,7 +355,7 @@ void MenuDrawer::drawScrollIndicator() {
   int totalItems = (int)menuItems.size();
   if (totalItems <= itemsPerPage) return;
 
-  int startY = drawerY + kDrawerListTop;
+  int startY = drawerY + drawerListTop();
   int listHeight = itemsPerPage * itemHeight;
   int thumbH = (itemsPerPage * listHeight) / totalItems;
   int thumbY = startY + (scrollOffset * listHeight) / totalItems;
@@ -343,7 +364,7 @@ void MenuDrawer::drawScrollIndicator() {
 }
 
 void MenuDrawer::clearScrollIndicatorArea() {
-  const int startY = drawerY + kDrawerListTop;
+  const int startY = drawerY + drawerListTop();
   const int listHeight = itemsPerPage * itemHeight;
   renderer.rectangle.fill(drawerX + drawerWidth - 5, startY, 4, listHeight, false);
 }
@@ -374,7 +395,7 @@ void MenuDrawer::refreshMainMenuSelection(int previousIndex, bool redrawScrollIn
  * @return Number of items per page
  */
 int MenuDrawer::getTocPageItems() const {
-  int items = (tocDrawerHeight - kDrawerListTop - kDrawerListBottomPadding) / LIST_ITEM_HEIGHT;
+  int items = (tocDrawerHeight - drawerListTop() - kDrawerListBottomPadding) / LIST_ITEM_HEIGHT;
   return (items < 1) ? 1 : items;
 }
 
@@ -518,7 +539,7 @@ void MenuDrawer::renderToc() {
   drawTocBackground();
 
   // Header band is the same height as a list item, title vertically centered, with a divider beneath it.
-  const int headerH = kDrawerHeaderHeight;
+  const int headerH = drawerHeaderHeight();
   const int headerY = tocDrawerY + (headerH - renderer.text.getLineHeight(ATKINSON_HYPERLEGIBLE_12_FONT_ID)) / 2;
   renderer.text.render(ATKINSON_HYPERLEGIBLE_12_FONT_ID, tocDrawerX + 20, headerY, "Table of Contents", true,
                        EpdFontFamily::BOLD);
@@ -527,7 +548,7 @@ void MenuDrawer::renderToc() {
   renderer.line.render(tocDrawerX, dividerY, tocDrawerX + panelW, dividerY, true);
 
   const int pageStartIndex = (tocSelectedIndex / pageItems) * pageItems;
-  int drawY = tocDrawerY + kDrawerListTop;
+  int drawY = tocDrawerY + drawerListTop();
 
   if (totalItems == 0) {
     const int msgY = drawY + 24;
@@ -594,7 +615,7 @@ void MenuDrawer::renderBookmarks() {
 
   drawTocBackground();
 
-  const int headerH = kDrawerHeaderHeight;
+  const int headerH = drawerHeaderHeight();
   const int headerY = tocDrawerY + (headerH - renderer.text.getLineHeight(ATKINSON_HYPERLEGIBLE_12_FONT_ID)) / 2;
   renderer.text.render(ATKINSON_HYPERLEGIBLE_12_FONT_ID, tocDrawerX + 20, headerY, "Bookmarks", true,
                        EpdFontFamily::BOLD);
@@ -618,7 +639,7 @@ void MenuDrawer::renderBookmarks() {
   }
 
   const int pageStartIndex = (bookmarkSelectedIndex / pageItems) * pageItems;
-  int drawY = tocDrawerY + kDrawerListTop;
+  int drawY = tocDrawerY + drawerListTop();
 
   for (int i = 0; i < pageItems; i++) {
     const int itemIndex = pageStartIndex + i;
@@ -664,7 +685,7 @@ void MenuDrawer::renderAnnotations() {
 
   drawTocBackground();
 
-  const int headerH = kDrawerHeaderHeight;
+  const int headerH = drawerHeaderHeight();
   const int headerY = tocDrawerY + (headerH - renderer.text.getLineHeight(ATKINSON_HYPERLEGIBLE_12_FONT_ID)) / 2;
   renderer.text.render(ATKINSON_HYPERLEGIBLE_12_FONT_ID, tocDrawerX + 20, headerY, "Annotations", true,
                        EpdFontFamily::BOLD);
@@ -693,7 +714,7 @@ void MenuDrawer::renderAnnotations() {
   }
 
   const int pageStartIndex = (annotationSelectedIndex / pageItems) * pageItems;
-  int drawY = tocDrawerY + kDrawerListTop;
+  int drawY = tocDrawerY + drawerListTop();
 
   for (int i = 0; i < pageItems; i++) {
     const int itemIndex = pageStartIndex + i;
@@ -741,7 +762,7 @@ void MenuDrawer::renderPercent() {
   drawTocBackground();
 
   // Header band matches TOC/Bookmarks/Annotations exactly.
-  const int headerH = kDrawerHeaderHeight;
+  const int headerH = drawerHeaderHeight();
   const int headerY = tocDrawerY + (headerH - renderer.text.getLineHeight(ATKINSON_HYPERLEGIBLE_12_FONT_ID)) / 2;
   renderer.text.render(ATKINSON_HYPERLEGIBLE_12_FONT_ID, tocDrawerX + 20, headerY, "Go to Percent", true,
                        EpdFontFamily::BOLD);
@@ -1311,12 +1332,17 @@ void MenuDrawer::handleInput(MappedInputManager& input) {
 
   if (readDrawerListPrev(input, renderer)) {
     const int previousIndex = selectedIndex;
-    if (selectedIndex > 0) {
-      selectedIndex--;
-      const bool scrolled = selectedIndex < scrollOffset;
-      if (scrolled) {
+    const int totalItems = static_cast<int>(menuItems.size());
+    if (totalItems > 0) {
+      selectedIndex = (selectedIndex - 1 + totalItems) % totalItems;
+      const int maxScroll = std::max(0, totalItems - itemsPerPage);
+      bool scrolled = selectedIndex < scrollOffset || selectedIndex >= scrollOffset + itemsPerPage;
+      if (selectedIndex < scrollOffset) {
         scrollOffset = selectedIndex;
+      } else if (selectedIndex >= scrollOffset + itemsPerPage) {
+        scrollOffset = std::min(selectedIndex - itemsPerPage + 1, maxScroll);
       }
+      scrollOffset = std::max(0, std::min(scrollOffset, maxScroll));
       lastInputTime = currentTime;
       if (scrolled) {
         renderWithRefresh();
@@ -1326,13 +1352,17 @@ void MenuDrawer::handleInput(MappedInputManager& input) {
     }
   } else if (readDrawerListNext(input, renderer)) {
     const int previousIndex = selectedIndex;
-    if (selectedIndex < static_cast<int>(menuItems.size()) - 1) {
-      selectedIndex++;
-      int maxScroll = std::max(0, (int)menuItems.size() - itemsPerPage);
-      const bool scrolled = selectedIndex > scrollOffset + itemsPerPage - 1;
-      if (scrolled) {
+    const int totalItems = static_cast<int>(menuItems.size());
+    if (totalItems > 0) {
+      selectedIndex = (selectedIndex + 1) % totalItems;
+      const int maxScroll = std::max(0, totalItems - itemsPerPage);
+      bool scrolled = selectedIndex < scrollOffset || selectedIndex >= scrollOffset + itemsPerPage;
+      if (selectedIndex < scrollOffset) {
+        scrollOffset = selectedIndex;
+      } else if (selectedIndex >= scrollOffset + itemsPerPage) {
         scrollOffset = std::min(selectedIndex - itemsPerPage + 1, maxScroll);
       }
+      scrollOffset = std::max(0, std::min(scrollOffset, maxScroll));
       lastInputTime = currentTime;
       if (scrolled) {
         renderWithRefresh();

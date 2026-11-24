@@ -121,7 +121,6 @@ KOReaderSyncClient::Error KOReaderSyncClient::authenticate() {
 
   std::string url = KOREADER_STORE.getBaseUrl() + "/users/auth";
   const uint32_t freeHeap = ESP.getFreeHeap();
-  Serial.printf("[%lu] [KOSync] Authenticating: %s heap=%u\n", millis(), url.c_str(), (unsigned)freeHeap);
   if (freeHeap < MIN_HEAP_FOR_TLS) {
     Serial.printf("[%lu] [KOSync] Insufficient heap for TLS: %u bytes free\n", millis(), (unsigned)freeHeap);
     return LOW_MEMORY;
@@ -152,7 +151,6 @@ KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& doc
 
   std::string url = KOREADER_STORE.getBaseUrl() + "/syncs/progress/" + documentHash;
   const uint32_t freeHeap = ESP.getFreeHeap();
-  Serial.printf("[%lu] [KOSync] Getting progress: %s heap=%u\n", millis(), url.c_str(), (unsigned)freeHeap);
   if (freeHeap < MIN_HEAP_FOR_TLS) {
     Serial.printf("[%lu] [KOSync] Insufficient heap for TLS: %u bytes free\n", millis(), (unsigned)freeHeap);
     return LOW_MEMORY;
@@ -203,7 +201,6 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
 
   std::string url = KOREADER_STORE.getBaseUrl() + "/syncs/progress";
   const uint32_t freeHeap = ESP.getFreeHeap();
-  Serial.printf("[%lu] [KOSync] Updating progress: %s heap=%u\n", millis(), url.c_str(), (unsigned)freeHeap);
   if (freeHeap < MIN_HEAP_FOR_TLS) {
     Serial.printf("[%lu] [KOSync] Insufficient heap for TLS: %u bytes free\n", millis(), (unsigned)freeHeap);
     return LOW_MEMORY;

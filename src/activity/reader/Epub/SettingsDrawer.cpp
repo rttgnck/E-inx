@@ -10,7 +10,9 @@
 #include <string>
 
 #include "../../settings/ReaderFontSettingsDraw.h"
+#include "StatusBar.h"
 #include "state/ReaderPreset.h"
+#include "state/ReaderSetting.h"
 #include "state/SystemSetting.h"
 #include "system/FontManager.h"
 #include "system/Fonts.h"
@@ -21,8 +23,11 @@
 constexpr int LIST_ITEM_HEIGHT = UiTheme::DRAWER_LIST_ITEM_HEIGHT;
 
 namespace {
-constexpr int kDrawerHeaderHeight = UiTheme::DRAWER_HEADER_HEIGHT;
-constexpr int kDrawerListTop = kDrawerHeaderHeight + 1;
+const char* statusBarItemName(const StatusBarItem item) { return SettingsDrawer::getStatusBarItemName(item); }
+
+int drawerHeaderHeight() { return INX_THEME.drawerHeaderHeight(); }
+
+int drawerListTop() { return drawerHeaderHeight() + 1; }
 constexpr int kDrawerListBottomPadding = UiTheme::DRAWER_LIST_BOTTOM_PADDING;
 constexpr int kDrawerHeaderHPad = 20;
 constexpr int kDrawerHeaderPillPadX = 10;
@@ -131,21 +136,21 @@ void SettingsDrawer::setEmbeddedRegion(int x, int y, int w, int h) {
   drawerY = y;
   drawerWidth = w;
   drawerHeight = h;
-  itemsPerPage = std::max(1, (drawerHeight - kDrawerListTop - kDrawerListBottomPadding) / itemHeight);
+  itemsPerPage = std::max(1, (drawerHeight - drawerListTop() - kDrawerListBottomPadding) / itemHeight);
 }
 
 int SettingsDrawer::snapEmbeddedHeight(int maxHeight) const {
   // Largest height <= maxHeight that fits a whole number of rows under the header, so the embedded
   // drawer has no dead space below the last row.
-  const int usable = maxHeight - kDrawerListTop - kDrawerListBottomPadding;
+  const int usable = maxHeight - drawerListTop() - kDrawerListBottomPadding;
   const int rows = std::max(1, usable / itemHeight);
-  return kDrawerListTop + rows * itemHeight + kDrawerListBottomPadding;
+  return drawerListTop() + rows * itemHeight + kDrawerListBottomPadding;
 }
 
 void SettingsDrawer::syncLayoutFromRenderer() {
   if (embedded_) {
     // Keep the host-provided region; just recompute how many rows fit.
-    itemsPerPage = std::max(1, (drawerHeight - kDrawerListTop - kDrawerListBottomPadding) / itemHeight);
+    itemsPerPage = std::max(1, (drawerHeight - drawerListTop() - kDrawerListBottomPadding) / itemHeight);
     return;
   }
   const int sw = renderer.getScreenWidth();
@@ -161,7 +166,7 @@ void SettingsDrawer::syncLayoutFromRenderer() {
     drawerHeight = sh * kPortraitDrawerHeightPercent / 100;
     drawerY = sh - drawerHeight;
   }
-  itemsPerPage = std::max(1, (drawerHeight - kDrawerListTop - kDrawerListBottomPadding) / itemHeight);
+  itemsPerPage = std::max(1, (drawerHeight - drawerListTop() - kDrawerListBottomPadding) / itemHeight);
 }
 
 /**
@@ -305,7 +310,7 @@ void SettingsDrawer::setupMenu() {
     alignEntry.group = GroupType::LAYOUT;
     alignEntry.name = "Paragraph Alignment";
     alignEntry.getValueText = [](const BookSettings& s) -> const char* {
-      static const char* align[] = {"Justify", "Left", "Center", "Right", "Css"};
+      static const char* align[] = {"Justify", "Left", "Center", "Right", "Book's style"};
       int index = s.paragraphAlignment;
       if (index > 4) index = 0;
       return align[index];
@@ -405,6 +410,26 @@ void SettingsDrawer::setupMenu() {
       s.markCustomSettings();
     };
     menuItems.push_back(bionicEntry);
+
+    // Per-book (pure visual overlay, never baked into layout/cache) — same pattern as hyphenation/bionic above.
+    MenuEntry guideLinesEntry;
+    guideLinesEntry.item = MenuItem::ReadingGuideLines;
+    guideLinesEntry.group = GroupType::LAYOUT;
+    guideLinesEntry.name = "Guide Lines";
+    guideLinesEntry.getValueText = [](const BookSettings& s) -> const char* {
+      static const char* styles[] = {"Off", "Grid", "Notebook"};
+      int index = s.readingGuideLinesEnabled;
+      if (index > 2) index = 0;
+      return styles[index];
+    };
+    guideLinesEntry.change = [](BookSettings& s, int delta) {
+      int newVal = s.readingGuideLinesEnabled + delta;
+      if (newVal >= 0 && newVal <= 2) {
+        s.readingGuideLinesEnabled = newVal;
+        s.markCustomSettings();
+      }
+    };
+    menuItems.push_back(guideLinesEntry);
   }
 
   MenuEntry imageSeparator;
@@ -544,57 +569,6 @@ void SettingsDrawer::setupMenu() {
     };
     menuItems.push_back(refreshModeEntry);
 
-    MenuEntry powerEntry;
-    powerEntry.item = MenuItem::ReaderPowerButton;
-    powerEntry.group = GroupType::CONTROLS;
-    powerEntry.name = "Power Button";
-    powerEntry.getValueText = [](const BookSettings&) -> const char* {
-      switch (SETTINGS.readerShortPwrBtn) {
-        case SystemSetting::READER_SHORT_PWRBTN::READER_PAGE_REFRESH:
-          return "Page Refresh";
-        case SystemSetting::READER_SHORT_PWRBTN::READER_ANNOTATE:
-          return "Annotate";
-        default:
-          return "Page Turn";
-      }
-    };
-    powerEntry.change = [](BookSettings&, int delta) {
-      int v = static_cast<int>(SETTINGS.readerShortPwrBtn) + delta;
-      if (v < 0) {
-        v = SystemSetting::READER_SHORT_PWRBTN::READER_SHORT_PWRBTN_COUNT - 1;
-      }
-      if (v >= SystemSetting::READER_SHORT_PWRBTN::READER_SHORT_PWRBTN_COUNT) {
-        v = 0;
-      }
-      SETTINGS.readerShortPwrBtn = static_cast<uint8_t>(v);
-      SETTINGS.saveToFile();
-    };
-    menuItems.push_back(powerEntry);
-
-    MenuEntry chapterEntry;
-    chapterEntry.item = MenuItem::ChapterSkip;
-    chapterEntry.group = GroupType::CONTROLS;
-    chapterEntry.name = "Long press";
-    chapterEntry.getValueText = [](const BookSettings& s) -> const char* {
-      static const char* kLabels[] = {"Off", "Chapter skip", "Skip 5 pages"};
-      const unsigned idx = s.longPressChapterSkip > SystemSetting::LONG_PRESS_PAGE_SKIP_5
-                               ? SystemSetting::LONG_PRESS_CHAPTER_SKIP
-                               : s.longPressChapterSkip;
-      return kLabels[idx];
-    };
-    chapterEntry.change = [](BookSettings& s, int delta) {
-      int v = static_cast<int>(s.longPressChapterSkip) + delta;
-      if (v < SystemSetting::LONG_PRESS_OFF) {
-        v = SystemSetting::LONG_PRESS_PAGE_SKIP_5;
-      }
-      if (v > SystemSetting::LONG_PRESS_PAGE_SKIP_5) {
-        v = SystemSetting::LONG_PRESS_OFF;
-      }
-      s.longPressChapterSkip = static_cast<uint8_t>(v);
-      s.markCustomSettings();
-    };
-    menuItems.push_back(chapterEntry);
-
     MenuEntry pageAutoTurnEntry;
     pageAutoTurnEntry.item = MenuItem::PageAutoTurn;
     pageAutoTurnEntry.group = GroupType::CONTROLS;
@@ -710,6 +684,45 @@ void SettingsDrawer::setupMenu() {
     };
     menuItems.push_back(statusRightEntry);
   }
+  MenuEntry statusBarFullSeparator;
+  statusBarFullSeparator.item = MenuItem::StatusBarFullSeparator;
+  statusBarFullSeparator.group = GroupType::STATUS_BAR_FULL;
+  statusBarFullSeparator.name = "═══ Full Width Bar ═══";
+  statusBarFullSeparator.getValueText = [this](const BookSettings&) -> const char* {
+    static char indicator[4];
+    snprintf(indicator, sizeof(indicator), "%s", isGroupExpanded(GroupType::STATUS_BAR_FULL) ? "-" : "+");
+    return indicator;
+  };
+  statusBarFullSeparator.change = [](BookSettings&, int) {};
+  menuItems.push_back(statusBarFullSeparator);
+
+  if (isGroupExpanded(GroupType::STATUS_BAR_FULL)) {
+    // A single style row, not 3 Left/Middle/Right rows - Full is one full-width bar restricted to
+    // StatusBar::kFullBarStyles (loading/progress visualizations), so there's nothing to put in
+    // separate sections.
+    MenuEntry fullStyleEntry;
+    fullStyleEntry.item = MenuItem::StatusBarFullStyle;
+    fullStyleEntry.group = GroupType::STATUS_BAR_FULL;
+    fullStyleEntry.name = "Style";
+    fullStyleEntry.getValueText = [](const BookSettings&) -> const char* {
+      return statusBarItemName(static_cast<StatusBarItem>(READER_SETTINGS.statusBarFullStyle));
+    };
+    fullStyleEntry.change = [](BookSettings&, int delta) {
+      int idx = 0;
+      for (int i = 0; i < StatusBar::kFullBarStyleCount; ++i) {
+        if (StatusBar::kFullBarStyles[i] == static_cast<StatusBarItem>(READER_SETTINGS.statusBarFullStyle)) {
+          idx = i;
+          break;
+        }
+      }
+      const int newIdx = idx + delta;
+      if (newIdx >= 0 && newIdx < StatusBar::kFullBarStyleCount) {
+        READER_SETTINGS.statusBarFullStyle = static_cast<uint8_t>(StatusBar::kFullBarStyles[newIdx]);
+        READER_SETTINGS.saveToFile();
+      }
+    };
+    menuItems.push_back(fullStyleEntry);
+  }
 }
 
 /**
@@ -718,11 +731,27 @@ void SettingsDrawer::setupMenu() {
  * @return String representation of the item
  */
 const char* SettingsDrawer::getStatusBarItemName(StatusBarItem item) {
-  static const char* names[] = {
-      "None",          "Page Numbers",    "Percentage",         "Chapter Title", "Battery Icon",
-      "Battery %",     "Battery Icon+%",  "Progress Bar",       "Progress Bar+%", "Page Bars",
-      "Book Title",    "Author Name",     "Page Num+%",         "Time",           "Session Time",
-      "Session Minutes", "Session / Goal", "Session / Day / Goal", "Session / Day"};
+  static const char* names[] = {"None",
+                                "Page Numbers",
+                                "Percentage",
+                                "Chapter Title",
+                                "Battery Icon",
+                                "Battery %",
+                                "Battery Icon+%",
+                                "Progress Bar",
+                                "Progress Bar+%",
+                                "Page Bars",
+                                "Book Title",
+                                "Author Name",
+                                "Page Num+%",
+                                "Time",
+                                "Session Time",
+                                "Session Minutes",
+                                "Session / Goal",
+                                "Session / Day / Goal",
+                                "Session / Day",
+                                "Time Left (Chapter)",
+                                "Time Left (Book)"};
   int index = static_cast<int>(item);
   if (index < 0 || index >= static_cast<int>(StatusBarItem::STATUS_BAR_ITEM_COUNT)) {
     index = 0;
@@ -805,14 +834,14 @@ void SettingsDrawer::drawBackground() {
   renderer.rectangle.fill(drawerX, drawerY, drawerWidth, drawerHeight, false);
   renderer.rectangle.render(drawerX, drawerY, drawerWidth, drawerHeight, true);
 
-  const int headerCenterY = drawerY + kDrawerHeaderHeight / 2;
+  const int headerCenterY = drawerY + drawerHeaderHeight() / 2;
   const int titleY = headerCenterY - renderer.text.getLineHeight(ATKINSON_HYPERLEGIBLE_12_FONT_ID) / 2;
   renderer.text.render(ATKINSON_HYPERLEGIBLE_12_FONT_ID, drawerX + kDrawerHeaderHPad, titleY, "Book Settings", true,
                        EpdFontFamily::BOLD);
 
   drawModePill(renderer, drawerX + drawerWidth - kDrawerHeaderHPad, headerCenterY, drawerModeLabel(settings),
                hasPresetSource(settings));
-  const int dividerY = drawerY + kDrawerHeaderHeight;
+  const int dividerY = drawerY + drawerHeaderHeight();
   renderer.line.render(drawerX, dividerY, drawerX + drawerWidth, dividerY, true);
 }
 
@@ -830,7 +859,7 @@ void SettingsDrawer::drawMenuItemRow(int visibleRow, int menuIndex) {
     return;
   }
 
-  const int startY = drawerY + kDrawerListTop;
+  const int startY = drawerY + drawerListTop();
   const int itemY = startY + (visibleRow * itemHeight);
   const auto& entry = menuItems[static_cast<size_t>(menuIndex)];
   const bool isSelected = (menuIndex == selectedIndex);
@@ -839,7 +868,8 @@ void SettingsDrawer::drawMenuItemRow(int visibleRow, int menuIndex) {
       drawerX, itemY, drawerWidth, itemHeight,
       isSelected ? static_cast<int>(GfxRenderer::FillTone::Ink) : static_cast<int>(GfxRenderer::FillTone::Paper));
 
-  if (entry.item == MenuItem::Separator || entry.item == MenuItem::StatusBarSeparator) {
+  if (entry.item == MenuItem::Separator || entry.item == MenuItem::StatusBarSeparator ||
+      entry.item == MenuItem::StatusBarFullSeparator) {
     const int textX = drawerX + 15;
     const int textY = itemY + (itemHeight - renderer.text.getLineHeight(ATKINSON_HYPERLEGIBLE_10_FONT_ID)) / 2;
     renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, textX, textY, entry.name, isSelected ? 0 : 1);
@@ -927,7 +957,7 @@ void SettingsDrawer::drawScrollIndicator() {
   int totalItems = static_cast<int>(menuItems.size());
   if (totalItems <= itemsPerPage) return;
 
-  int startY = drawerY + kDrawerListTop;
+  int startY = drawerY + drawerListTop();
   int listHeight = itemsPerPage * itemHeight;
   int thumbH = (itemsPerPage * listHeight) / totalItems;
   int thumbY = startY + (scrollOffset * listHeight) / totalItems;
@@ -936,7 +966,7 @@ void SettingsDrawer::drawScrollIndicator() {
 }
 
 void SettingsDrawer::clearScrollIndicatorArea() {
-  const int startY = drawerY + kDrawerListTop;
+  const int startY = drawerY + drawerListTop();
   const int listHeight = itemsPerPage * itemHeight;
   renderer.rectangle.fill(drawerX + drawerWidth - 5, startY, 4, listHeight, false);
 }
@@ -976,7 +1006,8 @@ void SettingsDrawer::toggleGroup(GroupType group) {
 
   for (size_t i = 0; i < menuItems.size(); i++) {
     if (menuItems[i].group == group &&
-        (menuItems[i].item == MenuItem::Separator || menuItems[i].item == MenuItem::StatusBarSeparator)) {
+        (menuItems[i].item == MenuItem::Separator || menuItems[i].item == MenuItem::StatusBarSeparator ||
+         menuItems[i].item == MenuItem::StatusBarFullSeparator)) {
       selectedIndex = static_cast<int>(i);
       if (selectedIndex < scrollOffset) {
         scrollOffset = selectedIndex;
@@ -1004,11 +1035,18 @@ void SettingsDrawer::handleInput(MappedInputManager& input) {
 
   if (readSettingsListPrev(input, renderer)) {
     const int previousIndex = selectedIndex;
-    if (selectedIndex > 0) {
-      selectedIndex--;
-      const bool scrolled = selectedIndex < scrollOffset;
-      if (scrolled) {
+    const int totalItems = static_cast<int>(menuItems.size());
+    if (totalItems > 0) {
+      selectedIndex = (selectedIndex - 1 + totalItems) % totalItems;
+      const int maxScroll = std::max(0, totalItems - itemsPerPage);
+      const bool scrolled = selectedIndex < scrollOffset || selectedIndex >= scrollOffset + itemsPerPage;
+      if (selectedIndex < scrollOffset) {
         scrollOffset = selectedIndex;
+      } else if (selectedIndex >= scrollOffset + itemsPerPage) {
+        scrollOffset = std::min(selectedIndex - itemsPerPage + 1, maxScroll);
+      }
+      scrollOffset = std::max(0, std::min(scrollOffset, maxScroll));
+      if (scrolled) {
         needRedraw = true;
       } else {
         lastInputTime = currentTime;
@@ -1020,12 +1058,18 @@ void SettingsDrawer::handleInput(MappedInputManager& input) {
 
   if (readSettingsListNext(input, renderer)) {
     const int previousIndex = selectedIndex;
-    if (selectedIndex < static_cast<int>(menuItems.size()) - 1) {
-      selectedIndex++;
-      int maxScroll = std::max(0, static_cast<int>(menuItems.size()) - itemsPerPage);
-      const bool scrolled = selectedIndex > scrollOffset + itemsPerPage - 1;
-      if (scrolled) {
+    const int totalItems = static_cast<int>(menuItems.size());
+    if (totalItems > 0) {
+      selectedIndex = (selectedIndex + 1) % totalItems;
+      const int maxScroll = std::max(0, totalItems - itemsPerPage);
+      const bool scrolled = selectedIndex < scrollOffset || selectedIndex >= scrollOffset + itemsPerPage;
+      if (selectedIndex < scrollOffset) {
+        scrollOffset = selectedIndex;
+      } else if (selectedIndex >= scrollOffset + itemsPerPage) {
         scrollOffset = std::min(selectedIndex - itemsPerPage + 1, maxScroll);
+      }
+      scrollOffset = std::max(0, std::min(scrollOffset, maxScroll));
+      if (scrolled) {
         needRedraw = true;
       } else {
         lastInputTime = currentTime;
@@ -1048,7 +1092,8 @@ void SettingsDrawer::handleInput(MappedInputManager& input) {
   if (input.wasPressed(MappedInputManager::Button::Confirm)) {
     if (selectedIndex >= 0 && selectedIndex < static_cast<int>(menuItems.size())) {
       const auto& selected = menuItems[selectedIndex];
-      if (selected.item == MenuItem::Separator || selected.item == MenuItem::StatusBarSeparator) {
+      if (selected.item == MenuItem::Separator || selected.item == MenuItem::StatusBarSeparator ||
+          selected.item == MenuItem::StatusBarFullSeparator) {
         toggleGroup(selected.group);
         needRedraw = true;
       }
@@ -1114,7 +1159,14 @@ void SettingsDrawer::applyChange(int delta) {
     case MenuItem::NavigationLock:
     case MenuItem::Separator:
     case MenuItem::StatusBarSeparator:
+    case MenuItem::StatusBarFullSeparator:
     case MenuItem::PresetPicker:
+    // Pure visual overlay: never affects text layout, so a redraw is enough.
+    case MenuItem::ReadingGuideLines:
+      break;
+    // The full-width bar reserves height at the bottom of the page, so the page must be laid out again.
+    case MenuItem::StatusBarFullStyle:
+      settingsUpdated = true;
       break;
   }
 

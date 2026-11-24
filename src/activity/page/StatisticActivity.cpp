@@ -47,6 +47,10 @@ static std::string xtcCachePathForBookPath(const std::string& bookPath) {
   return "/.metadata/xtc/" + std::to_string(std::hash<std::string>{}(bookPath));
 }
 
+// BookState keeps nothing in RAM (upstream Inx 1.0.18): every query scans books.bin. Statistics looks
+// a title up once per stats file, so it takes one snapshot per load instead of one scan per book.
+static std::vector<BookState::Book> sTrackedBooks;
+
 static bool statsFileExistsForCachePath(const std::string& cachePath) {
   if (cachePath.empty()) {
     return false;
@@ -70,7 +74,7 @@ static bool editedMetadataForCachePath(const std::string& cachePath, std::string
     }
   }
 
-  for (const auto& book : BOOK_STATE.books) {
+  for (const auto& book : sTrackedBooks) {
     if (book.path.empty()) {
       continue;
     }
@@ -480,7 +484,7 @@ void StatisticActivity::loadStats() {
       ScreenComponents::LoadingProgress::show(renderer, "Loading statistics...", 12);
   allBooksStats = getAllBooksStats();
   RECENT_BOOKS.loadFromFile();
-  BOOK_STATE.loadFromFile();
+  sTrackedBooks = BOOK_STATE.getAllBooks();
   for (auto& stats : allBooksStats) {
     if (applyEditedMetadataToStats(stats)) {
       saveBookStats(stats.path.c_str(), stats);
@@ -536,8 +540,7 @@ void StatisticActivity::indexBookStatsPaths() {
     addCachePath(cachePath, book.title, book.author, book.progress);
   }
 
-  BOOK_STATE.loadFromFile();
-  for (const auto& book : BOOK_STATE.books) {
+  for (const auto& book : sTrackedBooks) {
     if (book.path.empty()) {
       continue;
     }
@@ -767,8 +770,9 @@ void StatisticActivity::onEnter() {
 void StatisticActivity::onExit() {
   Activity::onExit();
 
-  allBooksStats.clear();
-  loadedBookStatsFlags_.clear();
+  std::vector<BookReadingStats>().swap(allBooksStats);
+  std::vector<uint8_t>().swap(loadedBookStatsFlags_);
+  std::vector<BookState::Book>().swap(sTrackedBooks);
 }
 
 int StatisticActivity::renderHeader(int y, int innerLeft, int innerRight, int innerW, int Margin) const {
@@ -1075,18 +1079,14 @@ void StatisticActivity::loop() {
   }
 
   if (upPressed) {
-    if (viewIndex > 0) {
-      viewIndex--;
-      updateRequired = true;
-    }
+    viewIndex = (viewIndex + totalViews - 1) % totalViews;
+    updateRequired = true;
     return;
   }
 
   if (downPressed) {
-    if (viewIndex < totalViews - 1) {
-      viewIndex++;
-      updateRequired = true;
-    }
+    viewIndex = (viewIndex + 1) % totalViews;
+    updateRequired = true;
     return;
   }
 }

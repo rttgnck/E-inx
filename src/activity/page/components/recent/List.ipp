@@ -7,26 +7,29 @@ void RecentActivity::renderList(int startY) {
     return;
   }
 
-  constexpr int kHintReserve = 54;
   const int screenW = renderer.getScreenWidth();
   const int screenH = renderer.getScreenHeight();
-  const int contentBottom = screenH - kHintReserve;
-  const int contentH = std::max(1, contentBottom - startY);
-  const int rowH = std::max(56, contentH / LIST_VISIBLE_ITEMS);
-  constexpr int padX = 30;
-  const int thumbH = std::max(48, rowH - 10);
-  const int thumbW = std::min(88, thumbH * RecentActivity::COVER_WIDTH / RecentActivity::COVER_HEIGHT);
+  const int hintReserve = INX_THEME.mainTabsAtBottom() ? INX_THEME.mainTabBarHeight() : 54;
+  constexpr int listPadY = 6;
+  const int listTop = startY + listPadY;
+  const int contentBottom = screenH - hintReserve - listPadY;
+  const int contentH = std::max(1, contentBottom - listTop);
+  constexpr int padX = 18;
   const bool thumbRound = SETTINGS.bitmapRoundedCorners != 0;
 
   const int visibleCount = std::min(LIST_VISIBLE_ITEMS, totalBooks - scrollOffset);
   for (int slot = 0; slot < visibleCount; ++slot) {
     const int bi = scrollOffset + slot;
-    const int y = startY + slot * rowH;
+    const int y = listTop + (contentH * slot) / LIST_VISIBLE_ITEMS;
+    const int rowBottom = listTop + (contentH * (slot + 1)) / LIST_VISIBLE_ITEMS;
+    const int rowH = std::max(56, rowBottom - y);
+    const int thumbH = std::max(48, rowH - 10);
+    const int thumbW = std::min(88, thumbH * RecentActivity::COVER_WIDTH / RecentActivity::COVER_HEIGHT);
     const RecentBook& book = recentBooks[static_cast<size_t>(bi)];
     const bool selected = !suppressBufferedSelection_ && (selectorIndex == bi);
 
     if (selected) {
-      renderer.rectangle.render(padX / 2, y + 1, screenW - padX, rowH, true, false);
+      drawFlowCarouselBackdropInRect(renderer, 0, y, screenW, rowH);
     }
 
     const int ty = y + (rowH - thumbH) / 2;
@@ -43,13 +46,13 @@ void RecentActivity::renderList(int startY) {
     const int textW = std::max(40, textRight - textX);
 
     const int fontTitle = ATKINSON_HYPERLEGIBLE_12_FONT_ID;
-    const int fontAuthor = ATKINSON_HYPERLEGIBLE_10_FONT_ID;
+    const int fontAuthor = ATKINSON_HYPERLEGIBLE_8_FONT_ID;
     const int lhT = renderer.text.getLineHeight(fontTitle);
     const int lhA = renderer.text.getLineHeight(fontAuthor);
     const int tyT = y + 20;
     const std::string dispTitle = bookDisplayTitle(book);
-    const std::string titleLine = renderer.text.truncate(fontTitle, dispTitle.c_str(), textW, EpdFontFamily::REGULAR);
-    renderer.text.render(fontTitle, textX, tyT, titleLine.c_str(), true, EpdFontFamily::REGULAR);
+    const std::string titleLine = renderer.text.truncate(fontTitle, dispTitle.c_str(), textW, EpdFontFamily::BOLD);
+    renderer.text.render(fontTitle, textX, tyT, titleLine.c_str(), true, EpdFontFamily::BOLD);
     int lastTextBottom = tyT + lhT;
     int tyA = tyT + lhT + 4;
     if (!book.author.empty()) {
@@ -66,7 +69,7 @@ void RecentActivity::renderList(int startY) {
     snprintf(pctBuf, sizeof(pctBuf), "%.0f%%", static_cast<double>(prog * 100.f));
     const int fontPct = ATKINSON_HYPERLEGIBLE_8_FONT_ID;
     const int pctW = renderer.text.getWidth(fontPct, pctBuf);
-    constexpr int barH = 8;
+    constexpr int barH = 6;
     int barY = lastTextBottom + 20;
     barY = std::max(barY, tyT + lhT + 4);
     barY = std::min(barY, y + rowH - barH - 4);
@@ -74,7 +77,8 @@ void RecentActivity::renderList(int startY) {
       barY = y + rowH - barH - 4;
     }
     const int barX = textX;
-    const int barW = std::max(24, textRight - pctW - 10 - barX);
+    const int maxBarW = std::max(24, textRight - pctW - 10 - barX);
+    const int barW = std::max(24, maxBarW * 80 / 100);
 
     renderer.rectangle.fill(barX, barY, barW, barH, false);
     renderer.rectangle.render(barX, barY, barW, barH, true);
@@ -82,7 +86,7 @@ void RecentActivity::renderList(int startY) {
     if (fillW > 0) {
       renderer.rectangle.fill(barX, barY, fillW, barH, true);
     }
-    renderer.text.render(fontPct, barX + barW + 6, barY - 1, pctBuf, false);
+    renderer.text.render(fontPct, barX + barW + 6, barY - 7, pctBuf, true);
 
     const bool isLastVisibleRow = (slot == visibleCount - 1);
     if (!isLastVisibleRow) {

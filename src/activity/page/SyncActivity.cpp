@@ -7,6 +7,11 @@
 
 #include <GfxRenderer.h>
 
+#include "activity/network/BackupRestoreActivity.h"
+#include "activity/reader/ImageViewerActivity.h"
+#include "activity/settings/DictionaryPickerActivity.h"
+#include "activity/settings/KOReaderSettingsActivity.h"
+#include "activity/settings/OtaUpdateActivity.h"
 #include "state/SystemSetting.h"
 #include "system/Fonts.h"
 #include "system/MappedInputManager.h"
@@ -14,10 +19,27 @@
 #include "system/UiTheme.h"
 
 namespace {
-constexpr int MENU_ITEM_COUNT = 7;
-const char* MENU_ITEMS[MENU_ITEM_COUNT] = {"Join a Network",     "Firmware Update", "Library Server",
+// E-inx's network modes first (indices 0-6 are what onModeSelected receives), then upstream Inx's
+// sub-activities. Keep MenuItem and MENU_ITEMS in the same order.
+enum MenuItem {
+  JOIN_NETWORK,
+  FIRMWARE_UPDATE,
+  LIBRARY_SERVER,
+  BLUETOOTH_TRANSFER,
+  CONNECT_CALIBRE,
+  CREATE_HOTSPOT,
+  OPDS_BROWSER,
+  BACKUP_RESTORE,
+  KOREADER_SYNC,
+  CHECK_FOR_UPDATES,
+  CHOOSE_DICTIONARY,
+  DEVICE_IDENTITY,
+  MENU_ITEM_COUNT
+};
+const char* MENU_ITEMS[MENU_ITEM_COUNT] = {"Join a Network",     "Firmware Update",    "Library Server",
                                            "Bluetooth Transfer", "Connect to Calibre", "Create Hotspot",
-                                           "OPDS Browser"};
+                                           "OPDS Browser",       "Backup and Restore", "KOReader Sync",
+                                           "Check for Updates",  "Choose Dictionary",  "Device"};
 constexpr int LIST_ITEM_HEIGHT = UiTheme::DRAWER_LIST_ITEM_HEIGHT;
 }  // namespace
 
@@ -38,6 +60,11 @@ void SyncActivity::onEnter() {
  * Processes button presses for menu navigation and tab switching.
  */
 void SyncActivity::loop() {
+  if (subActivity) {
+    ActivityWithSubactivity::loop();
+    return;
+  }
+
   if (tabSelectorIndex == 4 && updateRequired) {
     updateRequired = false;
     render();
@@ -72,34 +99,37 @@ void SyncActivity::loop() {
   }
 
   if (confirmPressed) {
-    NetworkMode mode = NetworkMode::JOIN_NETWORK;
-
-    if (selectedIndex == 1) {
-      mode = NetworkMode::UPDATE_SERVER;
+    const auto onSubActivityDone = [this] {
+      exitActivity();
+      updateRequired = true;
+    };
+    switch (selectedIndex) {
+      case BACKUP_RESTORE:
+        enterNewActivity(new BackupRestoreActivity(renderer, mappedInput, onSubActivityDone));
+        return;
+      case KOREADER_SYNC:
+        enterNewActivity(new KOReaderSettingsActivity(renderer, mappedInput, onSubActivityDone));
+        return;
+      case CHECK_FOR_UPDATES:
+        enterNewActivity(new OtaUpdateActivity(renderer, mappedInput, onSubActivityDone));
+        return;
+      case CHOOSE_DICTIONARY:
+        enterNewActivity(new DictionaryPickerActivity(renderer, mappedInput, onSubActivityDone));
+        return;
+      case DEVICE_IDENTITY:
+        enterNewActivity(
+            new ImageViewerActivity(renderer, mappedInput, "/sleep/device-identity.jpg", onSubActivityDone));
+        return;
+      default:
+        break;
     }
 
-    if (selectedIndex == 2) {
-      mode = NetworkMode::LIBRARY_SERVER;
-    }
-
-    if (selectedIndex == 3) {
-      mode = NetworkMode::BLUETOOTH_TRANSFER;
-    }
-
-    if (selectedIndex == 4) {
-      mode = NetworkMode::CONNECT_CALIBRE;
-    }
-
-    if (selectedIndex == 5) {
-      mode = NetworkMode::CREATE_HOTSPOT;
-    }
-
-    if (selectedIndex == 6) {
-      mode = NetworkMode::OPDS_BROWSER;
-    }
-
-    if (onModeSelected) {
-      onModeSelected(mode);
+    static constexpr NetworkMode kModes[] = {NetworkMode::JOIN_NETWORK,    NetworkMode::UPDATE_SERVER,
+                                             NetworkMode::LIBRARY_SERVER,  NetworkMode::BLUETOOTH_TRANSFER,
+                                             NetworkMode::CONNECT_CALIBRE, NetworkMode::CREATE_HOTSPOT,
+                                             NetworkMode::OPDS_BROWSER};
+    if (onModeSelected && selectedIndex >= 0 && selectedIndex <= OPDS_BROWSER) {
+      onModeSelected(kModes[selectedIndex]);
     }
     return;
   }
@@ -133,9 +163,9 @@ void SyncActivity::render() const {
   renderTabBar(renderer);
 
   const int headerY = mainContentTop();
-  const int headerHeight = TAB_BAR_HEIGHT;
+  const int headerHeight = mainHeaderHeight();
   const int headerTextY = headerY + (headerHeight - renderer.text.getLineHeight(ATKINSON_HYPERLEGIBLE_12_FONT_ID)) / 2;
-  renderer.text.render(ATKINSON_HYPERLEGIBLE_12_FONT_ID, 20, headerTextY, "Device connections", true,
+  renderer.text.render(ATKINSON_HYPERLEGIBLE_12_FONT_ID, 20, headerTextY, "Device Management", true,
                        EpdFontFamily::BOLD);
 
   const int dividerY = headerY + headerHeight;
@@ -144,8 +174,12 @@ void SyncActivity::render() const {
   const int listStartY = dividerY;
   const int visibleAreaHeight = (INX_THEME.mainTabsAtBottom() ? contentBottom : screenHeight - 80) - listStartY;
 
-  for (int i = 0; i < MENU_ITEM_COUNT; i++) {
-    const int itemY = listStartY + i * LIST_ITEM_HEIGHT;
+  // More items than fit: scroll just far enough to keep the selection on screen.
+  const int visibleCount = visibleAreaHeight / LIST_ITEM_HEIGHT;
+  const int firstVisible = selectedIndex >= visibleCount ? selectedIndex - visibleCount + 1 : 0;
+
+  for (int i = firstVisible; i < MENU_ITEM_COUNT; i++) {
+    const int itemY = listStartY + (i - firstVisible) * LIST_ITEM_HEIGHT;
 
     if (itemY < listStartY + visibleAreaHeight && itemY + LIST_ITEM_HEIGHT > listStartY) {
       const bool isSelected = (i == selectedIndex);
@@ -158,7 +192,8 @@ void SyncActivity::render() const {
       const int titleY = itemY + (LIST_ITEM_HEIGHT - renderer.text.getLineHeight(ATKINSON_HYPERLEGIBLE_10_FONT_ID)) / 2;
 
       renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, textX, titleY, MENU_ITEMS[i], !isSelected);
-      renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, screenWidth - 30, titleY, "›", !isSelected);
+      const int caretW = renderer.text.getWidth(ATKINSON_HYPERLEGIBLE_10_FONT_ID, "›");
+      renderer.text.render(ATKINSON_HYPERLEGIBLE_10_FONT_ID, screenWidth - caretW - 30, titleY, "›", !isSelected);
 
       if (i < MENU_ITEM_COUNT - 1) {
         renderer.line.render(0, itemY + LIST_ITEM_HEIGHT - 1, screenWidth, itemY + LIST_ITEM_HEIGHT - 1, true,
@@ -176,4 +211,4 @@ void SyncActivity::render() const {
 /**
  * Lifecycle hook called when exiting the activity.
  */
-void SyncActivity::onExit() { Activity::onExit(); }
+void SyncActivity::onExit() { ActivityWithSubactivity::onExit(); }
