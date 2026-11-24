@@ -22,7 +22,6 @@
 #include <cstring>
 #include <functional>
 #include <memory>
-#include <sstream>
 #include <vector>
 
 #include "../reader/Epub/EpubActivity.h"

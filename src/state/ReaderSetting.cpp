@@ -523,8 +523,11 @@ int ReaderSetting::getReaderFontIdForFamilyAndSize(uint8_t family, uint8_t size)
           return ATKINSON_HYPERLEGIBLE_14_FONT_ID;
         case SystemSetting::LARGE:
           return ATKINSON_HYPERLEGIBLE_16_FONT_ID;
-        case SystemSetting::EXTRA_LARGE:
-          return ATKINSON_HYPERLEGIBLE_18_FONT_ID;
+        case SystemSetting::EXTRA_LARGE: {
+          // 18 pt is not in flash; use the SD copy when there is one (scripts/export_sd_font.py).
+          const int sdId = FontManager::findSdFontId("Atkinson Hyperlegible", 18);
+          return sdId >= 0 ? sdId : ATKINSON_HYPERLEGIBLE_18_FONT_ID;
+        }
       }
     case SystemSetting::LITERATA:
     default:
@@ -538,8 +541,10 @@ int ReaderSetting::getReaderFontIdForFamilyAndSize(uint8_t family, uint8_t size)
           return LITERATA_14_FONT_ID;
         case SystemSetting::LARGE:
           return LITERATA_16_FONT_ID;
-        case SystemSetting::EXTRA_LARGE:
-          return LITERATA_18_FONT_ID;
+        case SystemSetting::EXTRA_LARGE: {
+          const int sdId = FontManager::findSdFontId("Literata", 18);
+          return sdId >= 0 ? sdId : LITERATA_18_FONT_ID;
+        }
       }
   }
 #endif

@@ -10,6 +10,19 @@ E-inx is a community firmware for Xteink e-paper readers, forked from [Inx](http
 
 ![](./docs/images/cover.jpg)
 
+## What's New in E-inx 1.20.9
+
+Frees about 1.1 MB of flash (the firmware drops from 97% to 80% of its partition), so later updates have room.
+
+- **The largest reading size (18 pt, "Extra Large") now comes from the SD card.** Download
+  `sd-fonts-18pt.zip` from this release and copy its `fonts` folder to the root of the card, so it holds
+  `/fonts/Literata/` and `/fonts/Atkinson Hyperlegible/`. The glyphs are the same ones that were built in.
+  Without the files, Extra Large shows at 16 pt. Text the interface drew at 18 pt (the Flow home layout,
+  the end-of-book stats, the sleep clock's labels, About) now uses 16 pt.
+  `scripts/export_sd_font.py` regenerates the files from the font headers.
+- The web manager's pages are stored compressed and load faster on a weak connection; nothing else changes.
+- A word-splitting helper no longer pulls in C++ stream code (about 120 KB).
+
 ## What's New in E-inx 1.20.8-2
 
 Catches up with upstream Inx 1.0.20 (its `release/1.0.20` branch; upstream has not tagged 1.0.20 yet).
