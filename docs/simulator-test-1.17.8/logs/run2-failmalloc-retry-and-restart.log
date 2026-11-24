@@ -1,0 +1,736 @@
+[0] [BOOT] Display init
+[FontManager] Initialized (Literata + Atkinson + Montserrat clock + SD streaming)
+=== Memory Usage ===
+Free heap: 1048576 bytes (1024 KB)
+Largest free block: 1048576 bytes
+Font families loaded: 0
+Fonts loaded: 0
+SD font entries: 0
+===================
+[138] [BOOT] Display OK, heap=1000000
+[138] [BOOT] SD init
+[138] [BOOT] SD OK
+[138] [BOOT] APP_STATE.lastRead = "/books/Project Hail Mary 2021 by Andy Weir 2.epub", rtcLastReadPath = ""
+[138] [BOOT] Loading settings
+[138] [CPS] Settings loaded (version 43, 102 items, darkMode=0)
+[138] [BOOT] Settings OK, darkMode=0, heap=1000000
+[149] [SIM] Activity: BootActivity
+[235] [SIM] Activity: Reader
+[235] [BMC] Loaded cache data: 41 spine, 38 TOC, 4 CSS entries
+[SIM] open failed: ./fs_/.metadata/epub/18276938335300208939/meta.override (flags=0x0 errno=2 No such file or directory)
+[FontManager] Unloading all SD streaming fonts
+[FontManager] All SD fonts unloaded
+=== Memory Usage ===
+Free heap: 1048576 bytes (1024 KB)
+Largest free block: 1048576 bytes
+Font families loaded: 0
+Fonts loaded: 0
+SD font entries: 0
+===================
+[FontManager] Scanned 0 font families, found 0 font sizes
+=== Memory Usage ===
+Free heap: 1048576 bytes (1024 KB)
+Largest free block: 1048576 bytes
+Font families loaded: 0
+Fonts loaded: 0
+SD font entries: 0
+===================
+[SIM] open failed: ./fs_/.metadata/epub/18276938335300208939/settings.bin (flags=0x0 errno=2 No such file or directory)
+[235] [SIM] Subactivity: EpubReader
+[SIM] open failed: ./fs_/.metadata/epub/18276938335300208939/bookmarks.bin (flags=0x0 errno=2 No such file or directory)
+[261] [DBG] EPUB renderScreen start
+[261] [DBG] renderContents start, hasImages=0, heap=1048576
+[261] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[263] [DBG] page->render done
+[263] [DBG] displayPageBuffer start
+[264] [DBG] displayPageBuffer done
+[264] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[264] [DBG] renderContents done, total=3ms, heap=1048576
+[264] [DBG] EPUB renderScreen done
+[2577] [SIMCTL] wait 500
+[3082] [SIMCTL] key left
+[3180] [DBG] EPUB renderScreen start
+[SIM] open failed: ./fs_/.metadata/epub/18276938335300208939/sections/34.bin (flags=0x0 errno=2 No such file or directory)
+[EBP] Zip Request: OEBPS/xhtml/Weir_9780593135211_epub3_c029_r1.xhtml
+[3189] [ZIP] Decompressed 13862 bytes into 41333 bytes
+[3189] [SCT] createSectionFile: temp HTML extract attempt=1 ok=1 bytes=41333 spine=34 href=OEBPS/xhtml/Weir_9780593135211_epub3_c029_r1.xhtml tmp=/.metadata/epub/18276938335300208939/.tmp_34.html book=/books/Project Hail Mary 2021 by Andy Weir 2.epub titl[3189] [SCT] parseAndBuildPages start internal=OEBPS/xhtml/Weir_9780593135211_epub3_c029_r1.xhtml tmp=/.metadata/epub/18276938335300208939/.tmp_34.html skipImages=0 viewport=482x754 font=3002 headerFont=3003 heap=1048576
+[EBP] Loaded parsed CSS cache: 276 rules
+[EHP] Using shared CSS dictionary (276 rules)
+[EBP] Zip Request: OEBPS/images/Weir_9780593135211_epub3_032_r1.jpg
+[3194] [ZIP] Decompressed 99821 bytes into 173383 bytes
+[EHP] Using shared CSS dictionary (276 rules)
+[3208] [SIMCTL] wait 800
+[3208] [EBP-IMG] cache hit /.metadata/epub/18276938335300208939/images/Weir_9780593135211_epub3_032_r1.jpg
+[EHP] Image ../images/Weir_9780593135211_epub3_032_r1.jpg - CSS: , Final: 482x36 (actual: 6776x516, percent: w=0 h=0)
+[3342] [SCT] parseAndBuildPages success internal=OEBPS/xhtml/Weir_9780593135211_epub3_c029_r1.xhtml finalY=368 heap=1048576
+[3345] [DBG] renderContents start, hasImages=0, heap=1048576
+[3345] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[3345] [DBG] page->render done
+[3345] [DBG] displayPageBuffer start
+[3346] [DBG] displayPageBuffer done
+[3346] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[3346] [DBG] renderContents done, total=1ms, heap=1048576
+[3346] [DBG] EPUB renderScreen done
+[4013] [SIMCTL] key confirm
+[4141] [SIMCTL] wait 4000
+[8142] [SIMCTL] key confirm
+[8270] [SIMCTL] wait 800
+[9075] [SIMCTL] key confirm
+[9182] [DBG] EPUB renderScreen start
+[9183] [DBG] renderContents start, hasImages=0, heap=1048576
+[9183] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[9198] [IMG-TIMING] JPEG 6776x516(r)->469x36 mode=0 quality=0 capture=0: headerScan=0ms init=0ms mcuDecode=11ms rowProcess=3ms rows=36/36 ok=1 decode+draw=14ms total=14ms
+[9198] [IMG-TIMING] fromPath /.metadata/epub/18276938335300208939/images/Weir_9780593135211_epub3_032_r1.jpg: open=0ms render=14ms
+[9199] [DBG] page->render done
+[9199] [DBG] displayPageBuffer start
+[9200] [DBG] displayPageBuffer done
+[9200] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[9200] [DBG] renderContents done, total=17ms, heap=1048576
+[9200] [DBG] EPUB renderScreen done
+[9201] [SIMCTL] wait 1500
+[10706] [SIMCTL] key up
+[10810] [DBG] EPUB renderScreen start
+[SIM] open failed: ./fs_/.metadata/epub/18276938335300208939/sections/33.bin (flags=0x0 errno=2 No such file or directory)
+[EBP] Zip Request: OEBPS/xhtml/Weir_9780593135211_epub3_c028_r1.xhtml
+[10817] [ZIP] Decompressed 7614 bytes into 21340 bytes
+[10817] [SCT] createSectionFile: temp HTML extract attempt=1 ok=1 bytes=21340 spine=33 href=OEBPS/xhtml/Weir_9780593135211_epub3_c028_r1.xhtml tmp=/.metadata/epub/18276938335300208939/.tmp_33.html book=/books/Project Hail Mary 2021 by Andy Weir 2.epub tit[10817] [SCT] parseAndBuildPages start internal=OEBPS/xhtml/Weir_9780593135211_epub3_c028_r1.xhtml tmp=/.metadata/epub/18276938335300208939/.tmp_33.html skipImages=0 viewport=482x754 font=3002 headerFont=3003 heap=1048576
+[EHP] Using shared CSS dictionary (276 rules)
+[EBP] Zip Request: OEBPS/images/Weir_9780593135211_epub3_031_r1.jpg
+[10819] [ZIP] Decompressed 101141 bytes into 174175 bytes
+[EHP] Using shared CSS dictionary (276 rules)
+[10825] [EBP-IMG] cache hit /.metadata/epub/18276938335300208939/images/Weir_9780593135211_epub3_031_r1.jpg
+[EHP] Image ../images/Weir_9780593135211_epub3_031_r1.jpg - CSS: , Final: 482x36 (actual: 6776x516, percent: w=0 h=0)
+[10833] [SIMCTL] wait 250
+[10889] [SCT] parseAndBuildPages success internal=OEBPS/xhtml/Weir_9780593135211_epub3_c028_r1.xhtml finalY=737 heap=1048576
+[10891] [DBG] renderContents start, hasImages=0, heap=1048576
+[10891] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[10892] [DBG] page->render done
+[10892] [DBG] displayPageBuffer start
+[10893] [DBG] displayPageBuffer done
+[10893] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[10893] [DBG] renderContents done, total=2ms, heap=1048576
+[10893] [DBG] EPUB renderScreen done
+[11084] [SIMCTL] key up
+[11185] [DBG] EPUB renderScreen start
+[11185] [DBG] renderContents start, hasImages=0, heap=1048576
+[11186] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[11188] [DBG] page->render done
+[11189] [DBG] displayPageBuffer start
+[11191] [DBG] displayPageBuffer done
+[11191] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[11191] [DBG] renderContents done, total=6ms, heap=1048576
+[11191] [DBG] EPUB renderScreen done
+[11206] [SIMCTL] wait 250
+[11459] [SIMCTL] key up
+[11565] [DBG] EPUB renderScreen start
+[11567] [DBG] renderContents start, hasImages=0, heap=1048576
+[11567] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[11569] [DBG] page->render done
+[11569] [DBG] displayPageBuffer start
+[11571] [DBG] displayPageBuffer done
+[11571] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[11571] [DBG] renderContents done, total=4ms, heap=1048576
+[11571] [DBG] EPUB renderScreen done
+[11589] [SIMCTL] wait 250
+[11843] [SIMCTL] key up
+[11946] [DBG] EPUB renderScreen start
+[11947] [DBG] renderContents start, hasImages=0, heap=1048576
+[11947] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[11950] [DBG] page->render done
+[11950] [DBG] displayPageBuffer start
+[11952] [DBG] displayPageBuffer done
+[11952] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[11952] [DBG] renderContents done, total=5ms, heap=1048576
+[11952] [DBG] EPUB renderScreen done
+[11970] [SIMCTL] wait 250
+[12225] [SIMCTL] key up
+[12327] [DBG] EPUB renderScreen start
+[12328] [DBG] renderContents start, hasImages=0, heap=1048576
+[12328] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[12331] [DBG] page->render done
+[12331] [DBG] displayPageBuffer start
+[12333] [DBG] displayPageBuffer done
+[12333] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[12333] [DBG] renderContents done, total=5ms, heap=1048576
+[12334] [DBG] EPUB renderScreen done
+[12355] [SIMCTL] wait 250
+[12609] [SIMCTL] key up
+[12708] [DBG] EPUB renderScreen start
+[12709] [DBG] renderContents start, hasImages=0, heap=1048576
+[12709] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[12712] [DBG] page->render done
+[12712] [DBG] displayPageBuffer start
+[12714] [DBG] displayPageBuffer done
+[12714] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[12714] [DBG] renderContents done, total=5ms, heap=1048576
+[12714] [DBG] EPUB renderScreen done
+[12734] [SIMCTL] wait 250
+[12989] [SIMCTL] key up
+[13085] [DBG] EPUB renderScreen start
+[13086] [DBG] renderContents start, hasImages=0, heap=1048576
+[13086] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[13088] [DBG] page->render done
+[13089] [DBG] displayPageBuffer start
+[13090] [DBG] displayPageBuffer done
+[13090] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[13090] [DBG] renderContents done, total=4ms, heap=1048576
+[13090] [DBG] EPUB renderScreen done
+[13117] [SIMCTL] wait 250
+[13369] [SIMCTL] key up
+[13475] [DBG] EPUB renderScreen start
+[13476] [DBG] renderContents start, hasImages=0, heap=1048576
+[13476] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[13479] [DBG] page->render done
+[13479] [DBG] displayPageBuffer start
+[13481] [DBG] displayPageBuffer done
+[13481] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[13481] [DBG] renderContents done, total=5ms, heap=1048576
+[13481] [DBG] EPUB renderScreen done
+[13498] [SIMCTL] wait 250
+[13753] [SIMCTL] key up
+[13856] [DBG] EPUB renderScreen start
+[13857] [DBG] renderContents start, hasImages=0, heap=1048576
+[13857] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[13859] [DBG] page->render done
+[13859] [DBG] displayPageBuffer start
+[13862] [DBG] displayPageBuffer done
+[13862] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[13862] [DBG] renderContents done, total=5ms, heap=1048576
+[13862] [DBG] EPUB renderScreen done
+[13877] [SIMCTL] wait 250
+[14131] [SIMCTL] key up
+[14236] [DBG] EPUB renderScreen start
+[14238] [DBG] renderContents start, hasImages=0, heap=1048576
+[14238] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[14241] [DBG] page->render done
+[14241] [DBG] displayPageBuffer start
+[14243] [DBG] displayPageBuffer done
+[14243] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[14243] [DBG] renderContents done, total=5ms, heap=1048576
+[14243] [DBG] EPUB renderScreen done
+[14253] [SIMCTL] wait 250
+[14508] [SIMCTL] key up
+[14613] [DBG] EPUB renderScreen start
+[14614] [DBG] renderContents start, hasImages=0, heap=1048576
+[14615] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[14617] [DBG] page->render done
+[14618] [DBG] displayPageBuffer start
+[14620] [DBG] displayPageBuffer done
+[14620] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[14620] [DBG] renderContents done, total=6ms, heap=1048576
+[14620] [DBG] EPUB renderScreen done
+[14636] [SIMCTL] wait 250
+[14890] [SIMCTL] key up
+[14995] [DBG] EPUB renderScreen start
+[14996] [DBG] renderContents start, hasImages=0, heap=1048576
+[14996] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[14999] [DBG] page->render done
+[15000] [DBG] displayPageBuffer start
+[15002] [DBG] displayPageBuffer done
+[15002] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[15002] [DBG] renderContents done, total=6ms, heap=1048576
+[15002] [DBG] EPUB renderScreen done
+[15015] [SIMCTL] wait 250
+[15270] [SIMCTL] key up
+[15365] [DBG] EPUB renderScreen start
+[15366] [DBG] renderContents start, hasImages=0, heap=1048576
+[15366] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[15368] [DBG] page->render done
+[15368] [DBG] displayPageBuffer start
+[15369] [DBG] displayPageBuffer done
+[15369] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[15369] [DBG] renderContents done, total=3ms, heap=1048576
+[15370] [DBG] EPUB renderScreen done
+[15392] [SIMCTL] wait 250
+[15646] [SIMCTL] key up
+[15747] [DBG] EPUB renderScreen start
+[15747] [DBG] renderContents start, hasImages=0, heap=1048576
+[15748] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[15750] [DBG] page->render done
+[15750] [DBG] displayPageBuffer start
+[15752] [DBG] displayPageBuffer done
+[15752] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[15752] [DBG] renderContents done, total=5ms, heap=1048576
+[15752] [DBG] EPUB renderScreen done
+[15776] [SIMCTL] wait 250
+[16031] [SIMCTL] key up
+[16128] [DBG] EPUB renderScreen start
+[16129] [DBG] renderContents start, hasImages=0, heap=1048576
+[16129] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[16131] [DBG] page->render done
+[16131] [DBG] displayPageBuffer start
+[16134] [DBG] displayPageBuffer done
+[16134] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[16134] [DBG] renderContents done, total=5ms, heap=1048576
+[16134] [DBG] EPUB renderScreen done
+[16159] [SIMCTL] wait 250
+[16413] [SIMCTL] key up
+[16518] [DBG] EPUB renderScreen start
+[16518] [DBG] renderContents start, hasImages=0, heap=1048576
+[16518] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[16519] [DBG] page->render done
+[16519] [DBG] displayPageBuffer start
+[16520] [DBG] displayPageBuffer done
+[16520] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[16520] [DBG] renderContents done, total=2ms, heap=1048576
+[16521] [DBG] EPUB renderScreen done
+[16539] [SIMCTL] wait 250
+[16789] [SIMCTL] key up
+[16894] [DBG] EPUB renderScreen start
+[16895] [DBG] renderContents start, hasImages=0, heap=1048576
+[16895] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[16898] [DBG] page->render done
+[16898] [DBG] displayPageBuffer start
+[16900] [DBG] displayPageBuffer done
+[16900] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[16900] [DBG] renderContents done, total=5ms, heap=1048576
+[16900] [DBG] EPUB renderScreen done
+[16918] [SIMCTL] wait 250
+[17171] [SIMCTL] key up
+[17276] [DBG] EPUB renderScreen start
+[17276] [DBG] renderContents start, hasImages=0, heap=1048576
+[17276] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[17279] [DBG] page->render done
+[17280] [DBG] displayPageBuffer start
+[17281] [DBG] displayPageBuffer done
+[17281] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[17281] [DBG] renderContents done, total=5ms, heap=1048576
+[17282] [DBG] EPUB renderScreen done
+[17296] [SIMCTL] wait 250
+[17549] [SIMCTL] key up
+[17645] [DBG] EPUB renderScreen start
+[17645] [DBG] renderContents start, hasImages=0, heap=1048576
+[17645] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[17647] [DBG] page->render done
+[17647] [DBG] displayPageBuffer start
+[17649] [DBG] displayPageBuffer done
+[17649] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[17649] [DBG] renderContents done, total=4ms, heap=1048576
+[17649] [DBG] EPUB renderScreen done
+[17675] [SIMCTL] wait 250
+[17927] [SIMCTL] key up
+[18026] [DBG] EPUB renderScreen start
+[18027] [DBG] renderContents start, hasImages=0, heap=1048576
+[18027] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[18031] [DBG] page->render done
+[18031] [DBG] displayPageBuffer start
+[18033] [DBG] displayPageBuffer done
+[18033] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[18033] [DBG] renderContents done, total=6ms, heap=1048576
+[18034] [DBG] EPUB renderScreen done
+[18055] [SIMCTL] wait 250
+[18305] [SIMCTL] key up
+[18410] [DBG] EPUB renderScreen start
+[18411] [DBG] renderContents start, hasImages=0, heap=1048576
+[18411] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[18414] [DBG] page->render done
+[18414] [DBG] displayPageBuffer start
+[18416] [DBG] displayPageBuffer done
+[18416] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[18416] [DBG] renderContents done, total=5ms, heap=1048576
+[18417] [DBG] EPUB renderScreen done
+[18430] [SIMCTL] wait 250
+[18684] [SIMCTL] key up
+[18789] [DBG] EPUB renderScreen start
+[18790] [DBG] renderContents start, hasImages=0, heap=1048576
+[18791] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[18793] [DBG] page->render done
+[18793] [DBG] displayPageBuffer start
+[18795] [DBG] displayPageBuffer done
+[18795] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[18795] [DBG] renderContents done, total=5ms, heap=1048576
+[18796] [DBG] EPUB renderScreen done
+[18811] [SIMCTL] wait 250
+[19063] [SIMCTL] key up
+[19170] [DBG] EPUB renderScreen start
+[19171] [DBG] renderContents start, hasImages=0, heap=1048576
+[19171] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[19173] [DBG] page->render done
+[19174] [DBG] displayPageBuffer start
+[19176] [DBG] displayPageBuffer done
+[19176] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[19176] [DBG] renderContents done, total=5ms, heap=1048576
+[19176] [DBG] EPUB renderScreen done
+[19190] [SIMCTL] wait 250
+[19442] [SIMCTL] key up
+[19540] [DBG] EPUB renderScreen start
+[19540] [DBG] renderContents start, hasImages=0, heap=1048576
+[19540] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[19542] [DBG] page->render done
+[19543] [DBG] displayPageBuffer start
+[19545] [DBG] displayPageBuffer done
+[19545] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[19545] [DBG] renderContents done, total=5ms, heap=1048576
+[19545] [DBG] EPUB renderScreen done
+[19568] [SIMCTL] wait 250
+[19822] [SIMCTL] key up
+[19919] [DBG] EPUB renderScreen start
+[19920] [DBG] renderContents start, hasImages=0, heap=1048576
+[19920] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[19923] [DBG] page->render done
+[19923] [DBG] displayPageBuffer start
+[19925] [DBG] displayPageBuffer done
+[19925] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[19925] [DBG] renderContents done, total=5ms, heap=1048576
+[19926] [DBG] EPUB renderScreen done
+[19951] [SIMCTL] wait 250
+[20204] [SIMCTL] key up
+[20311] [DBG] EPUB renderScreen start
+[20312] [DBG] renderContents start, hasImages=0, heap=1048576
+[20312] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[20326] [IMG-TIMING] JPEG 6776x516(r)->469x36 mode=0 quality=0 capture=0: headerScan=0ms init=0ms mcuDecode=12ms rowProcess=1ms rows=36/36 ok=1 decode+draw=13ms total=13ms
+[20326] [IMG-TIMING] fromPath /.metadata/epub/18276938335300208939/images/Weir_9780593135211_epub3_031_r1.jpg: open=0ms render=13ms
+[20328] [DBG] page->render done
+[20328] [DBG] displayPageBuffer start
+[20328] [SIMCTL] wait 250
+[20329] [DBG] displayPageBuffer done
+[20329] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[20329] [DBG] renderContents done, total=17ms, heap=1048576
+[20329] [DBG] EPUB renderScreen done
+[20584] [SIMCTL] key up
+[20689] [DBG] EPUB renderScreen start
+[SIM] open failed: ./fs_/.metadata/epub/18276938335300208939/sections/32.bin (flags=0x0 errno=2 No such file or directory)
+[EBP] Zip Request: OEBPS/xhtml/Weir_9780593135211_epub3_c027_r1.xhtml
+[20694] [ZIP] Decompressed 4563 bytes into 11641 bytes
+[20694] [SCT] createSectionFile: temp HTML extract attempt=1 ok=1 bytes=11641 spine=32 href=OEBPS/xhtml/Weir_9780593135211_epub3_c027_r1.xhtml tmp=/.metadata/epub/18276938335300208939/.tmp_32.html book=/books/Project Hail Mary 2021 by Andy Weir 2.epub tit[20694] [SCT] parseAndBuildPages start internal=OEBPS/xhtml/Weir_9780593135211_epub3_c027_r1.xhtml tmp=/.metadata/epub/18276938335300208939/.tmp_32.html skipImages=0 viewport=482x754 font=3002 headerFont=3003 heap=1048576
+[EHP] Using shared CSS dictionary (276 rules)
+[EBP] Zip Request: OEBPS/images/Weir_9780593135211_epub3_030_r1.jpg
+[20697] [ZIP] Decompressed 94551 bytes into 170786 bytes
+[EHP] Using shared CSS dictionary (276 rules)
+[20702] [EBP-IMG] cache hit /.metadata/epub/18276938335300208939/images/Weir_9780593135211_epub3_030_r1.jpg
+[EHP] Image ../images/Weir_9780593135211_epub3_030_r1.jpg - CSS: , Final: 482x35 (actual: 6922x505, percent: w=0 h=0)
+[20709] [SIMCTL] wait 250
+[20739] [SCT] parseAndBuildPages success internal=OEBPS/xhtml/Weir_9780593135211_epub3_c027_r1.xhtml finalY=221 heap=1048576
+[20740] [DBG] renderContents start, hasImages=0, heap=1048576
+[20740] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[20741] [DBG] page->render done
+[20741] [DBG] displayPageBuffer start
+[20742] [DBG] displayPageBuffer done
+[20742] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[20742] [DBG] renderContents done, total=2ms, heap=1048576
+[20742] [DBG] EPUB renderScreen done
+[20965] [SIMCTL] key up
+[21068] [DBG] EPUB renderScreen start
+[21069] [DBG] renderContents start, hasImages=0, heap=1048576
+[21070] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[21073] [DBG] page->render done
+[21073] [DBG] displayPageBuffer start
+[21075] [DBG] displayPageBuffer done
+[21075] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[21075] [DBG] renderContents done, total=6ms, heap=1048576
+[21075] [DBG] EPUB renderScreen done
+[21091] [SIMCTL] wait 250
+[21345] [SIMCTL] key up
+[21450] [DBG] EPUB renderScreen start
+[21451] [DBG] renderContents start, hasImages=0, heap=1048576
+[21451] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[21453] [DBG] page->render done
+[21453] [DBG] displayPageBuffer start
+[21455] [DBG] displayPageBuffer done
+[21455] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[21455] [DBG] renderContents done, total=4ms, heap=1048576
+[21456] [DBG] EPUB renderScreen done
+[21475] [SIMCTL] wait 250
+[21730] [SIMCTL] wait 600
+[22335] [SIMCTL] shot ./t4_toc.png
+[SIMCTL] shot ./t4_toc.png: ok
+[32066] [SIMCTL] key confirm
+[32196] [SIMCTL] wait 1000
+[33201] [SIMCTL] key confirm
+[33326] [SIMCTL] wait 1500
+[34828] [SIMCTL] key up
+[34952] [SIMCTL] wait 300
+[35254] [SIMCTL] key up
+[35380] [SIMCTL] wait 300
+[35680] [SIMCTL] key up
+[35805] [SIMCTL] wait 300
+[36110] [SIMCTL] key up
+[36235] [SIMCTL] wait 300
+[36536] [SIMCTL] key up
+[36658] [SIMCTL] wait 300
+[36961] [SIMCTL] key up
+[37087] [SIMCTL] wait 300
+[37387] [SIMCTL] key up
+[37512] [SIMCTL] wait 300
+[37816] [SIMCTL] key up
+[37940] [SIMCTL] wait 300
+[38241] [SIMCTL] key up
+[38369] [SIMCTL] wait 300
+[38672] [SIMCTL] key up
+[38796] [SIMCTL] wait 300
+[39100] [SIMCTL] key up
+[39229] [SIMCTL] wait 300
+[39531] [SIMCTL] key up
+[39658] [SIMCTL] wait 300
+[39963] [SIMCTL] key up
+[40087] [SIMCTL] wait 300
+[40393] [SIMCTL] key up
+[40516] [SIMCTL] wait 300
+[40818] [SIMCTL] key up
+[40945] [SIMCTL] wait 300
+[41247] [SIMCTL] key up
+[41375] [SIMCTL] wait 300
+[41675] [SIMCTL] key up
+[41801] [SIMCTL] wait 300
+[42104] [SIMCTL] key up
+[42232] [SIMCTL] wait 300
+[42535] [SIMCTL] key up
+[42663] [SIMCTL] wait 300
+[42968] [SIMCTL] key up
+[43093] [SIMCTL] wait 300
+[43399] [SIMCTL] key up
+[43526] [SIMCTL] wait 300
+[43829] [SIMCTL] key up
+[43951] [SIMCTL] wait 300
+[44256] [SIMCTL] key up
+[44383] [SIMCTL] wait 300
+[44687] [SIMCTL] key up
+[44816] [SIMCTL] wait 300
+[45116] [SIMCTL] key up
+[45242] [SIMCTL] wait 300
+[45545] [SIMCTL] key up
+[45667] [SIMCTL] wait 300
+[45971] [SIMCTL] wait 600
+[46571] [SIMCTL] shot ./t4_toc.png
+[SIMCTL] shot ./t4_toc.png: ok
+[53859] [SIMCTL] failmalloc 1 32768 32768 1
+[SIMCTL] failmalloc armed: after 1, the next 1 allocation(s) of 32768..32768 bytes fail
+[53859] [SIMCTL] key confirm
+[53958] [DBG] EPUB renderScreen start
+[SIM] open failed: ./fs_/.metadata/epub/18276938335300208939/sections/6.bin (flags=0x0 errno=2 No such file or directory)
+[EBP] Zip Request: OEBPS/xhtml/Weir_9780593135211_epub3_c001_r1.xhtml
+[SIMCTL] failmalloc: let malloc(32768) through
+[53962] [ZIP] Decompressed 13331 bytes into 39057 bytes
+[53962] [SCT] createSectionFile: temp HTML extract attempt=1 ok=1 bytes=39057 spine=6 href=OEBPS/xhtml/Weir_9780593135211_epub3_c001_r1.xhtml tmp=/.metadata/epub/18276938335300208939/.tmp_6.html book=/books/Project Hail Mary 2021 by Andy Weir 2.epub title[53962] [SCT] parseAndBuildPages start internal=OEBPS/xhtml/Weir_9780593135211_epub3_c001_r1.xhtml tmp=/.metadata/epub/18276938335300208939/.tmp_6.html skipImages=0 viewport=482x754 font=3002 headerFont=3003 heap=1048576
+[EHP] Using shared CSS dictionary (276 rules)
+[EBP] Zip Request: OEBPS/images/Weir_9780593135211_epub3_004_r1.jpg
+[SIMCTL] failmalloc: refused malloc(32768), 0 left
+[53962] [ZIP] Failed to allocate memory for dictionary: free=1048576 largest=0
+[53962] [EBP-IMG] ensureImageCached failed href=OEBPS/images/Weir_9780593135211_epub3_004_r1.jpg
+[EHP] Using shared CSS dictionary (276 rules)
+[EBP] Zip Request: OEBPS/images/Weir_9780593135211_epub3_004_r1.jpg
+[53972] [ZIP] Decompressed 76735 bytes into 144242 bytes
+[EHP] Image ../images/Weir_9780593135211_epub3_004_r1.jpg - CSS: , Final: 482x36 (actual: 6776x516, percent: w=0 h=0)
+[53984] [SIMCTL] wait 4000
+[54100] [SCT] parseAndBuildPages success internal=OEBPS/xhtml/Weir_9780593135211_epub3_c001_r1.xhtml finalY=55 heap=1048576
+[54102] [DBG] renderContents start, hasImages=0, heap=1048576
+[54102] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[54103] [DBG] page->render done
+[54103] [DBG] displayPageBuffer start
+[54104] [DBG] displayPageBuffer done
+[54104] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[54104] [DBG] renderContents done, total=2ms, heap=1048576
+[54104] [DBG] EPUB renderScreen done
+[57984] [SIMCTL] shot ./t4_missing.png
+[SIMCTL] shot ./t4_missing.png: ok
+[77577] [SIMCTL] key up
+[77682] [DBG] EPUB renderScreen start
+[77682] [DBG] renderContents start, hasImages=1, heap=1048576
+[77682] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[77684] [IMG-TIMING] renderImage(/.metadata/epub/18276938335300208939/images/Thrust_config2.jpg) plain-path: 2ms
+[77684] [DBG] page->render done
+[77684] [DBG] renderImages start
+[77685] [IMG-TIMING] renderImage(/.metadata/epub/18276938335300208939/images/Thrust_config2.jpg) plain-path: 1ms
+[77685] [DBG] renderImages done
+[77685] [DBG] displayPageBuffer start
+[77687] [DBG] displayPageBuffer done
+[77687] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[77687] [DBG] renderContents done, total=5ms, heap=1048576
+[77687] [DBG] EPUB renderScreen done
+[77707] [SIMCTL] wait 2000
+[80597] [SIMCTL] failmalloc 2 32768 32768 1
+[SIMCTL] failmalloc armed: after 1, the next 2 allocation(s) of 32768..32768 bytes fail
+[80597] [SIMCTL] key down
+[80699] [DBG] EPUB renderScreen start
+[SIM] open failed: ./fs_/.metadata/epub/18276938335300208939/sections/6.bin (flags=0x0 errno=2 No such file or directory)
+[EBP] Zip Request: OEBPS/xhtml/Weir_9780593135211_epub3_c001_r1.xhtml
+[SIMCTL] failmalloc: let malloc(32768) through
+[80705] [ZIP] Decompressed 13331 bytes into 39057 bytes
+[80705] [SCT] createSectionFile: temp HTML extract attempt=1 ok=1 bytes=39057 spine=6 href=OEBPS/xhtml/Weir_9780593135211_epub3_c001_r1.xhtml tmp=/.metadata/epub/18276938335300208939/.tmp_6.html book=/books/Project Hail Mary 2021 by Andy Weir 2.epub title[80705] [SCT] parseAndBuildPages start internal=OEBPS/xhtml/Weir_9780593135211_epub3_c001_r1.xhtml tmp=/.metadata/epub/18276938335300208939/.tmp_6.html skipImages=0 viewport=482x754 font=3002 headerFont=3003 heap=1048576
+[EHP] Using shared CSS dictionary (276 rules)
+[EBP] Zip Request: OEBPS/images/Weir_9780593135211_epub3_004_r1.jpg
+[SIMCTL] failmalloc: refused malloc(32768), 1 left
+[80706] [ZIP] Failed to allocate memory for dictionary: free=1048576 largest=0
+[80706] [EBP-IMG] ensureImageCached failed href=OEBPS/images/Weir_9780593135211_epub3_004_r1.jpg
+[EHP] Using shared CSS dictionary (276 rules)
+[EBP] Zip Request: OEBPS/images/Weir_9780593135211_epub3_004_r1.jpg
+[SIMCTL] failmalloc: refused malloc(32768), 0 left
+[80714] [ZIP] Failed to allocate memory for dictionary: free=1048576 largest=0
+[80714] [EBP-IMG] ensureImageCached failed href=OEBPS/images/Weir_9780593135211_epub3_004_r1.jpg
+[80714] [EBP-IMG] <img> not placed src=../images/Weir_9780593135211_epub3_004_r1.jpg resolved=OEBPS/images/Weir_9780593135211_epub3_004_r1.jpg cache=/.metadata/epub/18276938335300208939/images/Weir_9780593135211_epub3_004_r1.jpg skipImages=0
+[80723] [SIMCTL] wait 3000
+[80837] [SCT] parseAndBuildPages success internal=OEBPS/xhtml/Weir_9780593135211_epub3_c001_r1.xhtml finalY=738 heap=1048576
+[SIM] open failed: ./fs_/.metadata/epub/18276938335300208939/sections/6.bin.retry (flags=0x0 errno=2 No such file or directory)
+[80838] [SCT] spine=6 cached without 1 image(s); build 1 of 3
+[80840] [DBG] renderContents start, hasImages=0, heap=1048576
+[80840] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[80840] [DBG] page->render done
+[80841] [DBG] displayPageBuffer start
+[80841] [DBG] displayPageBuffer done
+[80841] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[80841] [DBG] renderContents done, total=1ms, heap=1048576
+[80842] [DBG] EPUB renderScreen done
+[83725] [SIMCTL] shot ./t4_missing.png
+[SIMCTL] shot ./t4_missing.png: ok
+[94514] [SIMCTL] key up
+[94623] [DBG] EPUB renderScreen start
+[94623] [DBG] renderContents start, hasImages=1, heap=1048576
+[94623] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[94625] [IMG-TIMING] renderImage(/.metadata/epub/18276938335300208939/images/Thrust_config2.jpg) plain-path: 2ms
+[94625] [DBG] page->render done
+[94625] [DBG] renderImages start
+[94627] [IMG-TIMING] renderImage(/.metadata/epub/18276938335300208939/images/Thrust_config2.jpg) plain-path: 2ms
+[94627] [DBG] renderImages done
+[94627] [DBG] displayPageBuffer start
+[94628] [DBG] displayPageBuffer done
+[94628] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[94628] [DBG] renderContents done, total=5ms, heap=1048576
+[94628] [DBG] EPUB renderScreen done
+[94641] [SIMCTL] wait 2000
+[96647] [SIMCTL] key down
+[96740] [DBG] EPUB renderScreen start
+[96740] [EPA] loadSection: spine=6 was cached without images; building again
+[EBP] Zip Request: OEBPS/xhtml/Weir_9780593135211_epub3_c001_r1.xhtml
+[96747] [ZIP] Decompressed 13331 bytes into 39057 bytes
+[96747] [SCT] createSectionFile: temp HTML extract attempt=1 ok=1 bytes=39057 spine=6 href=OEBPS/xhtml/Weir_9780593135211_epub3_c001_r1.xhtml tmp=/.metadata/epub/18276938335300208939/.tmp_6.html book=/books/Project Hail Mary 2021 by Andy Weir 2.epub title[96747] [SCT] parseAndBuildPages start internal=OEBPS/xhtml/Weir_9780593135211_epub3_c001_r1.xhtml tmp=/.metadata/epub/18276938335300208939/.tmp_6.html skipImages=0 viewport=482x754 font=3002 headerFont=3003 heap=1048576
+[EHP] Using shared CSS dictionary (276 rules)
+[EBP] Zip Request: OEBPS/images/Weir_9780593135211_epub3_004_r1.jpg
+[96749] [ZIP] Decompressed 76735 bytes into 144242 bytes
+[EHP] Using shared CSS dictionary (276 rules)
+[96758] [EBP-IMG] cache hit /.metadata/epub/18276938335300208939/images/Weir_9780593135211_epub3_004_r1.jpg
+[EHP] Image ../images/Weir_9780593135211_epub3_004_r1.jpg - CSS: , Final: 482x36 (actual: 6776x516, percent: w=0 h=0)
+[96769] [SIMCTL] wait 3000
+[96883] [SCT] parseAndBuildPages success internal=OEBPS/xhtml/Weir_9780593135211_epub3_c001_r1.xhtml finalY=55 heap=1048576
+[96885] [DBG] renderContents start, hasImages=0, heap=1048576
+[96885] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[96886] [DBG] page->render done
+[96886] [DBG] displayPageBuffer start
+[96887] [DBG] displayPageBuffer done
+[96887] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[96887] [DBG] renderContents done, total=2ms, heap=1048576
+[96887] [DBG] EPUB renderScreen done
+[99774] [SIMCTL] shot ./t4_restored.png
+[SIMCTL] shot ./t4_restored.png: ok
+[113395] [SIMCTL] key up
+[113501] [DBG] EPUB renderScreen start
+[113501] [DBG] renderContents start, hasImages=1, heap=1048576
+[113501] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[113504] [IMG-TIMING] renderImage(/.metadata/epub/18276938335300208939/images/Thrust_config2.jpg) plain-path: 3ms
+[113504] [DBG] page->render done
+[113504] [DBG] renderImages start
+[113506] [IMG-TIMING] renderImage(/.metadata/epub/18276938335300208939/images/Thrust_config2.jpg) plain-path: 2ms
+[113506] [DBG] renderImages done
+[113506] [DBG] displayPageBuffer start
+[113508] [DBG] displayPageBuffer done
+[113508] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[113508] [DBG] renderContents done, total=7ms, heap=1048576
+[113508] [DBG] EPUB renderScreen done
+[113526] [SIMCTL] wait 2000
+[116414] [SIMCTL] failmalloc 2 32768 32768 1
+[SIMCTL] failmalloc armed: after 1, the next 2 allocation(s) of 32768..32768 bytes fail
+[116414] [SIMCTL] key down
+[116513] [DBG] EPUB renderScreen start
+[SIM] open failed: ./fs_/.metadata/epub/18276938335300208939/sections/6.bin (flags=0x0 errno=2 No such file or directory)
+[EBP] Zip Request: OEBPS/xhtml/Weir_9780593135211_epub3_c001_r1.xhtml
+[SIMCTL] failmalloc: let malloc(32768) through
+[116518] [ZIP] Decompressed 13331 bytes into 39057 bytes
+[116518] [SCT] createSectionFile: temp HTML extract attempt=1 ok=1 bytes=39057 spine=6 href=OEBPS/xhtml/Weir_9780593135211_epub3_c001_r1.xhtml tmp=/.metadata/epub/18276938335300208939/.tmp_6.html book=/books/Project Hail Mary 2021 by Andy Weir 2.epub titl[116519] [SCT] parseAndBuildPages start internal=OEBPS/xhtml/Weir_9780593135211_epub3_c001_r1.xhtml tmp=/.metadata/epub/18276938335300208939/.tmp_6.html skipImages=0 viewport=482x754 font=3002 headerFont=3003 heap=1048576
+[EHP] Using shared CSS dictionary (276 rules)
+[EBP] Zip Request: OEBPS/images/Weir_9780593135211_epub3_004_r1.jpg
+[SIMCTL] failmalloc: refused malloc(32768), 1 left
+[116519] [ZIP] Failed to allocate memory for dictionary: free=1048576 largest=0
+[116519] [EBP-IMG] ensureImageCached failed href=OEBPS/images/Weir_9780593135211_epub3_004_r1.jpg
+[EHP] Using shared CSS dictionary (276 rules)
+[EBP] Zip Request: OEBPS/images/Weir_9780593135211_epub3_004_r1.jpg
+[SIMCTL] failmalloc: refused malloc(32768), 0 left
+[116533] [ZIP] Failed to allocate memory for dictionary: free=1048576 largest=0
+[116533] [EBP-IMG] ensureImageCached failed href=OEBPS/images/Weir_9780593135211_epub3_004_r1.jpg
+[116533] [EBP-IMG] <img> not placed src=../images/Weir_9780593135211_epub3_004_r1.jpg resolved=OEBPS/images/Weir_9780593135211_epub3_004_r1.jpg cache=/.metadata/epub/18276938335300208939/images/Weir_9780593135211_epub3_004_r1.jpg skipImages=0
+[116544] [SIMCTL] wait 3000
+[116670] [SCT] parseAndBuildPages success internal=OEBPS/xhtml/Weir_9780593135211_epub3_c001_r1.xhtml finalY=738 heap=1048576
+[SIM] open failed: ./fs_/.metadata/epub/18276938335300208939/sections/6.bin.retry (flags=0x0 errno=2 No such file or directory)
+[116670] [SCT] spine=6 cached without 1 image(s); build 1 of 3
+[116672] [DBG] renderContents start, hasImages=0, heap=1048576
+[116672] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[116673] [DBG] page->render done
+[116673] [DBG] displayPageBuffer start
+[116674] [DBG] displayPageBuffer done
+[116674] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[116674] [DBG] renderContents done, total=2ms, heap=1048576
+[116674] [DBG] EPUB renderScreen done
+[119549] [SIMCTL] key up
+[119656] [DBG] EPUB renderScreen start
+[119656] [DBG] renderContents start, hasImages=1, heap=1048576
+[119656] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[119660] [IMG-TIMING] renderImage(/.metadata/epub/18276938335300208939/images/Thrust_config2.jpg) plain-path: 4ms
+[119660] [DBG] page->render done
+[119660] [DBG] renderImages start
+[119664] [IMG-TIMING] renderImage(/.metadata/epub/18276938335300208939/images/Thrust_config2.jpg) plain-path: 4ms
+[119664] [DBG] renderImages done
+[119664] [DBG] displayPageBuffer start
+[119666] [DBG] displayPageBuffer done
+[119666] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[119666] [DBG] renderContents done, total=10ms, heap=1048576
+[119666] [DBG] EPUB renderScreen done
+[119676] [SIMCTL] wait 2000
+[123449] [SIMCTL] failmalloc 3 32768 32768 0
+[SIMCTL] failmalloc armed: after 0, the next 3 allocation(s) of 32768..32768 bytes fail
+[123449] [SIMCTL] key down
+[123554] [DBG] EPUB renderScreen start
+[123555] [EPA] loadSection: spine=6 was cached without images; building again
+[EBP] Zip Request: OEBPS/xhtml/Weir_9780593135211_epub3_c001_r1.xhtml
+[SIMCTL] failmalloc: refused malloc(32768), 2 left
+[123560] [ZIP] Failed to allocate memory for dictionary: free=1048576 largest=0
+[123560] [SCT] createSectionFile: temp HTML extract attempt=1 ok=0 bytes=0 spine=6 href=OEBPS/xhtml/Weir_9780593135211_epub3_c001_r1.xhtml tmp=/.metadata/epub/18276938335300208939/.tmp_6.html book=/books/Project Hail Mary 2021 by Andy Weir 2.epub title=Pr[123579] [SIMCTL] wait 4000
+[EBP] Zip Request: OEBPS/xhtml/Weir_9780593135211_epub3_c001_r1.xhtml
+[SIMCTL] failmalloc: refused malloc(32768), 1 left
+[123611] [ZIP] Failed to allocate memory for dictionary: free=1048576 largest=0
+[123611] [SCT] createSectionFile: temp HTML extract attempt=2 ok=0 bytes=0 spine=6 href=OEBPS/xhtml/Weir_9780593135211_epub3_c001_r1.xhtml tmp=/.metadata/epub/18276938335300208939/.tmp_6.html book=/books/Project Hail Mary 2021 by Andy Weir 2.epub title=Pr[EBP] Zip Request: OEBPS/xhtml/Weir_9780593135211_epub3_c001_r1.xhtml
+[SIMCTL] failmalloc: refused malloc(32768), 0 left
+[123662] [ZIP] Failed to allocate memory for dictionary: free=1048576 largest=0
+[123662] [SCT] createSectionFile: temp HTML extract attempt=3 ok=0 bytes=0 spine=6 href=OEBPS/xhtml/Weir_9780593135211_epub3_c001_r1.xhtml tmp=/.metadata/epub/18276938335300208939/.tmp_6.html book=/books/Project Hail Mary 2021 by Andy Weir 2.epub title=Pr[123662] [SCT] createSectionFile: failed to extract chapter after retries spine=6 href=OEBPS/xhtml/Weir_9780593135211_epub3_c001_r1.xhtml book=/books/Project Hail Mary 2021 by Andy Weir 2.epub title=Project Hail MaryA Novel heap=1048576
+[123666] [EPA] loadSection: rebuild of spine=6 failed; keeping the earlier layout
+[123667] [DBG] renderContents start, hasImages=0, heap=1048576
+[123667] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[123669] [DBG] page->render done
+[123669] [DBG] displayPageBuffer start
+[123671] [DBG] displayPageBuffer done
+[123671] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[123671] [DBG] renderContents done, total=4ms, heap=1048576
+[123671] [DBG] EPUB renderScreen done
+[127580] [SIMCTL] shot ./t5_rebuildfail.png
+[SIMCTL] shot ./t5_rebuildfail.png: ok
+[138733] [SIMCTL] key up
+[138831] [DBG] EPUB renderScreen start
+[138831] [DBG] renderContents start, hasImages=1, heap=1048576
+[138831] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[138833] [IMG-TIMING] renderImage(/.metadata/epub/18276938335300208939/images/Thrust_config2.jpg) plain-path: 2ms
+[138833] [DBG] page->render done
+[138833] [DBG] renderImages start
+[138835] [IMG-TIMING] renderImage(/.metadata/epub/18276938335300208939/images/Thrust_config2.jpg) plain-path: 2ms
+[138835] [DBG] renderImages done
+[138835] [DBG] displayPageBuffer start
+[138836] [DBG] displayPageBuffer done
+[138836] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[138836] [DBG] renderContents done, total=5ms, heap=1048576
+[138836] [DBG] EPUB renderScreen done
+[138863] [SIMCTL] wait 2000
+[141747] [SIMCTL] failmalloc 3 32768 32768 0
+[SIMCTL] failmalloc armed: after 0, the next 3 allocation(s) of 32768..32768 bytes fail
+[141747] [SIMCTL] key down
+[141850] [DBG] EPUB renderScreen start
+[SIM] open failed: ./fs_/.metadata/epub/18276938335300208939/sections/6.bin (flags=0x0 errno=2 No such file or directory)
+[EBP] Zip Request: OEBPS/xhtml/Weir_9780593135211_epub3_c001_r1.xhtml
+[SIMCTL] failmalloc: refused malloc(32768), 2 left
+[141856] [ZIP] Failed to allocate memory for dictionary: free=1048576 largest=0
+[141856] [SCT] createSectionFile: temp HTML extract attempt=1 ok=0 bytes=0 spine=6 href=OEBPS/xhtml/Weir_9780593135211_epub3_c001_r1.xhtml tmp=/.metadata/epub/18276938335300208939/.tmp_6.html book=/books/Project Hail Mary 2021 by Andy Weir 2.epub title=Pr[141876] [SIMCTL] wait 4000
+[EBP] Zip Request: OEBPS/xhtml/Weir_9780593135211_epub3_c001_r1.xhtml
+[SIMCTL] failmalloc: refused malloc(32768), 1 left
+[141908] [ZIP] Failed to allocate memory for dictionary: free=1048576 largest=0
+[141908] [SCT] createSectionFile: temp HTML extract attempt=2 ok=0 bytes=0 spine=6 href=OEBPS/xhtml/Weir_9780593135211_epub3_c001_r1.xhtml tmp=/.metadata/epub/18276938335300208939/.tmp_6.html book=/books/Project Hail Mary 2021 by Andy Weir 2.epub title=Pr[EBP] Zip Request: OEBPS/xhtml/Weir_9780593135211_epub3_c001_r1.xhtml
+[SIMCTL] failmalloc: refused malloc(32768), 0 left
+[141960] [ZIP] Failed to allocate memory for dictionary: free=1048576 largest=0
+[141960] [SCT] createSectionFile: temp HTML extract attempt=3 ok=0 bytes=0 spine=6 href=OEBPS/xhtml/Weir_9780593135211_epub3_c001_r1.xhtml tmp=/.metadata/epub/18276938335300208939/.tmp_6.html book=/books/Project Hail Mary 2021 by Andy Weir 2.epub title=Pr[141960] [SCT] createSectionFile: failed to extract chapter after retries spine=6 href=OEBPS/xhtml/Weir_9780593135211_epub3_c001_r1.xhtml book=/books/Project Hail Mary 2021 by Andy Weir 2.epub title=Project Hail MaryA Novel heap=1048576
+[141965] [EPA] loadSection: build failed spine=6 total=41
+[141965] [EPA] loadCurrentSection: build failed spine=6, not walking further
+[141967] [CHR] restarting to open spine=6 of /books/Project Hail Mary 2021 by Andy Weir 2.epub on a fresh heap

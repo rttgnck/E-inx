@@ -1,0 +1,433 @@
+[0] [BOOT] Display init
+[FontManager] Initialized (Literata + Atkinson + Montserrat clock + SD streaming)
+=== Memory Usage ===
+Free heap: 1048576 bytes (1024 KB)
+Largest free block: 1048576 bytes
+Font families loaded: 0
+Fonts loaded: 0
+SD font entries: 0
+===================
+[141] [BOOT] Display OK, heap=1000000
+[141] [BOOT] SD init
+[141] [BOOT] SD OK
+[142] [BOOT] APP_STATE.lastRead = "", rtcLastReadPath = ""
+[142] [BOOT] Loading settings
+[142] [CPS] Settings loaded (version 43, 102 items, darkMode=0)
+[142] [BOOT] Settings OK, darkMode=0, heap=1000000
+[151] [SIM] Activity: BootActivity
+[237] [SIM] Activity: Recent
+[SIM] open failed: ./fs_/.metadata/epub/18276938335300208939/statistics.bin (flags=0x0 errno=2 No such file or directory)
+[2993] [SIMCTL] wait 6000
+[8998] [SIMCTL] shot ./t1_ch1.png
+[SIMCTL] shot ./t1_ch1.png: ok
+[17143] [SIMCTL] shot ./t1_recent.png
+[SIMCTL] shot ./t1_recent.png: ok
+[17160] [SIMCTL] key confirm
+[17241] [SIM] Activity: Reader
+[SIM] open failed: ./fs_/.metadata/epub/18276938335300208939/book.bin (flags=0x0 errno=2 No such file or directory)
+[FontManager] Unloading all SD streaming fonts
+[FontManager] All SD fonts unloaded
+=== Memory Usage ===
+Free heap: 1048576 bytes (1024 KB)
+Largest free block: 1048576 bytes
+Font families loaded: 0
+Fonts loaded: 0
+SD font entries: 0
+===================
+[FontManager] Scanned 0 font families, found 0 font sizes
+=== Memory Usage ===
+Free heap: 1048576 bytes (1024 KB)
+Largest free block: 1048576 bytes
+Font families loaded: 0
+Fonts loaded: 0
+SD font entries: 0
+===================
+[SIM] open failed: ./fs_/.metadata/epub/18276938335300208939/settings.bin (flags=0x0 errno=2 No such file or directory)
+[17241] [SIM] Subactivity: EpubReader
+[SIM] open failed: ./fs_/.metadata/epub/18276938335300208939/book.bin (flags=0x0 errno=2 No such file or directory)
+[17243] [BMC] Entering write mode
+[17244] [BMC] Beginning content opf pass
+[EBP] Zip Request: META-INF/container.xml
+[17244] [ZIP] Decompressed 181 bytes into 257 bytes
+[EBP] Zip Request: OEBPS/9780593135211.opf
+[17245] [COF] Found EPUB 3 nav document: OEBPS/9780593135211_nav.xhtml
+[17248] [COF] Entering guide state.
+[17248] [COF] Skipping non-text reference in guide: cover
+[17248] [COF] Skipping non-text reference in guide: toc
+[17248] [COF] Found text reference in guide: OEBPS/xhtml/Weir_9780593135211_epub3_fm-sup_r1.xhtml.
+[17248] [COF] Found start reference in guide: OEBPS/xhtml/Weir_9780593135211_epub3_fm-sup_r1.xhtml.
+[17248] [COF] Skipping non-text reference in guide: copyright-page
+[17248] [ZIP] Decompressed 2149 bytes into 13906 bytes
+[17248] [BMC] Beginning CSS extraction pass
+[17249] [ZIP] Decompressed 181 bytes into 257 bytes
+[17249] [BMC] Found OPF: OEBPS/9780593135211.opf
+[17250] [ZIP] Decompressed 2149 bytes into 13906 bytes
+[17250] [BMC] Found CSS file in manifest: OEBPS/css/9780593135211_style.css
+[17251] [ZIP] Decompressed 1422 bytes into 13334 bytes
+[17251] [BMC] Found CSS file in manifest: OEBPS/css/prhStyle.css
+[17252] [ZIP] Decompressed 4708 bytes into 19108 bytes
+[17253] [BMC] Found CSS file in manifest: OEBPS/css/prhStyle-media-queries.css
+[17254] [ZIP] Decompressed 361 bytes into 784 bytes
+[17254] [BMC] Found CSS file in manifest: OEBPS/css/freeFont.css
+[17255] [ZIP] Decompressed 313 bytes into 1910 bytes
+[17255] [BMC] Extracted 4 CSS files from EPUB manifest
+[17255] [BMC] Extracted 4 CSS files
+[17255] [BMC] Beginning toc pass
+[EBP] Zip Request: OEBPS/9780593135211_nav.xhtml
+[17256] [ZIP] Decompressed 3861 bytes into 45348 bytes
+[17256] [NAV] Found nav toc element
+[17257] [NAV] Finished parsing nav toc
+[17258] [BMC] Wrote 41 spine, 38 TOC, 4 CSS entries
+[17259] [BMC] Warning: Could not find TOC entry for spine item 4: OEBPS/xhtml/Weir_9780593135211_epub3_fm-sup_r1.xhtml, using title from last section
+[17260] [BMC] Warning: Could not find TOC entry for spine item 5: OEBPS/xhtml/Weir_9780593135211_epub3_fm-sup1_r1.xhtml, using title from last section
+[17267] [BMC] Warning: Could not find TOC entry for spine item 40: OEBPS/xhtml/next-reads.xhtml, using title from last section
+[17268] [BMC] Successfully built book.bin
+[17268] [BMC] Loaded cache data: 41 spine, 38 TOC, 4 CSS entries
+[SIM] open failed: ./fs_/.metadata/epub/18276938335300208939/meta.override (flags=0x0 errno=2 No such file or directory)
+[EBP] Zip Request: OEBPS/images/9780593135211_cover.jpg
+[17274] [ZIP] Decompressed 1063392 bytes into 1104071 bytes
+[EBP] Zip Request: OEBPS/images/9780593135211_cover.jpg
+[17286] [ZIP] Decompressed 1063392 bytes into 1104071 bytes
+[17286] [SIMCTL] wait 8000
+[EBP] Thumbnail JPEG resize ok: /.metadata/epub/18276938335300208939/thumb.jpg
+[SIM] open failed: ./fs_/.metadata/epub/18276938335300208939/sections/4.bin (flags=0x0 errno=2 No such file or directory)
+[EBP] Zip Request: OEBPS/xhtml/Weir_9780593135211_epub3_fm-sup_r1.xhtml
+[17444] [ZIP] Decompressed 468 bytes into 951 bytes
+[17444] [SCT] createSectionFile: temp HTML extract attempt=1 ok=1 bytes=951 spine=4 href=OEBPS/xhtml/Weir_9780593135211_epub3_fm-sup_r1.xhtml tmp=/.metadata/epub/18276938335300208939/.tmp_4.html book=/books/Project Hail Mary 2021 by Andy Weir 2.epub title[17444] [SCT] parseAndBuildPages start internal=OEBPS/xhtml/Weir_9780593135211_epub3_fm-sup_r1.xhtml tmp=/.metadata/epub/18276938335300208939/.tmp_4.html skipImages=0 viewport=482x754 font=3002 headerFont=3003 heap=1048576
+[EBP] Building shared CSS dictionary from 4 CSS files
+[CSSP] Parsed 94 CSS rules
+[CSSP] Parsed 263 CSS rules
+[CSSP] Parsed 264 CSS rules
+[CSSP] Parsed 276 CSS rules
+[EBP] Shared CSS dictionary: 276 rules from 35136 bytes
+[EHP] Using shared CSS dictionary (276 rules)
+[EBP] Zip Request: OEBPS/images/Thrust_config1.jpg
+[17456] [ZIP] Decompressed 531844 bytes into 601194 bytes
+[EHP] Using shared CSS dictionary (276 rules)
+[17458] [EBP-IMG] cache hit /.metadata/epub/18276938335300208939/images/Thrust_config1.jpg
+[EHP] Image ../images/Thrust_config1.jpg - CSS: , Final: 471x754 (actual: 1478x2367, percent: w=0 h=0)
+[17487] [IMG-TIMING] JPEG 1478x2367(r)->160x256 mode=1 quality=0 capture=0: headerScan=0ms init=0ms mcuDecode=27ms rowProcess=2ms rows=256/256 ok=1 decode+draw=29ms total=29ms
+[17487] [IMG-TIMING] fromPath /.metadata/epub/18276938335300208939/images/Thrust_config1.jpg: open=0ms render=29ms
+[17488] [SCT] parseAndBuildPages success internal=OEBPS/xhtml/Weir_9780593135211_epub3_fm-sup_r1.xhtml finalY=0 heap=1048576
+[SIM] open failed: ./fs_/.metadata/epub/18276938335300208939/bookmarks.bin (flags=0x0 errno=2 No such file or directory)
+[SIM] open failed: ./fs_/.metadata/epub/18276938335300208939/statistics.bin (flags=0x0 errno=2 No such file or directory)
+[17503] [DBG] EPUB renderScreen start
+[17503] [DBG] renderContents start, hasImages=1, heap=1048576
+[17503] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[17505] [IMG-TIMING] renderImage(/.metadata/epub/18276938335300208939/images/Thrust_config1.jpg) plain-path: 2ms
+[17505] [DBG] page->render done
+[17505] [DBG] renderImages start
+[17507] [IMG-TIMING] renderImage(/.metadata/epub/18276938335300208939/images/Thrust_config1.jpg) plain-path: 2ms
+[17507] [DBG] renderImages done
+[17507] [DBG] displayPageBuffer start
+[17507] [DBG] displayPageBuffer done
+[17507] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[17507] [DBG] renderContents done, total=4ms, heap=1048576
+[17508] [DBG] EPUB renderScreen done
+[25291] [SIMCTL] shot ./t1_ch1.png
+[SIMCTL] shot ./t1_ch1.png: ok
+[38895] [SIMCTL] key down
+[38997] [DBG] EPUB renderScreen start
+[SIM] open failed: ./fs_/.metadata/epub/18276938335300208939/sections/5.bin (flags=0x0 errno=2 No such file or directory)
+[EBP] Zip Request: OEBPS/xhtml/Weir_9780593135211_epub3_fm-sup1_r1.xhtml
+[39001] [ZIP] Decompressed 466 bytes into 945 bytes
+[39001] [SCT] createSectionFile: temp HTML extract attempt=1 ok=1 bytes=945 spine=5 href=OEBPS/xhtml/Weir_9780593135211_epub3_fm-sup1_r1.xhtml tmp=/.metadata/epub/18276938335300208939/.tmp_5.html book=/books/Project Hail Mary 2021 by Andy Weir 2.epub titl[39001] [SCT] parseAndBuildPages start internal=OEBPS/xhtml/Weir_9780593135211_epub3_fm-sup1_r1.xhtml tmp=/.metadata/epub/18276938335300208939/.tmp_5.html skipImages=0 viewport=482x754 font=3002 headerFont=3003 heap=1048576
+[EHP] Using shared CSS dictionary (276 rules)
+[EBP] Zip Request: OEBPS/images/Thrust_config2.jpg
+[39006] [ZIP] Decompressed 471787 bytes into 527596 bytes
+[EHP] Using shared CSS dictionary (276 rules)
+[39008] [EBP-IMG] cache hit /.metadata/epub/18276938335300208939/images/Thrust_config2.jpg
+[EHP] Image ../images/Thrust_config2.jpg - CSS: , Final: 468x754 (actual: 1475x2372, percent: w=0 h=0)
+[39023] [SIMCTL] wait 1500
+[39043] [IMG-TIMING] JPEG 1475x2372(r)->160x257 mode=1 quality=0 capture=0: headerScan=0ms init=0ms mcuDecode=29ms rowProcess=5ms rows=257/257 ok=1 decode+draw=34ms total=34ms
+[39043] [IMG-TIMING] fromPath /.metadata/epub/18276938335300208939/images/Thrust_config2.jpg: open=0ms render=34ms
+[39043] [SCT] parseAndBuildPages success internal=OEBPS/xhtml/Weir_9780593135211_epub3_fm-sup1_r1.xhtml finalY=0 heap=1048576
+[39045] [DBG] renderContents start, hasImages=1, heap=1048576
+[39045] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[39047] [IMG-TIMING] renderImage(/.metadata/epub/18276938335300208939/images/Thrust_config2.jpg) plain-path: 2ms
+[39047] [DBG] page->render done
+[39047] [DBG] renderImages start
+[39049] [IMG-TIMING] renderImage(/.metadata/epub/18276938335300208939/images/Thrust_config2.jpg) plain-path: 2ms
+[39049] [DBG] renderImages done
+[39049] [DBG] displayPageBuffer start
+[39050] [DBG] displayPageBuffer done
+[39050] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[39050] [DBG] renderContents done, total=5ms, heap=1048576
+[39050] [DBG] EPUB renderScreen done
+[40528] [SIMCTL] key down
+[40634] [DBG] EPUB renderScreen start
+[SIM] open failed: ./fs_/.metadata/epub/18276938335300208939/sections/6.bin (flags=0x0 errno=2 No such file or directory)
+[EBP] Zip Request: OEBPS/xhtml/Weir_9780593135211_epub3_c001_r1.xhtml
+[40640] [ZIP] Decompressed 13331 bytes into 39057 bytes
+[40640] [SCT] createSectionFile: temp HTML extract attempt=1 ok=1 bytes=39057 spine=6 href=OEBPS/xhtml/Weir_9780593135211_epub3_c001_r1.xhtml tmp=/.metadata/epub/18276938335300208939/.tmp_6.html book=/books/Project Hail Mary 2021 by Andy Weir 2.epub title[40640] [SCT] parseAndBuildPages start internal=OEBPS/xhtml/Weir_9780593135211_epub3_c001_r1.xhtml tmp=/.metadata/epub/18276938335300208939/.tmp_6.html skipImages=0 viewport=482x754 font=3002 headerFont=3003 heap=1048576
+[EHP] Using shared CSS dictionary (276 rules)
+[EBP] Zip Request: OEBPS/images/Weir_9780593135211_epub3_004_r1.jpg
+[40642] [ZIP] Decompressed 76735 bytes into 144242 bytes
+[40654] [SIMCTL] wait 3000
+[EHP] Using shared CSS dictionary (276 rules)
+[40657] [EBP-IMG] cache hit /.metadata/epub/18276938335300208939/images/Weir_9780593135211_epub3_004_r1.jpg
+[EHP] Image ../images/Weir_9780593135211_epub3_004_r1.jpg - CSS: , Final: 482x36 (actual: 6776x516, percent: w=0 h=0)
+[40796] [SCT] parseAndBuildPages success internal=OEBPS/xhtml/Weir_9780593135211_epub3_c001_r1.xhtml finalY=55 heap=1048576
+[40798] [DBG] renderContents start, hasImages=0, heap=1048576
+[40798] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[40799] [DBG] page->render done
+[40799] [DBG] displayPageBuffer start
+[40800] [DBG] displayPageBuffer done
+[40800] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[40800] [DBG] renderContents done, total=2ms, heap=1048576
+[40800] [DBG] EPUB renderScreen done
+[43660] [SIMCTL] shot ./t1_ch1.png
+[SIMCTL] shot ./t1_ch1.png: ok
+[59526] [SIMCTL] key confirm
+[59653] [SIMCTL] wait 800
+[60458] [SIMCTL] key confirm
+[60589] [SIMCTL] wait 1500
+[62091] [SIMCTL] shot ./t2_toc.png
+[SIMCTL] shot ./t2_toc.png: ok
+[70181] [SIMCTL] key down 50
+[70278] [SIMCTL] key down 50
+[70374] [SIMCTL] key down 50
+[70472] [SIMCTL] key down 50
+[70572] [SIMCTL] key down 50
+[70671] [SIMCTL] key down 50
+[70765] [SIMCTL] key down 50
+[70865] [SIMCTL] key down 50
+[70958] [SIMCTL] key down 50
+[71053] [SIMCTL] key down 50
+[71154] [SIMCTL] key down 50
+[71249] [SIMCTL] key down 50
+[71347] [SIMCTL] key down 50
+[71441] [SIMCTL] key down 50
+[71539] [SIMCTL] key down 50
+[71639] [SIMCTL] key down 50
+[71735] [SIMCTL] key down 50
+[71829] [SIMCTL] key down 50
+[71929] [SIMCTL] key down 50
+[72023] [SIMCTL] key down 50
+[72120] [SIMCTL] key down 50
+[72218] [SIMCTL] key down 50
+[72310] [SIMCTL] key down 50
+[72407] [SIMCTL] key down 50
+[72507] [SIMCTL] key down 50
+[72604] [SIMCTL] key down 50
+[72704] [SIMCTL] key down 50
+[72801] [SIMCTL] key down 50
+[72900] [SIMCTL] key down 50
+[73000] [SIMCTL] wait 800
+[73805] [SIMCTL] shot ./t2_toc30.png
+[SIMCTL] shot ./t2_toc30.png: ok
+[84223] [SIMCTL] key down
+[84349] [SIMCTL] wait 250
+[84604] [SIMCTL] key down
+[84728] [SIMCTL] wait 250
+[84980] [SIMCTL] key down
+[85107] [SIMCTL] wait 250
+[85361] [SIMCTL] key down
+[85484] [SIMCTL] wait 250
+[85738] [SIMCTL] key down
+[85865] [SIMCTL] wait 250
+[86117] [SIMCTL] key down
+[86245] [SIMCTL] wait 250
+[86500] [SIMCTL] key down
+[86624] [SIMCTL] wait 250
+[86878] [SIMCTL] key down
+[87007] [SIMCTL] wait 250
+[87263] [SIMCTL] key down
+[87391] [SIMCTL] wait 250
+[87645] [SIMCTL] key down
+[87774] [SIMCTL] wait 250
+[88025] [SIMCTL] key down
+[88156] [SIMCTL] wait 250
+[88406] [SIMCTL] key down
+[88531] [SIMCTL] wait 250
+[88786] [SIMCTL] key down
+[88912] [SIMCTL] wait 250
+[89165] [SIMCTL] key down
+[89293] [SIMCTL] wait 250
+[89544] [SIMCTL] wait 800
+[90347] [SIMCTL] shot ./t2_toc30.png
+[SIMCTL] shot ./t2_toc30.png: ok
+[99437] [SIMCTL] key confirm
+[99538] [DBG] EPUB renderScreen start
+[SIM] open failed: ./fs_/.metadata/epub/18276938335300208939/sections/35.bin (flags=0x0 errno=2 No such file or directory)
+[EBP] Zip Request: OEBPS/xhtml/Weir_9780593135211_epub3_c030_r1.xhtml
+[99542] [ZIP] Decompressed 6021 bytes into 15763 bytes
+[99542] [SCT] createSectionFile: temp HTML extract attempt=1 ok=1 bytes=15763 spine=35 href=OEBPS/xhtml/Weir_9780593135211_epub3_c030_r1.xhtml tmp=/.metadata/epub/18276938335300208939/.tmp_35.html book=/books/Project Hail Mary 2021 by Andy Weir 2.epub tit[99542] [SCT] parseAndBuildPages start internal=OEBPS/xhtml/Weir_9780593135211_epub3_c030_r1.xhtml tmp=/.metadata/epub/18276938335300208939/.tmp_35.html skipImages=0 viewport=482x754 font=3002 headerFont=3003 heap=1048576
+[EHP] Using shared CSS dictionary (276 rules)
+[EBP] Zip Request: OEBPS/images/Weir_9780593135211_epub3_033_r1.jpg
+[99543] [ZIP] Decompressed 101387 bytes into 174658 bytes
+[EHP] Using shared CSS dictionary (276 rules)
+[99550] [EBP-IMG] cache hit /.metadata/epub/18276938335300208939/images/Weir_9780593135211_epub3_033_r1.jpg
+[EHP] Image ../images/Weir_9780593135211_epub3_033_r1.jpg - CSS: , Final: 482x35 (actual: 6922x505, percent: w=0 h=0)
+[99559] [SIMCTL] wait 6000
+[99599] [SCT] parseAndBuildPages success internal=OEBPS/xhtml/Weir_9780593135211_epub3_c030_r1.xhtml finalY=202 heap=1048576
+[99602] [DBG] renderContents start, hasImages=0, heap=1048576
+[99602] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[99612] [IMG-TIMING] JPEG 6922x505(r)->474x35 mode=0 quality=0 capture=0: headerScan=0ms init=0ms mcuDecode=9ms rowProcess=1ms rows=35/35 ok=1 decode+draw=10ms total=10ms
+[99612] [IMG-TIMING] fromPath /.metadata/epub/18276938335300208939/images/Weir_9780593135211_epub3_033_r1.jpg: open=0ms render=10ms
+[99613] [DBG] page->render done
+[99613] [DBG] displayPageBuffer start
+[99614] [DBG] displayPageBuffer done
+[99614] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[99614] [DBG] renderContents done, total=12ms, heap=1048576
+[99614] [DBG] EPUB renderScreen done
+[105564] [SIMCTL] shot ./t2_ch30.png
+[SIMCTL] shot ./t2_ch30.png: ok
+[199217] [SIMCTL] key back
+[FontManager] Unloading all SD streaming fonts
+[FontManager] All SD fonts unloaded
+=== Memory Usage ===
+Free heap: 1048576 bytes (1024 KB)
+Largest free block: 1048576 bytes
+Font families loaded: 0
+Fonts loaded: 0
+SD font entries: 0
+===================
+[199307] [SIM] Activity: Recent
+[199315] [IMG-TIMING] JPEG 130x196->210x318 mode=0 quality=0 capture=0: headerScan=0ms init=0ms mcuDecode=3ms rowProcess=0ms rows=318/318 ok=1 decode+draw=3ms total=3ms
+[199315] [IMG-TIMING] fromPath /.metadata/epub/18276938335300208939/thumb.jpg: open=0ms render=3ms
+[199343] [SIMCTL] wait 1500
+[200848] [SIMCTL] shot ./n1.png
+[SIMCTL] shot ./n1.png: ok
+[207824] [SIMCTL] key right
+[207824] [SIM] Activity: News
+[207952] [SIMCTL] wait 700
+[208657] [SIMCTL] key right
+[208666] [SIM] Activity: Library
+[208675] [IMG-TIMING] JPEG 130x196->147x192 mode=0 quality=0 capture=0: headerScan=0ms init=0ms mcuDecode=1ms rowProcess=2ms rows=192/192 ok=1 decode+draw=3ms total=3ms
+[208675] [IMG-TIMING] fromPath /.metadata/epub/18276938335300208939/thumb.jpg: open=0ms render=3ms
+[208778] [SIMCTL] wait 700
+[209483] [SIMCTL] key right
+[209490] [CPS] Settings saved to file (version 43, darkMode=0)
+[209490] [SIM] Activity: Settings
+[209490] [SIM] Subactivity: CategorySettings
+[209608] [SIMCTL] wait 1200
+[210813] [SIMCTL] shot ./n2.png
+[SIMCTL] shot ./n2.png: ok
+[217899] [SIMCTL] key confirm
+[218029] [SIMCTL] wait 1200
+[219229] [SIMCTL] shot ./n3.png
+[SIMCTL] shot ./n3.png: ok
+[226312] [SIMCTL] key confirm
+[226439] [SIMCTL] wait 800
+[227241] [SIMCTL] key down
+[227370] [SIMCTL] wait 300
+[227670] [SIMCTL] key down
+[227798] [SIMCTL] wait 300
+[228103] [SIMCTL] key down
+[228233] [SIMCTL] wait 300
+[228538] [SIMCTL] key down
+[228664] [SIMCTL] wait 300
+[228968] [SIMCTL] key down
+[229093] [SIMCTL] wait 300
+[229395] [SIMCTL] key confirm
+[229522] [SIMCTL] wait 1200
+[230727] [SIMCTL] shot ./n4.png
+[SIMCTL] shot ./n4.png: ok
+[237279] [SIMCTL] key confirm
+[237401] [SIMCTL] wait 800
+[238206] [SIMCTL] key up
+[238333] [SIMCTL] wait 300
+[238634] [SIMCTL] key up
+[238759] [SIMCTL] wait 300
+[239064] [SIMCTL] key up
+[239191] [SIMCTL] wait 300
+[239492] [SIMCTL] key up
+[239616] [SIMCTL] wait 300
+[239921] [SIMCTL] key confirm
+[240051] [SIMCTL] wait 1200
+[241256] [SIMCTL] shot ./n5.png
+[SIMCTL] shot ./n5.png: ok
+[256670] [SIMCTL] key confirm
+[256795] [SIMCTL] wait 800
+[257599] [SIMCTL] key up
+[257725] [SIMCTL] wait 300
+[258027] [SIMCTL] key confirm
+[258153] [SIMCTL] wait 1000
+[259154] [SIMCTL] key down
+[259284] [SIMCTL] wait 300
+[259585] [SIMCTL] key down
+[259715] [SIMCTL] wait 300
+[260020] [SIMCTL] key down
+[260147] [SIMCTL] wait 300
+[260447] [SIMCTL] key down
+[260577] [SIMCTL] wait 300
+[260882] [SIMCTL] key down
+[261004] [SIMCTL] wait 300
+[261305] [SIMCTL] key down
+[261434] [SIMCTL] wait 300
+[261736] [SIMCTL] key down
+[261861] [SIMCTL] wait 300
+[262166] [SIMCTL] key down
+[262297] [SIMCTL] wait 300
+[262602] [SIMCTL] key down
+[262729] [SIMCTL] wait 300
+[263034] [SIMCTL] key down
+[263157] [SIMCTL] wait 300
+[263462] [SIMCTL] key down
+[263590] [SIMCTL] wait 300
+[263892] [SIMCTL] key down
+[264020] [SIMCTL] wait 300
+[264321] [SIMCTL] wait 800
+[265125] [SIMCTL] shot ./n6.png
+[SIMCTL] shot ./n6.png: ok
+[272024] [SIMCTL] key down
+[272144] [SIMCTL] wait 300
+[272449] [SIMCTL] key down
+[272579] [SIMCTL] wait 300
+[272884] [SIMCTL] key down
+[273013] [SIMCTL] wait 300
+[273317] [SIMCTL] key down
+[273445] [SIMCTL] wait 300
+[273747] [SIMCTL] key down
+[273877] [SIMCTL] wait 300
+[274179] [SIMCTL] wait 500
+[274684] [SIMCTL] shot ./n7.png
+[SIMCTL] shot ./n7.png: ok
+[282796] [SIMCTL] key confirm
+[282926] [SIMCTL] wait 800
+[283728] [SIMCTL] shot ./n8.png
+[SIMCTL] shot ./n8.png: ok
+[283746] [SIMCTL] key left
+[283876] [SIMCTL] wait 600
+[284480] [SIMCTL] key left
+[284606] [SIMCTL] wait 600
+[285211] [SIMCTL] key left
+[285341] [SIMCTL] wait 1500
+[286846] [SIMCTL] shot ./t3_games.png
+[SIMCTL] shot ./t3_games.png: ok
+[294620] [SIMCTL] key up
+[294746] [SIMCTL] wait 500
+[295247] [SIMCTL] shot ./n9.png
+[SIMCTL] shot ./n9.png: ok
+[301891] [SIMCTL] key confirm
+[301903] [CPS] Settings saved to file (version 43, darkMode=0)
+[302021] [SIMCTL] wait 800
+[302826] [SIMCTL] key left
+[302834] [CPS] Settings saved to file (version 43, darkMode=0)
+[302834] [SIM] Activity: Library
+[302955] [SIMCTL] wait 800
+[303758] [SIMCTL] key left
+[303765] [CPS] Settings saved to file (version 43, darkMode=0)
+[303765] [SIM] Activity: Games
+[303883] [SIMCTL] wait 1500
+[305387] [SIMCTL] shot ./t3_games.png
+[SIMCTL] shot ./t3_games.png: ok
+[313779] [SIMCTL] key down
+[313906] [SIMCTL] wait 300
+[314209] [SIMCTL] key down
+[314337] [SIMCTL] wait 300
+[314642] [SIMCTL] key down
+[314772] [SIMCTL] wait 300
+[315077] [SIMCTL] key down
+[315207] [SIMCTL] wait 500
+[315712] [SIMCTL] shot ./t3_sel.png
+[SIMCTL] shot ./t3_sel.png: ok
+[315728] [SIMCTL] key confirm
+[315853] [SIMCTL] wait 1500
+[317358] [SIMCTL] shot ./t3_roms.png
+[SIMCTL] shot ./t3_roms.png: ok
+[326358] [SIMCTL] key back
+[326484] [SIMCTL] wait 1500
+[327987] [SIMCTL] shot ./t3_back.png
+[SIMCTL] shot ./t3_back.png: ok

@@ -2,6 +2,7 @@
 
 #include <HalDisplay.h>
 
+#include <algorithm>
 #include <functional>
 #include <string>
 
@@ -9,6 +10,7 @@
 #include "../Menu.h"
 #include "GalagaActivity.h"
 #include "MazeRunnerActivity.h"
+#include "PaperBoyActivity.h"
 #include "SnakeActivity.h"
 #include "TetrisActivity.h"
 #include "system/Fonts.h"
@@ -48,6 +50,10 @@ class GamesActivity final : public Activity, public Menu {
   void loop() override {
     if (subGame) {
       subGame->loop();
+      if (returnPending_) {
+        returnPending_ = false;
+        returnFromGame();
+      }
       return;
     }
 
@@ -80,10 +86,12 @@ class GamesActivity final : public Activity, public Menu {
   }
 
   bool preventAutoSleep() override { return subGame != nullptr && subGame->preventAutoSleep(); }
+  bool handlesPowerButton() override { return subGame && subGame->handlesPowerButton(); }
+  bool allowGlobalPowerRefresh() override { return !subGame || subGame->allowGlobalPowerRefresh(); }
   bool skipLoopDelay() override { return subGame != nullptr && subGame->skipLoopDelay(); }
 
  private:
-  static constexpr int GAME_COUNT = 4;
+  static constexpr int GAME_COUNT = 5;
   // Row geometry is derived from the fonts rather than fixed, because it was
   // fixed and wrong: the box was ITEM_HEIGHT - ITEM_PADDING tall and the
   // description ended at exactly that line, so every descender was clipped by
@@ -99,10 +107,9 @@ class GamesActivity final : public Activity, public Menu {
   };
 
   static inline constexpr GameInfo kGames[GAME_COUNT] = {
-      {"Tetris", "Classic block-stacking puzzle"},
-      {"Snake", "Guide the snake to eat and grow"},
-      {"Galaga", "Defend against alien waves"},
-      {"Maze Runner", "Escape procedural 3D mazes"},
+      {"Tetris", "Classic block-stacking puzzle"}, {"Snake", "Guide the snake to eat and grow"},
+      {"Galaga", "Defend against alien waves"},    {"Maze Runner", "Escape procedural 3D mazes"},
+      {"PaperBoyX3", "Game Boy ROMs from /Games"},
   };
 
   const std::function<void()> onRecentOpen;
@@ -111,6 +118,7 @@ class GamesActivity final : public Activity, public Menu {
   int selectedIndex = 0;
   bool updateRequired = false;
   Activity* subGame = nullptr;
+  bool returnPending_ = false;
 
   void navigateToSelectedMenu() override {
     if (tabSelectorIndex == 0 && onRecentOpen) onRecentOpen();
@@ -127,7 +135,7 @@ class GamesActivity final : public Activity, public Menu {
   }
 
   void launchGame(int index) {
-    auto backCb = [this]() { returnFromGame(); };
+    auto backCb = [this]() { returnPending_ = true; };
     Activity* game = nullptr;
     switch (index) {
       case 0:
@@ -141,6 +149,9 @@ class GamesActivity final : public Activity, public Menu {
         break;
       case 3:
         game = new MazeRunnerActivity(renderer, mappedInput, backCb);
+        break;
+      case 4:
+        game = new PaperBoyActivity(renderer, mappedInput, backCb);
         break;
       default:
         return;
@@ -166,8 +177,10 @@ class GamesActivity final : public Activity, public Menu {
     const int boxH = ROW_PAD + nameH + ROW_TEXT_GAP + descH + ROW_PAD;
     const int rowStride = boxH + ROW_GAP;
     const int textMaxWidth = sw - 88;
-    for (int i = 0; i < GAME_COUNT; ++i) {
-      const int itemY = listStartY + i * rowStride;
+    const int visibleRows = std::max(1, (renderer.getScreenHeight() - listStartY - 65) / rowStride);
+    const int first = (selectedIndex / visibleRows) * visibleRows;
+    for (int i = first; i < GAME_COUNT && i < first + visibleRows; ++i) {
+      const int itemY = listStartY + (i - first) * rowStride;
       const bool selected = (i == selectedIndex);
 
       if (selected) {

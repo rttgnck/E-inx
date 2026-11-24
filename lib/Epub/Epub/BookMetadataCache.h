@@ -23,7 +23,7 @@ class BookMetadataCache {
 
   struct SpineEntry {
     std::string href;
-    size_t cumulativeSize;
+    uint32_t cumulativeSize;  // Serialized: fixed width so book.bin reads back the same on a 64-bit host.
     int16_t tocIndex;
 
     SpineEntry() : cumulativeSize(0), tocIndex(-1) {}
@@ -59,7 +59,7 @@ class BookMetadataCache {
 
  private:
   std::string cachePath;
-  size_t lutOffset;
+  uint32_t lutOffset;  // Serialized as uint32_t; size_t is 8 bytes on a 64-bit host.
   uint16_t spineCount;
   uint16_t tocCount;
   uint16_t cssCount;

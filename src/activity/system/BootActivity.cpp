@@ -9,6 +9,7 @@
 #include <SDCardManager.h>
 
 #include "KOReaderCredentialStore.h"
+#include "activity/reader/Epub/ChapterRestart.h"
 #include "images/CorgiWhite.h"
 #include "state/BookState.h"
 #include "state/RecentBooks.h"
@@ -16,7 +17,7 @@
 #include "state/SystemSetting.h"
 
 extern void onGoToRecent();
-extern void onGoToReader(const std::string&);
+extern void onGoToReader(std::string path);
 extern HalDisplay display;
 extern HalGPIO gpio;
 extern MappedInputManager mappedInputManager;
@@ -54,7 +55,9 @@ void BootActivity::loop() {
     if (resumePath.empty() && rtcLastReadPath[0] != '\0') {
       resumePath = rtcLastReadPath;
     }
-    const bool resumeFromSleep = !resumePath.empty() && rtcLastSleepSleptFromReader;
+    // A chapter restart happened mid-book, so reopen it even when the boot setting says Home.
+    const bool chapterRestart = ChapterRestart::consumeResumeRequest();
+    const bool resumeFromSleep = !resumePath.empty() && (rtcLastSleepSleptFromReader || chapterRestart);
     if (resumePath.empty() || (!resumeFromSleep && SETTINGS.bootSetting == SystemSetting::HOME_PAGE)) {
       onGoToRecent();
     } else {

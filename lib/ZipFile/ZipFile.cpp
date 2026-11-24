@@ -12,6 +12,21 @@
 #include <algorithm>
 #include <cstring>
 
+#ifndef SIMULATOR
+#include <esp_heap_caps.h>
+#endif
+
+namespace {
+/** Largest single allocatable block; the inflate window needs TINFL_LZ_DICT_SIZE of it in one piece. */
+unsigned largestFreeBlockBytes() {
+#ifdef SIMULATOR
+  return 0;
+#else
+  return static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+#endif
+}
+}  // namespace
+
 bool inflateOneShot(const uint8_t* inputBuf, const size_t deflatedSize, uint8_t* outputBuf, const size_t inflatedSize) {
   const auto inflator = static_cast<tinfl_decompressor*>(malloc(sizeof(tinfl_decompressor)));
   if (!inflator) {
@@ -518,9 +533,25 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
   }
 
   if (fileStat.method == MZ_DEFLATED) {
+    // Largest first. The 32 KB window is the one allocation a fragmented heap cannot satisfy, and the
+    // ~11 KB decompressor and the read buffer asked for before it could carve up the only block big
+    // enough to hold it — failing a chapter or an image while the bytes it needed were free a moment
+    // earlier. Taking the window first leaves the small requests to fit wherever they can.
+    const auto outputBuffer = static_cast<uint8_t*>(malloc(TINFL_LZ_DICT_SIZE));
+    if (!outputBuffer) {
+      Serial.printf("[%lu] [ZIP] Failed to allocate memory for dictionary: free=%u largest=%u\n", millis(),
+                    static_cast<unsigned>(ESP.getFreeHeap()), largestFreeBlockBytes());
+      if (!wasOpen) {
+        close();
+      }
+      return false;
+    }
+    memset(outputBuffer, 0, TINFL_LZ_DICT_SIZE);
+
     const auto inflator = static_cast<tinfl_decompressor*>(malloc(sizeof(tinfl_decompressor)));
     if (!inflator) {
       Serial.printf("[%lu] [ZIP] Failed to allocate memory for inflator\n", millis());
+      free(outputBuffer);
       if (!wasOpen) {
         close();
       }
@@ -533,23 +564,12 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
     if (!fileReadBuffer) {
       Serial.printf("[%lu] [ZIP] Failed to allocate memory for zip file read buffer\n", millis());
       free(inflator);
+      free(outputBuffer);
       if (!wasOpen) {
         close();
       }
       return false;
     }
-
-    const auto outputBuffer = static_cast<uint8_t*>(malloc(TINFL_LZ_DICT_SIZE));
-    if (!outputBuffer) {
-      Serial.printf("[%lu] [ZIP] Failed to allocate memory for dictionary\n", millis());
-      free(inflator);
-      free(fileReadBuffer);
-      if (!wasOpen) {
-        close();
-      }
-      return false;
-    }
-    memset(outputBuffer, 0, TINFL_LZ_DICT_SIZE);
 
     size_t fileRemainingBytes = deflatedDataSize;
     size_t processedOutputBytes = 0;

@@ -342,10 +342,14 @@ void markActivityNow();
 bool powerSleepGuardActive();
 void normalizeUnavailableClockSettings();
 void enterDeepSleep(bool forceSleepImageAdvance = false, bool continueExistingSleep = false);
-void onGoToReader(const std::string& path);
-void onGoToReaderNavigation(const std::string& path);
-void onSelectBook(const std::string& path);
-void onSelectBookNavigation(const std::string& path);
+// Navigation callbacks take paths by value. Callers pass strings owned by the
+// current activity (a library row, a recent-books entry), and switchTo()
+// deletes that activity before constructing the next one, so a reference would
+// be read after it is freed.
+void onGoToReader(std::string path);
+void onGoToReaderNavigation(std::string path);
+void onSelectBook(std::string path);
+void onSelectBookNavigation(std::string path);
 void onGoToRecent();
 void onGoToNews();
 void onGoToTab2();
@@ -358,11 +362,11 @@ void onGoToFileTransfer();
 void onGoToLibraryServer();
 void onGoToLibraryHotspot();
 void onGoToSettings();
-void onGoToLibrary(const std::string& path = "/");
-void onEditBookMetadata(const std::string& bookPath, const std::string& returnPath);
+void onGoToLibrary(std::string path = "/");
+void onEditBookMetadata(std::string bookPath, std::string returnPath);
 void setupDisplayAndFonts();
 void onNetworkModeSelected(NetworkMode mode);
-void openReaderFromCallback(const std::string& path);
+void openReaderFromCallback(std::string path);
 bool handleGlobalPowerRefresh();
 
 /**
@@ -399,7 +403,7 @@ T* switchTo(Args&&... args) {
 /**
  * @brief Navigates to the reader activity for a specific book.
  */
-void onGoToReader(const std::string& path) {
+void onGoToReader(std::string path) {
   switchTo<ReaderActivity>(render, input, path, [](const std::string&) { onGoToRecent(); });
 }
 
@@ -411,7 +415,7 @@ bool isExportedNoteImage(const std::string& path) {
                     StringUtils::checkFileExtension(path, ".jpeg") || StringUtils::checkFileExtension(path, ".png"));
 }
 
-void onGoToReaderNavigation(const std::string& path) {
+void onGoToReaderNavigation(std::string path) {
   switchTo<ReaderActivity>(
       render, input, path, [](const std::string&) { onGoToRecent(); },
       /*openNavigationOnLaunch=*/true);
@@ -420,7 +424,7 @@ void onGoToReaderNavigation(const std::string& path) {
 /**
  * @brief Opens the reader activity and returns to the library when closed.
  */
-void openReaderFromCallback(const std::string& path) {
+void openReaderFromCallback(std::string path) {
   if (isExportedNoteImage(path)) {
     switchTo<ImageViewerActivity>(render, input, path, [path]() {
       std::string folderPath = path.substr(0, path.find_last_of('/'));
@@ -439,9 +443,9 @@ void openReaderFromCallback(const std::string& path) {
 /**
  * @brief Callback wrapper for selecting a book to read.
  */
-void onSelectBook(const std::string& path) { onGoToReader(path); }
+void onSelectBook(std::string path) { onGoToReader(path); }
 
-void onSelectBookNavigation(const std::string& path) { onGoToReaderNavigation(path); }
+void onSelectBookNavigation(std::string path) { onGoToReaderNavigation(path); }
 
 /**
  * @brief Navigates to the statistics activity.
@@ -545,12 +549,12 @@ void onGoToSettings() {
 /**
  * @brief Navigates to the library activity.
  */
-void onGoToLibrary(const std::string& path) {
+void onGoToLibrary(std::string path) {
   switchTo<LibraryActivity>(render, input, onGoToRecent, openReaderFromCallback, onGoToRecent, onGoToTab2,
                             onGoToSettings, onEditBookMetadata, path);
 }
 
-void onEditBookMetadata(const std::string& bookPath, const std::string& returnPath) {
+void onEditBookMetadata(std::string bookPath, std::string returnPath) {
   std::string title;
   std::string author;
   std::string language;
@@ -1044,6 +1048,17 @@ void setup() {
 void loop() {
   gpio.update();
 
+  // Keep a game-owned Power press claimed through exit until physical release.
+  // Otherwise the 3-second Start+Select exit immediately triggers reader sleep.
+  static bool gamePowerClaimed = false;
+  static bool powerWasDown = false;
+  static unsigned long powerPressedAt = 0;
+  const bool powerDown = gpio.isPressed(HalGPIO::BTN_POWER);
+  if (powerDown && !powerWasDown) powerPressedAt = millis();
+  powerWasDown = powerDown;
+  if (!powerDown) gamePowerClaimed = false;
+  if (powerDown && currentActivity && currentActivity->handlesPowerButton()) gamePowerClaimed = true;
+
   if (lastActivityTime == 0) {
     markActivityNow();
   }
@@ -1062,14 +1077,17 @@ void loop() {
   }
 
   if (!powerSleepGuardActive() && gpio.isPressed(HalGPIO::BTN_POWER)) {
-    const unsigned long heldMs = gpio.getHeldTime();
-    Serial.printf("[%lu] [DBG] PRE-LOOP power held %lums (need %lums)\n", millis(), heldMs,
-                  (unsigned long)SETTINGS.getPowerButtonDuration());
+    const unsigned long heldMs = gamePowerClaimed ? millis() - powerPressedAt : gpio.getHeldTime();
+    if (!gamePowerClaimed) {
+      Serial.printf("[%lu] [DBG] PRE-LOOP power held %lums (need %lums)\n", millis(), heldMs,
+                    (unsigned long)SETTINGS.getPowerButtonDuration());
+    }
     if (heldMs >= 10000) {
       esp_restart();
       return;
     }
-    if (heldMs > SETTINGS.getPowerButtonDuration()) {
+    if (!gamePowerClaimed && (!currentActivity || !currentActivity->handlesPowerButton()) &&
+        heldMs > SETTINGS.getPowerButtonDuration()) {
       Serial.printf("[%lu] [DBG] PRE-LOOP -> enterDeepSleep\n", millis());
       enterDeepSleep();
       return;
@@ -1089,13 +1107,14 @@ void loop() {
   }
 
   if (!powerSleepGuardActive() && gpio.isPressed(HalGPIO::BTN_POWER)) {
-    const unsigned long heldMs = gpio.getHeldTime();
-    Serial.printf("[%lu] [DBG] POST-LOOP power held %lums\n", millis(), heldMs);
+    const unsigned long heldMs = gamePowerClaimed ? millis() - powerPressedAt : gpio.getHeldTime();
+    if (!gamePowerClaimed) Serial.printf("[%lu] [DBG] POST-LOOP power held %lums\n", millis(), heldMs);
     if (heldMs >= 10000) {
       esp_restart();
       return;
     }
-    if (heldMs > SETTINGS.getPowerButtonDuration()) {
+    if (!gamePowerClaimed && (!currentActivity || !currentActivity->handlesPowerButton()) &&
+        heldMs > SETTINGS.getPowerButtonDuration()) {
       Serial.printf("[%lu] [DBG] POST-LOOP -> enterDeepSleep\n", millis());
       enterDeepSleep();
       return;

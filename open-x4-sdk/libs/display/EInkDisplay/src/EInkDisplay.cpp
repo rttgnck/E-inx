@@ -6,6 +6,7 @@
 #include <vector>
 
 EInkDisplay::WaitCallback EInkDisplay::waitCallback_ = nullptr;
+EInkDisplay::WaitCallback EInkDisplay::frameWaitCallback_ = nullptr;
 
 // SSD1677 command definitions
 // Initialization and reset
@@ -432,6 +433,7 @@ void EInkDisplay::waitForRefresh(const char* comment) {
   if (!_x3Mode) {
     while (digitalRead(_busy) == HIGH) {
       delay(1);
+      if (frameWaitCallback_) frameWaitCallback_();
       if (waitCallback_ && millis() - lastCb >= 50) {
         waitCallback_();
         lastCb = millis();
@@ -442,6 +444,7 @@ void EInkDisplay::waitForRefresh(const char* comment) {
     bool sawLow = false;
     while (digitalRead(_busy) == HIGH) {
       delay(1);
+      if (frameWaitCallback_) frameWaitCallback_();
       if (waitCallback_ && millis() - lastCb >= 50) {
         waitCallback_();
         lastCb = millis();
@@ -452,6 +455,7 @@ void EInkDisplay::waitForRefresh(const char* comment) {
       sawLow = true;
       while (digitalRead(_busy) == LOW) {
         delay(1);
+        if (frameWaitCallback_) frameWaitCallback_();
         if (waitCallback_ && millis() - lastCb >= 50) {
           waitCallback_();
           lastCb = millis();

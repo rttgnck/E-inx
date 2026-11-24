@@ -10,6 +10,22 @@ E-inx is a community firmware for Xteink e-paper readers, forked from [Inx](http
 
 ![](./docs/images/cover.jpg)
 
+## What's New in E-inx 1.17.8
+
+- **Game Boy games.** Games → PaperBoyX3 plays `.gb` and Game Boy-compatible `.gbc` ROMs from
+  `/Games` on the SD card. Saves go to `<rom>.sav` beside the ROM. Tap Power for Start, Power+Up
+  for Select, hold Power+Confirm+Up for 3 s to save and leave. No sound or save states yet.
+- **Chapter-heading images come back.** A chapter parsed while memory was too fragmented to unpack
+  its heading image used to keep that gap for good. It is now rebuilt on a later visit (up to three
+  times) until the image is in, and chapters cached without their images are rebuilt once.
+- **A chapter that will not build no longer fails with an unreadable error.** The reader restarts
+  once into that chapter on fresh memory and reopens the book there. If it still fails, the message
+  stays up long enough to read. A repeat failure no longer deletes the book's cache, reading
+  position, bookmarks and statistics.
+- Opening a book from the Library no longer reads its path after the Library screen is freed. It
+  worked only while that memory hadn't been reused.
+- Version jumps from 1.6.17-5 to 1.17.8 so the updater offers it over the 1.17.7-2 PaperBoy beta.
+
 ## What's New in E-inx 1.6.17-4
 
 - **Name your reader.** One setting, in the web manager under Device Name and shown on the device

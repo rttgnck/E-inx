@@ -95,6 +95,8 @@ class ChapterHtmlSlimParser {
 
   /** After cold image extract, yield occasionally so heap can consolidate (ZIP + converters). */
   unsigned imageExtractCountForYield_ = 0;
+  /** Supported images the layout pass needed but could not extract — see imageCacheFailures(). */
+  unsigned imageCacheFailures_ = 0;
 
   CssParser cssParser_;
   const CssParser* sharedCssParser = nullptr;
@@ -271,6 +273,7 @@ class ChapterHtmlSlimParser {
    * Ensures an image is cached as BMP format.
    */
   bool ensureImageCached(const std::string& internalPath, const std::string& cacheImgPath, int* w, int* h);
+  void noteImageCacheFailure(const std::string& internalPath);
 
   /** Reads cached image dimensions (BMP or JPEG). */
   bool getImageDimensions(const std::string& path, int* w, int* h);
@@ -353,4 +356,10 @@ class ChapterHtmlSlimParser {
    * When skipImageProcessing is true, only one pass runs and new ZIP→BMP work is skipped.
    */
   bool parseAndBuildPages(bool skipImageProcessing = false);
+  /**
+   * How many supported images the layout left out because they could not be extracted. Non-zero means
+   * the pages are complete apart from those images and are worth building again later — typically
+   * the heap was too fragmented for the 32 KB inflate window at the moment this chapter was parsed.
+   */
+  unsigned imageCacheFailures() const { return imageCacheFailures_; }
 };

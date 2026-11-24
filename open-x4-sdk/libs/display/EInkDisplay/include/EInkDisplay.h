@@ -104,6 +104,9 @@ class EInkDisplay {
   // Optional callback invoked periodically during display refresh waits.
   using WaitCallback = void (*)();
   static void setWaitCallback(WaitCallback cb) { waitCallback_ = cb; }
+  // Optional cooperative work while BUSY is asserted; must not access display.
+  // Called outside display SPI transactions; sequential SD bank reads are permitted.
+  static void setFrameWaitCallback(WaitCallback cb) { frameWaitCallback_ = cb; }
   static void invokeWaitCallback() {
     if (waitCallback_) waitCallback_();
   }
@@ -165,6 +168,7 @@ class EInkDisplay {
   void initDisplayController();
 
   static WaitCallback waitCallback_;
+  static WaitCallback frameWaitCallback_;
 
   // Low-level display operations
   void setRamArea(uint16_t x, uint16_t y, uint16_t w, uint16_t h);

@@ -53,6 +53,9 @@ class Section {
    */
   uint32_t onPageComplete(std::unique_ptr<Page> page, const std::function<void(Page&, uint16_t)>& pageBuiltFn);
 
+  /** Marks this layout for another build when images were left out, or clears that mark. */
+  void recordImageCompleteness(unsigned missingImages) const;
+
  public:
   uint16_t pageCount = 0;
   int currentPage = 0;
@@ -101,6 +104,11 @@ class Section {
    * @return true if file was successfully removed or didn't exist
    */
   bool clearCache() const;
+  /**
+   * True when this chapter's cached layout left out images it should have had, and has not yet been
+   * rebuilt kImageRetryLimit times. Building it again is how those images come back.
+   */
+  bool needsImageRetry() const;
 
   /**
    * Creates a new section file by parsing the HTML content and building pages.

@@ -94,6 +94,8 @@ class GfxRenderer {
   int getScreenWidth() const;
   int getScreenHeight() const;
   void displayBuffer(const HalDisplay::RefreshMode refreshMode = HalDisplay::FAST_REFRESH) const;
+  // Transient gameplay policy: differential refresh, existing fast LUT, rails kept on.
+  void displayGameBuffer() const;
   bool reinforcementEnabled(ReinforcementTarget target) const;
   void displayWithReinforcement(ReinforcementTarget target,
                                 HalDisplay::RefreshMode fallback = HalDisplay::FAST_REFRESH) const;

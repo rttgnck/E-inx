@@ -5,6 +5,7 @@
 #ifdef __cplusplus
 #include <chrono>
 #include <cstdint>
+#include <cstdlib>
 #else
 #include <stdint.h>
 #endif
@@ -50,6 +51,26 @@ inline uint32_t esp_random() {
   static uint32_t state = 0x9e3779b9U;
   state = state * 1664525U + 1013904223U + xTaskGetTickCount();
   return state;
+}
+#endif
+
+#ifdef __cplusplus
+// Arduino calls E-inx uses that the simulator library's Arduino.h lacks.
+// Every pin reads HIGH, so the power button is never seen as held at boot.
+#ifndef LOW
+#define LOW 0x0
+#endif
+#ifndef HIGH
+#define HIGH 0x1
+#endif
+#ifndef INPUT_PULLUP
+#define INPUT_PULLUP 0x05
+#endif
+inline void pinMode(uint8_t, uint8_t) {}
+inline int digitalRead(uint8_t) { return HIGH; }
+inline void randomSeed(unsigned long seed) { std::srand(static_cast<unsigned>(seed)); }
+inline long random(long minValue, long maxValue) {
+  return maxValue <= minValue ? minValue : minValue + std::rand() % (maxValue - minValue);
 }
 #endif
 
