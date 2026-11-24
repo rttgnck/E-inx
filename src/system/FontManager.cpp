@@ -223,19 +223,7 @@ void FontManager::initialize(GfxRenderer& renderer) {
   static EpdFontFamily montserrat14FontFamily(&montserrat14RegularFont, &montserrat14BoldFont,
                                               &montserrat14ItalicFont, &montserrat14BoldItalicFont);
 
-  static EpdFont montserrat16RegularFont(&montserrat_16_regular);
-  static EpdFont montserrat16BoldFont(&montserrat_16_bold);
-  static EpdFont montserrat16ItalicFont(&montserrat_16_italic);
-  static EpdFont montserrat16BoldItalicFont(&montserrat_16_bolditalic);
-  static EpdFontFamily montserrat16FontFamily(&montserrat16RegularFont, &montserrat16BoldFont,
-                                              &montserrat16ItalicFont, &montserrat16BoldItalicFont);
 
-  static EpdFont montserrat18RegularFont(&montserrat_18_regular);
-  static EpdFont montserrat18BoldFont(&montserrat_18_bold);
-  static EpdFont montserrat18ItalicFont(&montserrat_18_italic);
-  static EpdFont montserrat18BoldItalicFont(&montserrat_18_bolditalic);
-  static EpdFontFamily montserrat18FontFamily(&montserrat18RegularFont, &montserrat18BoldFont,
-                                              &montserrat18ItalicFont, &montserrat18BoldItalicFont);
 
   static EpdFont montserratClock70RegularFont(&montserrat_clock_70_regular);
   static EpdFont montserratClock70BoldFont(&montserrat_clock_70_bold);
@@ -252,8 +240,9 @@ void FontManager::initialize(GfxRenderer& renderer) {
   g_uiFonts[1] = {&atkinson_hyperlegible10FontFamily, &montserrat10FontFamily};
   g_uiFonts[2] = {&atkinson_hyperlegible12FontFamily, &montserrat12FontFamily};
   g_uiFonts[3] = {&atkinson_hyperlegible14FontFamily, &montserrat14FontFamily};
-  g_uiFonts[4] = {&atkinson_hyperlegible16FontFamily, &montserrat16FontFamily};
-  g_uiFonts[5] = {&atkinson_hyperlegible18FontFamily, &montserrat18FontFamily};
+  // Montserrat 16 and 18 are left out of flash; the new screens' large text uses 14.
+  g_uiFonts[4] = {&atkinson_hyperlegible16FontFamily, &montserrat14FontFamily};
+  g_uiFonts[5] = {&atkinson_hyperlegible18FontFamily, &montserrat14FontFamily};
   applyUiFont(renderer, false);  // main.cpp applies the saved choice once settings are loaded
   renderer.insertFont(MONTSERRAT_CLOCK_70_FONT_ID, montserratClock70FontFamily);
 
