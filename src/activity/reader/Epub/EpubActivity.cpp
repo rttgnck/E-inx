@@ -28,6 +28,7 @@
 #include <string>
 #include <vector>
 
+#include "ChapterRestart.h"
 #include "EpubAnnotations.h"
 #include "EpubReadingStats.h"
 #include "KOReaderCredentialStore.h"
@@ -240,7 +241,10 @@ void EpubActivity::readerPopup(const char* message) {
 }
 
 void EpubActivity::handleChapterLoadFailure() {
-  readerPopup("Error loading chapter");
+  // Held on screen long enough to read: the page redrawn next would otherwise replace it at once.
+  constexpr unsigned long kFailureMessageMs = 2500;
+  readerPopup("Couldn't open this chapter");
+  delay(kFailureMessageMs);
 
   if (!chapterRecoveryAttempted_) {
     chapterRecoveryAttempted_ = true;
@@ -251,14 +255,16 @@ void EpubActivity::handleChapterLoadFailure() {
     return;
   }
 
+  // Second failure in a row. Drop only the failing chapter's cached layout, in case that is what is
+  // damaged. This used to clear the whole book cache and delete the reading position, which also took
+  // bookmarks and reading statistics with it — far too much to lose to what is usually a heap too
+  // fragmented to build one chapter, and gone by the next boot.
   chapterRecoveryAttempted_ = false;
-  section.reset();
   if (epub) {
-    epub->clearCache();
+    std::shared_ptr<Epub> sharedEpub = std::shared_ptr<Epub>(epub.get(), [](Epub*) {});
+    Section(sharedEpub, currentSpineIndex, renderer).clearCache();
   }
-  if (bookProgress) {
-    bookProgress->remove();
-  }
+  section.reset();
   onGoBack();
 }
 
@@ -348,6 +354,37 @@ std::unique_ptr<Section> EpubActivity::loadSection(int spineIndex, const Viewpor
       info.fontId, info.lineCompression, info.wordSpacing, bookSettings.extraParagraphSpacing,
       bookSettings.paragraphAlignment, info.width, info.height, bookSettings.hyphenationEnabled,
       bookSettings.paragraphCssIndentEnabled != 0, bookSettings.bionicReadingEnabled != 0);
+
+  // A layout cached while an image could not be extracted is complete apart from that image. Build it
+  // again so the image gets another chance — otherwise a chapter-heading banner that failed once is
+  // gone from that chapter for good. The readable layout is set aside rather than deleted, so a rebuild
+  // that fails (the same heap pressure that lost the image can stop the chapter extracting) puts it
+  // back instead of turning a chapter missing a banner into one that will not open.
+  if (isCached && loadedSection->needsImageRetry()) {
+    const std::string sectionPath = epub->getCachePath() + "/sections/" + std::to_string(spineIndex) + ".bin";
+    const std::string keptPath = sectionPath + ".kept";
+    Serial.printf("[%lu] [EPA] loadSection: spine=%d was cached without images; building again\n", millis(),
+                  spineIndex);
+    loadedSection.reset(new Section(sharedEpub, spineIndex, renderer));  // closes the cached file
+    if (SdMan.exists(keptPath.c_str())) SdMan.remove(keptPath.c_str());
+    if (SdMan.rename(sectionPath.c_str(), keptPath.c_str())) {
+      const bool rebuilt = buildSection(spineIndex, info, showProgress, false);
+      if (rebuilt) {
+        SdMan.remove(keptPath.c_str());
+      } else {
+        Serial.printf("[%lu] [EPA] loadSection: rebuild of spine=%d failed; keeping the earlier layout\n", millis(),
+                      spineIndex);
+        if (SdMan.exists(sectionPath.c_str())) SdMan.remove(sectionPath.c_str());
+        SdMan.rename(keptPath.c_str(), sectionPath.c_str());
+      }
+      isCached = loadedSection->loadSectionFile(
+          info.fontId, info.lineCompression, info.wordSpacing, bookSettings.extraParagraphSpacing,
+          bookSettings.paragraphAlignment, info.width, info.height, bookSettings.hyphenationEnabled,
+          bookSettings.paragraphCssIndentEnabled != 0, bookSettings.bionicReadingEnabled != 0);
+    } else {
+      isCached = false;
+    }
+  }
 
   if (!isCached) {
     if (!buildSection(spineIndex, info, showProgress, false)) {
@@ -564,7 +601,18 @@ void EpubActivity::loadCurrentSection(const bool showProgress) {
         Serial.printf("[%lu] [EPA] loadCurrentSection: build failed spine=%d, not walking further\n", millis(),
                       spineIndex);
         currentSpineIndex = requestedSpine;
-        readerPopup("Chapter could not be opened");
+        // Almost always the heap, not the book: after a long session the 32 KB inflate window cannot be
+        // found in one piece. A fresh boot has it, so restart once into this chapter rather than fail.
+        if (!ChapterRestart::alreadyTried(epub->getPath(), requestedSpine)) {
+          pauseReadingStats();
+          saveBookStats();
+          saveProgress(requestedSpine, nextPageNumber, 0, true);
+          APP_STATE.lastRead = epub->getPath();
+          APP_STATE.saveToFile();
+          readerPopup("Restarting to open this chapter");
+          ChapterRestart::restartInto(epub->getPath(), requestedSpine);
+        }
+        ChapterRestart::clear();
         return;
       }
 
@@ -580,6 +628,7 @@ void EpubActivity::loadCurrentSection(const bool showProgress) {
       pendingPercentJump = false;
     }
     section = std::move(newSection);
+    ChapterRestart::clear();
     if (nextPageNumber == static_cast<int>(UINT16_MAX)) {
       section->currentPage = (section->pageCount > 0) ? (section->pageCount - 1) : 0;
     } else {
