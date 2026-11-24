@@ -363,10 +363,6 @@ void CategorySettingsActivity::setupMenu() {
               forceFullRefreshNext_ = true;
             } else if (settingPtr->valuePtr == &SystemSetting::sunlightFadingFix) {
               renderer.setFadingFix(SETTINGS.sunlightFadingFix);
-            } else if (settingPtr->valuePtr == &SystemSetting::newUi) {
-              // The font changes at once; the screens change the next time Home opens.
-              FontManager::applyUiFont(renderer, SETTINGS.newUi != 0);
-              forceFullRefreshNext_ = true;
             }
             updateRequired = true;
           };

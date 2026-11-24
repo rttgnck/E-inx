@@ -89,11 +89,8 @@ static std::string extractStyleFromFilename(const std::string& filename) {
  * @brief Initializes the font manager with built-in fonts
  */
 namespace {
-struct UiFontPair {
-  const EpdFontFamily* classic;  // Atkinson Hyperlegible, E-inx's interface font
-  const EpdFontFamily* modern;   // Montserrat, upstream Inx's new interface font
-};
-UiFontPair g_uiFonts[6] = {};
+// Atkinson Hyperlegible for every interface size; filled in by initialize().
+const EpdFontFamily* g_uiFonts[6] = {};
 constexpr int kAtkinsonUiIds[6] = {ATKINSON_HYPERLEGIBLE_8_FONT_ID,  ATKINSON_HYPERLEGIBLE_10_FONT_ID,
                                    ATKINSON_HYPERLEGIBLE_12_FONT_ID, ATKINSON_HYPERLEGIBLE_14_FONT_ID,
                                    ATKINSON_HYPERLEGIBLE_16_FONT_ID, ATKINSON_HYPERLEGIBLE_18_FONT_ID};
@@ -102,13 +99,15 @@ constexpr int kMontserratUiIds[6] = {MONTSERRAT_8_FONT_ID,  MONTSERRAT_10_FONT_I
 }  // namespace
 
 void FontManager::applyUiFont(GfxRenderer& renderer, const bool modern) {
+  // Both the classic and the new screens draw in Atkinson Hyperlegible; `modern` is kept so a second
+  // interface face can be added back here if flash ever allows it.
+  (void)modern;
   for (int i = 0; i < 6; ++i) {
-    const EpdFontFamily* family = modern ? g_uiFonts[i].modern : g_uiFonts[i].classic;
-    if (!family) {
+    if (!g_uiFonts[i]) {
       continue;
     }
-    renderer.insertFont(kAtkinsonUiIds[i], *family);
-    renderer.insertFont(kMontserratUiIds[i], *family);
+    renderer.insertFont(kAtkinsonUiIds[i], *g_uiFonts[i]);
+    renderer.insertFont(kMontserratUiIds[i], *g_uiFonts[i]);
   }
 }
 
@@ -199,32 +198,6 @@ void FontManager::initialize(GfxRenderer& renderer) {
       &atkinson_hyperlegible18RegularFont, &atkinson_hyperlegible18BoldFont, &atkinson_hyperlegible18ItalicFont,
       &atkinson_hyperlegible18BoldItalicFont);
 
-  static EpdFont montserrat8RegularFont(&montserrat_8_regular);
-  static EpdFontFamily montserrat8FontFamily(&montserrat8RegularFont, nullptr, nullptr, nullptr);
-
-  static EpdFont montserrat10RegularFont(&montserrat_10_regular);
-  static EpdFont montserrat10BoldFont(&montserrat_10_bold);
-  static EpdFont montserrat10ItalicFont(&montserrat_10_italic);
-  static EpdFont montserrat10BoldItalicFont(&montserrat_10_bolditalic);
-  static EpdFontFamily montserrat10FontFamily(&montserrat10RegularFont, &montserrat10BoldFont,
-                                              &montserrat10ItalicFont, &montserrat10BoldItalicFont);
-
-  static EpdFont montserrat12RegularFont(&montserrat_12_regular);
-  static EpdFont montserrat12BoldFont(&montserrat_12_bold);
-  static EpdFont montserrat12ItalicFont(&montserrat_12_italic);
-  static EpdFont montserrat12BoldItalicFont(&montserrat_12_bolditalic);
-  static EpdFontFamily montserrat12FontFamily(&montserrat12RegularFont, &montserrat12BoldFont,
-                                              &montserrat12ItalicFont, &montserrat12BoldItalicFont);
-
-  static EpdFont montserrat14RegularFont(&montserrat_14_regular);
-  static EpdFont montserrat14BoldFont(&montserrat_14_bold);
-  static EpdFont montserrat14ItalicFont(&montserrat_14_italic);
-  static EpdFont montserrat14BoldItalicFont(&montserrat_14_bolditalic);
-  static EpdFontFamily montserrat14FontFamily(&montserrat14RegularFont, &montserrat14BoldFont,
-                                              &montserrat14ItalicFont, &montserrat14BoldItalicFont);
-
-
-
   static EpdFont montserratClock70RegularFont(&montserrat_clock_70_regular);
   static EpdFont montserratClock70BoldFont(&montserrat_clock_70_bold);
   static EpdFontFamily montserratClock70FontFamily(&montserratClock70RegularFont, &montserratClock70BoldFont, nullptr,
@@ -236,18 +209,17 @@ void FontManager::initialize(GfxRenderer& renderer) {
   renderer.insertFont(LITERATA_16_FONT_ID, literata16RegularFontFamily);
   renderer.insertFont(LITERATA_18_FONT_ID, literata18RegularFontFamily);
 
-  g_uiFonts[0] = {&atkinson_hyperlegible8FontFamily, &montserrat8FontFamily};
-  g_uiFonts[1] = {&atkinson_hyperlegible10FontFamily, &montserrat10FontFamily};
-  g_uiFonts[2] = {&atkinson_hyperlegible12FontFamily, &montserrat12FontFamily};
-  g_uiFonts[3] = {&atkinson_hyperlegible14FontFamily, &montserrat14FontFamily};
-  // Montserrat 16 and 18 are left out of flash; the new screens' large text uses 14.
-  g_uiFonts[4] = {&atkinson_hyperlegible16FontFamily, &montserrat14FontFamily};
-  g_uiFonts[5] = {&atkinson_hyperlegible18FontFamily, &montserrat14FontFamily};
+  g_uiFonts[0] = &atkinson_hyperlegible8FontFamily;
+  g_uiFonts[1] = &atkinson_hyperlegible10FontFamily;
+  g_uiFonts[2] = &atkinson_hyperlegible12FontFamily;
+  g_uiFonts[3] = &atkinson_hyperlegible14FontFamily;
+  g_uiFonts[4] = &atkinson_hyperlegible16FontFamily;
+  g_uiFonts[5] = &atkinson_hyperlegible18FontFamily;
   applyUiFont(renderer, false);  // main.cpp applies the saved choice once settings are loaded
   renderer.insertFont(MONTSERRAT_CLOCK_70_FONT_ID, montserratClock70FontFamily);
 
   FontPreviews::initialize(renderer);
-  Serial.println("[FontManager] Initialized (Literata + Atkinson/Montserrat UI + clock + SD streaming)");
+  Serial.println("[FontManager] Initialized (Literata + Atkinson + clock + SD streaming)");
 }
 
 /**

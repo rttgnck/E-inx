@@ -48,19 +48,6 @@
 #include "font/literata_18_bolditalic.h"
 #include "font/literata_18_italic.h"
 #include "font/literata_18_regular.h"
-#include "font/montserrat_10_bold.h"
-#include "font/montserrat_10_bolditalic.h"
-#include "font/montserrat_10_italic.h"
-#include "font/montserrat_10_regular.h"
-#include "font/montserrat_12_bold.h"
-#include "font/montserrat_12_bolditalic.h"
-#include "font/montserrat_12_italic.h"
-#include "font/montserrat_12_regular.h"
-#include "font/montserrat_14_bold.h"
-#include "font/montserrat_14_bolditalic.h"
-#include "font/montserrat_14_italic.h"
-#include "font/montserrat_14_regular.h"
-#include "font/montserrat_8_regular.h"
 #include "font/montserrat_clock_70_bold.h"
 #include "font/montserrat_clock_70_regular.h"
 
@@ -71,15 +58,13 @@
 #define ATKINSON_HYPERLEGIBLE_16_FONT_ID (2005)
 #define ATKINSON_HYPERLEGIBLE_18_FONT_ID (2006)
 
-// The interface font. Old (E-inx) screens name the ATKINSON_* ids and the new upstream Inx screens the
-// MONTSERRAT_* ids; FontManager::applyUiFont() points both sets at the one font the "New UI" setting
-// picks, so every screen uses the same face.
+// The interface font. E-inx's screens name the ATKINSON_* ids and upstream Inx's new screens the
+// MONTSERRAT_* ids. Montserrat itself is not in flash (it would not fit beside Atkinson and Literata), so
+// FontManager::applyUiFont() points both sets at Atkinson Hyperlegible.
 #define MONTSERRAT_8_FONT_ID (2501)
 #define MONTSERRAT_10_FONT_ID (2502)
 #define MONTSERRAT_12_FONT_ID (2503)
 #define MONTSERRAT_14_FONT_ID (2504)
-// No Montserrat 16 or 18 in flash (it would not fit beside Atkinson and Literata): with New UI on, these
-// two ids draw Montserrat 14. See FontManager::applyUiFont().
 #define MONTSERRAT_16_FONT_ID (2505)
 #define MONTSERRAT_18_FONT_ID (2506)
 

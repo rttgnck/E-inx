@@ -16,8 +16,9 @@ Catches up with upstream Inx 1.0.20 (its `release/1.0.20` branch; upstream has n
 
 - **Try upstream's new screens, or keep yours.** Two switches under Settings → Display, both off after the
   update:
-  - **New UI** opens upstream's redesigned Home (with widgets), Library, Settings and Search, and draws
-    the interface in Montserrat. Off: the 6-tab screens in Atkinson Hyperlegible, as before.
+  - **New UI** opens upstream's redesigned Home (with widgets), Library, Settings and Search. Off: the
+    6-tab screens, as before. Both use Atkinson Hyperlegible: upstream's Montserrat does not fit in flash
+    beside the built-in reading fonts.
   - **New reader** makes Confirm open upstream's contents sidebar (hold it for KOReader sync). Off:
     Confirm opens the reader menu and holding it adds a bookmark, as before.
   - With New UI on, E-inx-only settings (Tab 2, App Drawer, X3 waveform, If Found) and the Games, News
@@ -34,7 +35,7 @@ Catches up with upstream Inx 1.0.20 (its `release/1.0.20` branch; upstream has n
 - **Cleaning up:** Delete Cache can also clear thumbnails and the library index.
 - **Dark mode:** the screen after "Restarting to open this chapter" is no longer white.
 - Literata and Atkinson Hyperlegible stay built in for reading. Upstream's downloadable font packs are
-  extra choices. To fit, the new screens draw their two largest sizes at 14 pt.
+  extra choices.
 
 ## What's New in E-inx 1.19.8
 
@@ -629,7 +630,7 @@ Only uncompressed `.dict` files are supported. Compressed `.dict.dz` dictionarie
 
 ## Fonts
 
-E-inx includes built-in **Literata** and **Atkinson Hyperlegible** reader fonts. The interface uses Atkinson Hyperlegible, or Montserrat with Settings → Display → New UI on.
+E-inx includes built-in **Literata** and **Atkinson Hyperlegible** reader fonts. The interface uses Atkinson Hyperlegible.
 
 You can also install fonts on the SD card:
 

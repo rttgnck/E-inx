@@ -671,7 +671,7 @@ class SystemSetting {
   uint8_t systemTextSize = SYSTEM_TEXT_SMALL;
   /** How many recent books to show on the Recent hub (1–8). Upstream 1.0.20 dropped it; E-inx's screens use it. */
   uint8_t recentVisibleCount = 9;
-  /** Upstream Inx 1.0.20's Home, Library, Settings and Search screens, in Montserrat. Off: E-inx's tabs, in Atkinson. */
+  /** Upstream Inx 1.0.20's Home, Library, Settings and Search screens. Off: E-inx's tabs. */
   uint8_t newUi = 0;
   /** Upstream Inx 1.0.20's reader navigation (contents sidebar, Go to Percent). Off: E-inx's reader menu. */
   uint8_t newReader = 0;
