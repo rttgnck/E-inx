@@ -17,7 +17,7 @@
 #include "state/SystemSetting.h"
 
 extern void onGoToRecent();
-extern void onGoToReader(const std::string&);
+extern void onGoToReader(std::string path);
 extern HalDisplay display;
 extern HalGPIO gpio;
 extern MappedInputManager mappedInputManager;
