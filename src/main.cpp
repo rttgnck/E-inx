@@ -1007,6 +1007,10 @@ void setup() {
   APP_STATE.saveToFile();
   render.setDarkMode(SETTINGS.darkMode);
   render.setFadingFix(SETTINGS.sunlightFadingFix);
+  // The display driver starts its buffer as real white, and dark mode is applied while drawing. A
+  // screen that only draws a popup over that buffer, like "Loading chapter..." after a chapter
+  // restart, would show it on a white page. Clearing here gives every first frame the mode's paper.
+  render.clearScreen();
   // Booting/waking into dark mode flips the whole panel's polarity; force the first paint to be a full
   // refresh so it develops cleanly instead of ghosting from the previous (light) sleep image.
   if (SETTINGS.darkMode) {
