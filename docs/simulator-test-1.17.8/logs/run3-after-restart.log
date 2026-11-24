@@ -1,0 +1,64 @@
+[0] [BOOT] Display init
+[FontManager] Initialized (Literata + Atkinson + Montserrat clock + SD streaming)
+=== Memory Usage ===
+Free heap: 1048576 bytes (1024 KB)
+Largest free block: 1048576 bytes
+Font families loaded: 0
+Fonts loaded: 0
+SD font entries: 0
+===================
+[142] [BOOT] Display OK, heap=1000000
+[142] [BOOT] SD init
+[142] [BOOT] SD OK
+[142] [BOOT] APP_STATE.lastRead = "/books/Project Hail Mary 2021 by Andy Weir 2.epub", rtcLastReadPath = ""
+[142] [BOOT] Loading settings
+[142] [CPS] Settings loaded (version 43, 102 items, darkMode=0)
+[142] [BOOT] Settings OK, darkMode=0, heap=1000000
+[152] [SIM] Activity: BootActivity
+[238] [SIM] Activity: Reader
+[238] [BMC] Loaded cache data: 41 spine, 38 TOC, 4 CSS entries
+[SIM] open failed: ./fs_/.metadata/epub/18276938335300208939/meta.override (flags=0x0 errno=2 No such file or directory)
+[FontManager] Unloading all SD streaming fonts
+[FontManager] All SD fonts unloaded
+=== Memory Usage ===
+Free heap: 1048576 bytes (1024 KB)
+Largest free block: 1048576 bytes
+Font families loaded: 0
+Fonts loaded: 0
+SD font entries: 0
+===================
+[FontManager] Scanned 0 font families, found 0 font sizes
+=== Memory Usage ===
+Free heap: 1048576 bytes (1024 KB)
+Largest free block: 1048576 bytes
+Font families loaded: 0
+Fonts loaded: 0
+SD font entries: 0
+===================
+[SIM] open failed: ./fs_/.metadata/epub/18276938335300208939/settings.bin (flags=0x0 errno=2 No such file or directory)
+[239] [SIM] Subactivity: EpubReader
+[SIM] open failed: ./fs_/.metadata/epub/18276938335300208939/sections/6.bin (flags=0x0 errno=2 No such file or directory)
+[EBP] Zip Request: OEBPS/xhtml/Weir_9780593135211_epub3_c001_r1.xhtml
+[241] [ZIP] Decompressed 13331 bytes into 39057 bytes
+[241] [SCT] createSectionFile: temp HTML extract attempt=1 ok=1 bytes=39057 spine=6 href=OEBPS/xhtml/Weir_9780593135211_epub3_c001_r1.xhtml tmp=/.metadata/epub/18276938335300208939/.tmp_6.html book=/books/Project Hail Mary 2021 by Andy Weir 2.epub title=P[241] [SCT] parseAndBuildPages start internal=OEBPS/xhtml/Weir_9780593135211_epub3_c001_r1.xhtml tmp=/.metadata/epub/18276938335300208939/.tmp_6.html skipImages=0 viewport=482x754 font=3002 headerFont=3003 heap=1048576
+[EBP] Loaded parsed CSS cache: 276 rules
+[EHP] Using shared CSS dictionary (276 rules)
+[EBP] Zip Request: OEBPS/images/Weir_9780593135211_epub3_004_r1.jpg
+[246] [ZIP] Decompressed 76735 bytes into 144242 bytes
+[EHP] Using shared CSS dictionary (276 rules)
+[254] [EBP-IMG] cache hit /.metadata/epub/18276938335300208939/images/Weir_9780593135211_epub3_004_r1.jpg
+[EHP] Image ../images/Weir_9780593135211_epub3_004_r1.jpg - CSS: , Final: 482x36 (actual: 6776x516, percent: w=0 h=0)
+[385] [SCT] parseAndBuildPages success internal=OEBPS/xhtml/Weir_9780593135211_epub3_c001_r1.xhtml finalY=55 heap=1048576
+[SIM] open failed: ./fs_/.metadata/epub/18276938335300208939/bookmarks.bin (flags=0x0 errno=2 No such file or directory)
+[414] [DBG] EPUB renderScreen start
+[415] [DBG] renderContents start, hasImages=0, heap=1048576
+[415] [DBG] page->render start (skipImg=0, gray=0, highQ=0, medQ=0, aa=0)
+[416] [DBG] page->render done
+[416] [DBG] displayPageBuffer start
+[417] [DBG] displayPageBuffer done
+[417] [DBG] grayscale phase: highQ=0 bwStored=0 medGray=0 aaPass=0
+[417] [DBG] renderContents done, total=2ms, heap=1048576
+[417] [DBG] EPUB renderScreen done
+[2991] [SIMCTL] wait 4000
+[6996] [SIMCTL] shot ./t7_after.png
+[SIMCTL] shot ./t7_after.png: ok
