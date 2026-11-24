@@ -28,6 +28,7 @@ enum PageElementTag : uint8_t {
   TAG_PageSmallCaps = 7,
   TAG_PageCssBorderLine = 8,
   TAG_PageCssBorderBox = 9,
+  TAG_PageListMarker = 10,
 };
 
 /**
@@ -77,13 +78,13 @@ class PageElement {
  * Contains a TextBlock for regular paragraph text.
  */
 class PageLine final : public PageElement {
-  std::shared_ptr<TextBlock> block;
+  TextBlock block;
 
  public:
-  PageLine(std::shared_ptr<TextBlock> block, const int16_t xPos, const int16_t yPos)
+  PageLine(TextBlock&& block, const int16_t xPos, const int16_t yPos)
       : PageElement(xPos, yPos), block(std::move(block)) {}
 
-  const TextBlock& getTextBlock() const { return *block; }
+  const TextBlock& getTextBlock() const { return block; }
 
   PageElementTag getTag() const override { return TAG_PageLine; }
   void render(GfxRenderer& renderer, int fontId, int xOffset, int yOffset,
@@ -97,14 +98,14 @@ class PageLine final : public PageElement {
  * Uses the specified headerFontId for rendering.
  */
 class PageHeader final : public PageElement {
-  std::shared_ptr<TextBlock> block;
+  TextBlock block;
   int headerFontId;
 
  public:
-  PageHeader(std::shared_ptr<TextBlock> block, const int16_t xPos, const int16_t yPos, int fontId)
+  PageHeader(TextBlock&& block, const int16_t xPos, const int16_t yPos, int fontId)
       : PageElement(xPos, yPos), block(std::move(block)), headerFontId(fontId) {}
 
-  const TextBlock& getTextBlock() const { return *block; }
+  const TextBlock& getTextBlock() const { return block; }
   int getHeaderFontId() const { return headerFontId; }
 
   PageElementTag getTag() const override { return TAG_PageHeader; }
@@ -120,14 +121,14 @@ class PageHeader final : public PageElement {
  * serialized page compatibility with older cache files.
  */
 class PageSmallCaps final : public PageElement {
-  std::shared_ptr<TextBlock> block;
+  TextBlock block;
   int compatFontId;
 
  public:
-  PageSmallCaps(std::shared_ptr<TextBlock> block, const int16_t xPos, const int16_t yPos, int fontId)
+  PageSmallCaps(TextBlock&& block, const int16_t xPos, const int16_t yPos, int fontId)
       : PageElement(xPos, yPos), block(std::move(block)), compatFontId(fontId) {}
 
-  const TextBlock& getTextBlock() const { return *block; }
+  const TextBlock& getTextBlock() const { return block; }
   int getCompatFontId() const { return compatFontId; }
 
   PageElementTag getTag() const override { return TAG_PageSmallCaps; }
@@ -165,6 +166,35 @@ class PageDropCap final : public PageElement {
               ImageRenderMode imageMode = ImageRenderMode::OneBit) override;
   bool serialize(FsFile& file) override;
   static std::unique_ptr<PageDropCap> deserialize(FsFile& file);
+};
+
+/**
+ * A <ul>/<ol> list item's bullet/number marker, drawn as its own element at the item's un-indented
+ * margin - independent of the text word flow, so it never reserves layout width that would push the
+ * item's real text (or wrapped continuation lines) out of alignment with each other.
+ */
+class PageListMarker final : public PageElement {
+  std::string text;
+  int markerFontId;
+
+ public:
+  /**
+   * @param text The marker glyph(s) to render (e.g. a bullet dot or "1.")
+   * @param xPos X coordinate (the list item's margin, before its hanging indent)
+   * @param yPos Y coordinate (top of the item's first line)
+   * @param fontId Font to render the marker in, sized to match the item's own body text
+   */
+  PageListMarker(std::string text, const int16_t xPos, const int16_t yPos, int fontId)
+      : PageElement(xPos, yPos), text(std::move(text)), markerFontId(fontId) {}
+
+  const std::string& getMarkerText() const { return text; }
+  int getMarkerFontId() const { return markerFontId; }
+
+  PageElementTag getTag() const override { return TAG_PageListMarker; }
+  void render(GfxRenderer& renderer, int fontId, int xOffset, int yOffset,
+              ImageRenderMode imageMode = ImageRenderMode::OneBit) override;
+  bool serialize(FsFile& file) override;
+  static std::unique_ptr<PageListMarker> deserialize(FsFile& file);
 };
 
 /**
@@ -303,6 +333,9 @@ class PageCssBorderBox final : public PageElement {
   uint8_t styleRight;
   uint8_t styleBottom;
   uint8_t styleLeft;
+  int16_t radius;
+  uint8_t borderTone;
+  uint8_t backgroundTone;
 
  public:
   PageCssBorderBox(const int16_t xPos, const int16_t yPos, const int16_t width, const int16_t height,
@@ -310,7 +343,8 @@ class PageCssBorderBox final : public PageElement {
                    const int16_t borderLeft, const uint8_t styleTop = PageCssBorderLine::SOLID,
                    const uint8_t styleRight = PageCssBorderLine::SOLID,
                    const uint8_t styleBottom = PageCssBorderLine::SOLID,
-                   const uint8_t styleLeft = PageCssBorderLine::SOLID)
+                   const uint8_t styleLeft = PageCssBorderLine::SOLID, const int16_t radius = 0,
+                   const uint8_t borderTone = 1, const uint8_t backgroundTone = 0)
       : PageElement(xPos, yPos),
         width(width),
         height(height),
@@ -321,9 +355,15 @@ class PageCssBorderBox final : public PageElement {
         styleTop(styleTop),
         styleRight(styleRight),
         styleBottom(styleBottom),
-        styleLeft(styleLeft) {}
+        styleLeft(styleLeft),
+        radius(radius),
+        borderTone(borderTone),
+        backgroundTone(backgroundTone) {}
 
   PageElementTag getTag() const override { return TAG_PageCssBorderBox; }
+  bool hasBackground() const { return backgroundTone != 0; }
+  int16_t getWidth() const { return width; }
+  int16_t getHeight() const { return height; }
   void setGeometry(const int16_t x, const int16_t y, const int16_t w, const int16_t h) {
     xPos = x;
     yPos = y;
@@ -341,11 +381,17 @@ class PageCssBorderBox final : public PageElement {
  */
 class Page {
  public:
-  std::vector<std::shared_ptr<PageElement>> elements;
+  std::vector<std::unique_ptr<PageElement>> elements;
+
+  void trimElementStorage() {
+    if (elements.capacity() > elements.size()) {
+      elements.shrink_to_fit();
+    }
+  }
 
   bool hasImages() const {
     return std::any_of(elements.begin(), elements.end(),
-                       [](const std::shared_ptr<PageElement>& element) { return element->getTag() == TAG_PageImage; });
+                       [](const std::unique_ptr<PageElement>& element) { return element->getTag() == TAG_PageImage; });
   }
 
   // True if at least one image on the page has continuous-tone content worth rendering in grayscale. Pages whose

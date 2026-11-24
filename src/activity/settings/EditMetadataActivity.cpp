@@ -210,13 +210,11 @@ void EditMetadataActivity::save() {
 
   // 2) Denormalized copies shown in the Library browser.
   BookState& books = BookState::getInstance();
-  books.addOrUpdateBook(bookPath, title, author);
-  if (BookState::Book* b = books.findBookByPath(bookPath)) {
-    b->title = title;
-    b->author = author;
-    b->isFavorite = favorite;
+  books.addOrUpdateBook(bookPath, title, author);  // writes books.bin itself
+  BookState::Book tracked;
+  if (books.findBook(bookPath, tracked) && tracked.isFavorite != favorite) {
+    books.toggleFavorite(bookPath, title);
   }
-  books.saveToFile();
 
   // 3) Denormalized copies shown on the Recent (home) screen.
   RecentBooks::getInstance().updateMetadata(bookPath, title, author);

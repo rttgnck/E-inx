@@ -10,6 +10,31 @@ E-inx is a community firmware for Xteink e-paper readers, forked from [Inx](http
 
 ![](./docs/images/cover.jpg)
 
+## What's New in E-inx 1.19.8
+
+Catches up with upstream Inx 1.0.18 and 1.0.19.
+
+- **Dictionary.** Look up a word while reading (Reader Menu → Dictionary) in a StarDict dictionary
+  from the SD card, chosen under Device Management → Choose Dictionary. Saved words are kept.
+- **Per-button bindings and Quick Actions.** Each of Up, Down, Left and Right gets its own short-
+  and long-press action, and Power its own short-press action, under Settings → Buttons. Quick Actions
+  opens a popup of the shortcuts you pick. The page-turn direction, power-button action and long-press
+  setting from 1.17.8 are carried into these bindings on the first boot.
+- **Backup and restore** under Device Management: settings, presets, Wi-Fi, reading progress,
+  bookmarks and statistics, copied to `/.system/backup` on the SD card.
+- **Presets** apply from the Reader Menu (Apply Preset). A button can be bound to change orientation.
+- **.mobi books** open. Upstream notes the layout is not yet as accurate as EPUB.
+- **Closer book rendering**: bullet lists, more of each book's CSS, drop caps, and about 20% faster
+  chapter parsing. Chapters are laid out again once after the update.
+- **Reader additions**: Guide Lines (grid or notebook), a full-width progress bar under the status
+  bar, and Time Left (Chapter / Book) status items.
+- **Hide button hints** on the main screens (Settings → Display), and lists wrap around at either end.
+- Device Management gains Backup and Restore, KOReader Sync, Check for Updates, Choose Dictionary and
+  Device; the list scrolls.
+- The menu clock is one setting now (Settings → Clock → Show Clock), replacing "Time beside battery".
+- Settings move to two files, `settings.bin` and `reader_settings.bin`. A 1.17.8 `settings.bin` is
+  converted on the first boot rather than reset to defaults as upstream does.
+
 ## What's New in E-inx 1.17.8
 
 - **Game Boy games.** Games → PaperBoyX3 plays `.gb` and Game Boy-compatible `.gbc` ROMs from
@@ -391,7 +416,7 @@ E-inx 1.2.17 builds on Inx 1.0.17 with the following additions and improvements.
 
 - Read **EPUB**, **XTC / XTCH**, **TXT**, and **MD** files.
 - Browse books from **Recent**, **News**, **Library**, **Settings**, **File Transfer**, and **Statistics** tabs.
-- Use EPUB features such as bookmarks, annotations, go-to-page, go-to-percent, table of contents, footnotes, per-book settings, and KOReader sync.
+- Use EPUB features such as bookmarks, annotations, dictionary lookup, go-to-page, go-to-percent, table of contents, footnotes, per-book settings, and KOReader sync.
 - Edit book metadata (title, author) and manage favorites from the Library.
 - Render **JPEG**, **PNG**, and **BMP** images directly.
 - Use **1-bit** or **2-bit** image rendering.
@@ -413,6 +438,7 @@ E-inx 1.2.17 builds on Inx 1.0.17 with the following additions and improvements.
 - EPUB paging with saved progress.
 - EPUB layout support for tables, drop caps, borders, images, lists, blockquotes, superscript/subscript, and common CSS spacing/alignment.
 - EPUB text annotation and highlight support.
+- EPUB dictionary lookup using StarDict dictionaries stored on the SD card.
 - EPUB bookmarks.
 - Go to a specific page or percentage in an EPUB.
 - Table of contents, bookmark, annotation, and footnote navigation from the in-book menu.
@@ -548,6 +574,33 @@ The local web interface includes:
 - **Settings**: edit system settings, reader settings, Wi-Fi networks, KOReader settings, and OPDS servers.
 - **Firmware Update**: drag-and-drop firmware upload with progress, image validation, and OTA partition info.
 
+## Dictionary
+
+Inx supports EPUB dictionary lookup with StarDict dictionaries stored on the SD card.
+
+You can download a ready-to-use dictionary pack here:
+
+[Download dictionary pack](https://drive.google.com/file/d/1N7aUdO93xyO8Cvgr_u2sX5-dJ_a-piCK/view?usp=sharing)
+
+To install a dictionary:
+
+1. Download and extract the dictionary pack.
+2. Copy the extracted dictionary folder to `/dictionaries/` on the SD card.
+3. Make sure the dictionary folder directly contains `.ifo`, `.idx`, and `.dict` files.
+4. On the device, open **Sync/Device Management page -> Choose dictionary** and select the dictionary.
+
+Example SD-card layout:
+
+```text
+/dictionaries/
+  English/
+    dictionary.ifo
+    dictionary.idx
+    dictionary.dict
+```
+
+Only uncompressed `.dict` files are supported. Compressed `.dict.dz` dictionaries are not supported/must be uncompressed.
+
 ## Fonts
 
 E-inx includes built-in **Literata** and **Atkinson Hyperlegible** reader fonts.
@@ -601,6 +654,7 @@ Main cache locations:
 /.system/cache/   Display and image cache
 /.system/         Settings, TXT cache, sleep/wake traces, and system data
 /fonts/           SD-card reader fonts
+/dictionaries/    StarDict dictionaries for EPUB lookup
 /sleep/           Custom sleep images
 /Wallpapers/      Additional sleep images
 ```

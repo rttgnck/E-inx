@@ -90,42 +90,54 @@ bool warmImagePlane(GfxRenderer& renderer, const std::string& path, const int x,
   return ok;
 }
 
-void drawStyledHorizontal(GfxRenderer& renderer, const int left, const int right, const int y, const uint8_t style) {
+bool drawTonePixel(GfxRenderer& renderer, const int x, const int y, const uint8_t tone) {
+  if (tone == 0) return false;
+  if (tone == 2) {
+    renderer.drawPixel(x, y, ((x + y) & 1) == 0);
+    return true;
+  }
+  renderer.drawPixel(x, y, true);
+  return true;
+}
+
+void drawStyledHorizontal(GfxRenderer& renderer, const int left, const int right, const int y, const uint8_t style,
+                          const uint8_t tone) {
   if (right < left) {
     return;
   }
   if (style == PageCssBorderLine::DOTTED) {
     for (int xx = left; xx <= right; xx += 3) {
-      renderer.drawPixel(xx, y, true);
+      drawTonePixel(renderer, xx, y, tone);
     }
   } else if (style == PageCssBorderLine::DASHED) {
     for (int xx = left; xx <= right; xx += 9) {
-      renderer.line.render(xx, y, std::min(right, xx + 5), y, true);
+      for (int px = xx; px <= std::min(right, xx + 5); ++px) drawTonePixel(renderer, px, y, tone);
     }
   } else {
-    renderer.line.render(left, y, right, y, true);
+    for (int px = left; px <= right; ++px) drawTonePixel(renderer, px, y, tone);
   }
 }
 
-void drawStyledVertical(GfxRenderer& renderer, const int x, const int top, const int bottom, const uint8_t style) {
+void drawStyledVertical(GfxRenderer& renderer, const int x, const int top, const int bottom, const uint8_t style,
+                        const uint8_t tone) {
   if (bottom < top) {
     return;
   }
   if (style == PageCssBorderLine::DOTTED) {
     for (int yy = top; yy <= bottom; yy += 3) {
-      renderer.drawPixel(x, yy, true);
+      drawTonePixel(renderer, x, yy, tone);
     }
   } else if (style == PageCssBorderLine::DASHED) {
     for (int yy = top; yy <= bottom; yy += 9) {
-      renderer.line.render(x, yy, x, std::min(bottom, yy + 5), true);
+      for (int py = yy; py <= std::min(bottom, yy + 5); ++py) drawTonePixel(renderer, x, py, tone);
     }
   } else {
-    renderer.line.render(x, top, x, bottom, true);
+    for (int py = top; py <= bottom; ++py) drawTonePixel(renderer, x, py, tone);
   }
 }
 
 void drawHorizontalBorder(GfxRenderer& renderer, const int left, const int right, const int top, const int thickness,
-                          const uint8_t style) {
+                          const uint8_t style, const uint8_t tone = 1) {
   if (thickness <= 0) {
     return;
   }
@@ -133,17 +145,17 @@ void drawHorizontalBorder(GfxRenderer& renderer, const int left, const int right
   if (style == PageCssBorderLine::DOUBLE) {
     const int total = std::max(3, drawThickness);
     const int lineW = std::max(1, total / 3);
-    for (int i = 0; i < lineW; ++i) drawStyledHorizontal(renderer, left, right, top + i, style);
-    for (int i = 0; i < lineW; ++i) drawStyledHorizontal(renderer, left, right, top + total - 1 - i, style);
+    for (int i = 0; i < lineW; ++i) drawStyledHorizontal(renderer, left, right, top + i, style, tone);
+    for (int i = 0; i < lineW; ++i) drawStyledHorizontal(renderer, left, right, top + total - 1 - i, style, tone);
   } else {
     for (int i = 0; i < drawThickness; ++i) {
-      drawStyledHorizontal(renderer, left, right, top + i, style);
+      drawStyledHorizontal(renderer, left, right, top + i, style, tone);
     }
   }
 }
 
 void drawVerticalBorder(GfxRenderer& renderer, const int left, const int top, const int bottom, const int thickness,
-                        const uint8_t style) {
+                        const uint8_t style, const uint8_t tone = 1) {
   if (thickness <= 0) {
     return;
   }
@@ -151,11 +163,35 @@ void drawVerticalBorder(GfxRenderer& renderer, const int left, const int top, co
   if (style == PageCssBorderLine::DOUBLE) {
     const int total = std::max(3, drawThickness);
     const int lineW = std::max(1, total / 3);
-    for (int i = 0; i < lineW; ++i) drawStyledVertical(renderer, left + i, top, bottom, style);
-    for (int i = 0; i < lineW; ++i) drawStyledVertical(renderer, left + total - 1 - i, top, bottom, style);
+    for (int i = 0; i < lineW; ++i) drawStyledVertical(renderer, left + i, top, bottom, style, tone);
+    for (int i = 0; i < lineW; ++i) drawStyledVertical(renderer, left + total - 1 - i, top, bottom, style, tone);
   } else {
     for (int i = 0; i < drawThickness; ++i) {
-      drawStyledVertical(renderer, left + i, top, bottom, style);
+      drawStyledVertical(renderer, left + i, top, bottom, style, tone);
+    }
+  }
+}
+
+void drawRoundedBorder(GfxRenderer& renderer, const int x, const int y, const int width, const int height,
+                       const int thickness, const uint8_t tone) {
+  if (width <= 0 || height <= 0 || thickness <= 0 || tone == 0) {
+    return;
+  }
+  const int r = std::max(1, std::min(width, height) / 15);
+  const int right = x + width - 1;
+  const int bottom = y + height - 1;
+  for (int t = 0; t < thickness; ++t) {
+    const int rr = std::max(1, r - t);
+    drawStyledHorizontal(renderer, x + rr, right - rr, y + t, PageCssBorderLine::SOLID, tone);
+    drawStyledHorizontal(renderer, x + rr, right - rr, bottom - t, PageCssBorderLine::SOLID, tone);
+    drawStyledVertical(renderer, x + t, y + rr, bottom - rr, PageCssBorderLine::SOLID, tone);
+    drawStyledVertical(renderer, right - t, y + rr, bottom - rr, PageCssBorderLine::SOLID, tone);
+    for (int cy = 0; cy <= rr; ++cy) {
+      const int span = static_cast<int>(std::sqrt(rr * rr - (rr - cy) * (rr - cy)));
+      drawTonePixel(renderer, x + rr - span, y + cy, tone);
+      drawTonePixel(renderer, right - rr + span, y + cy, tone);
+      drawTonePixel(renderer, x + rr - span, bottom - cy, tone);
+      drawTonePixel(renderer, right - rr + span, bottom - cy, tone);
     }
   }
 }
@@ -171,7 +207,7 @@ void drawVerticalBorder(GfxRenderer& renderer, const int left, const int top, co
  * @param yOffset Vertical offset for page margins
  */
 void PageLine::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset, ImageRenderMode) {
-  block->render(renderer, fontId, xPos + xOffset, yPos + yOffset);
+  block.render(renderer, fontId, xPos + xOffset, yPos + yOffset);
 }
 /**
  * Serializes a PageLine to a file.
@@ -182,7 +218,7 @@ void PageLine::render(GfxRenderer& renderer, const int fontId, const int xOffset
 bool PageLine::serialize(FsFile& file) {
   serialization::writePod(file, xPos);
   serialization::writePod(file, yPos);
-  return block->serialize(file);
+  return block.serialize(file);
 }
 
 /**
@@ -196,7 +232,8 @@ std::unique_ptr<PageLine> PageLine::deserialize(FsFile& file) {
   serialization::readPod(file, x);
   serialization::readPod(file, y);
   auto tb = TextBlock::deserialize(file);
-  return std::unique_ptr<PageLine>(new PageLine(std::move(tb), x, y));
+  if (!tb) return nullptr;
+  return std::unique_ptr<PageLine>(new PageLine(std::move(*tb), x, y));
 }
 
 /**
@@ -204,14 +241,14 @@ std::unique_ptr<PageLine> PageLine::deserialize(FsFile& file) {
  */
 void PageSmallCaps::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset,
                            ImageRenderMode) {
-  block->render(renderer, fontId, xPos + xOffset, yPos + yOffset);
+  block.render(renderer, fontId, xPos + xOffset, yPos + yOffset);
 }
 
 bool PageSmallCaps::serialize(FsFile& file) {
   serialization::writePod(file, xPos);
   serialization::writePod(file, yPos);
   serialization::writePod(file, compatFontId);
-  return block->serialize(file);
+  return block.serialize(file);
 }
 
 std::unique_ptr<PageSmallCaps> PageSmallCaps::deserialize(FsFile& file) {
@@ -221,7 +258,8 @@ std::unique_ptr<PageSmallCaps> PageSmallCaps::deserialize(FsFile& file) {
   serialization::readPod(file, y);
   serialization::readPod(file, scId);
   auto tb = TextBlock::deserialize(file);
-  return std::unique_ptr<PageSmallCaps>(new PageSmallCaps(std::move(tb), x, y, scId));
+  if (!tb) return nullptr;
+  return std::unique_ptr<PageSmallCaps>(new PageSmallCaps(std::move(*tb), x, y, scId));
 }
 
 /**
@@ -235,7 +273,7 @@ std::unique_ptr<PageSmallCaps> PageSmallCaps::deserialize(FsFile& file) {
  */
 void PageHeader::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset,
                         ImageRenderMode) {
-  block->render(renderer, headerFontId, xPos + xOffset, yPos + yOffset);
+  block.render(renderer, headerFontId, xPos + xOffset, yPos + yOffset);
 }
 
 /**
@@ -248,7 +286,7 @@ bool PageHeader::serialize(FsFile& file) {
   serialization::writePod(file, xPos);
   serialization::writePod(file, yPos);
   serialization::writePod(file, headerFontId);
-  return block->serialize(file);
+  return block.serialize(file);
 }
 
 /**
@@ -267,7 +305,8 @@ std::unique_ptr<PageHeader> PageHeader::deserialize(FsFile& file) {
     serialization::readPod(file, headerId);
   }
   auto textBlock = TextBlock::deserialize(file);
-  return std::unique_ptr<PageHeader>(new PageHeader(std::move(textBlock), x, y, headerId));
+  if (!textBlock) return nullptr;
+  return std::unique_ptr<PageHeader>(new PageHeader(std::move(*textBlock), x, y, headerId));
 }
 
 /**
@@ -324,6 +363,43 @@ std::unique_ptr<PageDropCap> PageDropCap::deserialize(FsFile& file) {
   serialization::readPod(file, inlineFirstLine);
   serialization::readString(file, text);
   return std::unique_ptr<PageDropCap>(new PageDropCap(text, x, y, dcFontId, inlineFirstLine));
+}
+
+void PageListMarker::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset,
+                            ImageRenderMode) {
+  // Drawn as a plain filled circle rather than a font glyph - some fonts render "." or "•" too small, too
+  // faint, or positioned oddly (this reader has no dedicated bullet glyph), so a drawn shape sized off the
+  // item's own font metrics is the only way to guarantee a clearly visible, correctly placed marker.
+  const int ascender = renderer.text.getFontAscenderSize(markerFontId);
+  const int radius = std::max(3, ascender / 4);
+  const int bodyBaseline = yPos + yOffset + renderer.text.getFontAscenderSize(fontId);
+  const int centerX = xPos + xOffset + radius;
+  const int centerY = bodyBaseline - ascender / 2;
+  for (int dy = -radius; dy <= radius; ++dy) {
+    const int span = static_cast<int>(std::sqrt(static_cast<double>(radius * radius - dy * dy)));
+    for (int dx = -span; dx <= span; ++dx) {
+      renderer.drawPixel(centerX + dx, centerY + dy, true);
+    }
+  }
+}
+
+bool PageListMarker::serialize(FsFile& file) {
+  serialization::writePod(file, xPos);
+  serialization::writePod(file, yPos);
+  serialization::writePod(file, markerFontId);
+  serialization::writeString(file, text);
+  return true;
+}
+
+std::unique_ptr<PageListMarker> PageListMarker::deserialize(FsFile& file) {
+  int16_t x, y;
+  int fontId;
+  std::string text;
+  serialization::readPod(file, x);
+  serialization::readPod(file, y);
+  serialization::readPod(file, fontId);
+  serialization::readString(file, text);
+  return std::unique_ptr<PageListMarker>(new PageListMarker(text, x, y, fontId));
 }
 
 /**
@@ -736,10 +812,25 @@ void PageCssBorderBox::render(GfxRenderer& renderer, const int fontId, const int
   const int right = left + boxWidth - 1;
   const int bottom = top + boxHeight - 1;
 
-  drawHorizontalBorder(renderer, left, right, top, borderTop, styleTop);
-  drawHorizontalBorder(renderer, left, right, bottom - std::max<int>(1, borderBottom) + 1, borderBottom, styleBottom);
-  drawVerticalBorder(renderer, left, top, bottom, borderLeft, styleLeft);
-  drawVerticalBorder(renderer, right - std::max<int>(1, borderRight) + 1, top, bottom, borderRight, styleRight);
+  const bool hasBackground = backgroundTone != 0;
+  const uint8_t effectiveBorderTone = hasBackground ? 0 : borderTone;
+  if (hasBackground) {
+    renderer.rectangle.fill(left, top, boxWidth, boxHeight, static_cast<int>(GfxRenderer::FillTone::Ink), radius > 0,
+                            true);
+  }
+  if (radius > 0 && borderTop == borderRight && borderTop == borderBottom && borderTop == borderLeft &&
+      styleTop == PageCssBorderLine::SOLID && styleRight == PageCssBorderLine::SOLID &&
+      styleBottom == PageCssBorderLine::SOLID && styleLeft == PageCssBorderLine::SOLID) {
+    drawRoundedBorder(renderer, left, top, boxWidth, boxHeight, std::max<int>(1, borderTop), effectiveBorderTone);
+    return;
+  }
+
+  drawHorizontalBorder(renderer, left, right, top, borderTop, styleTop, effectiveBorderTone);
+  drawHorizontalBorder(renderer, left, right, bottom - std::max<int>(1, borderBottom) + 1, borderBottom, styleBottom,
+                       effectiveBorderTone);
+  drawVerticalBorder(renderer, left, top, bottom, borderLeft, styleLeft, effectiveBorderTone);
+  drawVerticalBorder(renderer, right - std::max<int>(1, borderRight) + 1, top, bottom, borderRight, styleRight,
+                     effectiveBorderTone);
 }
 
 bool PageCssBorderBox::serialize(FsFile& file) {
@@ -755,6 +846,9 @@ bool PageCssBorderBox::serialize(FsFile& file) {
   serialization::writePod(file, styleRight);
   serialization::writePod(file, styleBottom);
   serialization::writePod(file, styleLeft);
+  serialization::writePod(file, radius);
+  serialization::writePod(file, borderTone);
+  serialization::writePod(file, backgroundTone);
   return true;
 }
 
@@ -765,6 +859,9 @@ std::unique_ptr<PageCssBorderBox> PageCssBorderBox::deserialize(FsFile& file) {
   uint8_t styleRight = PageCssBorderLine::SOLID;
   uint8_t styleBottom = PageCssBorderLine::SOLID;
   uint8_t styleLeft = PageCssBorderLine::SOLID;
+  int16_t radius = 0;
+  uint8_t borderTone = 1;
+  uint8_t backgroundTone = 0;
   serialization::readPod(file, x);
   serialization::readPod(file, y);
   serialization::readPod(file, width);
@@ -777,18 +874,22 @@ std::unique_ptr<PageCssBorderBox> PageCssBorderBox::deserialize(FsFile& file) {
   serialization::readPod(file, styleRight);
   serialization::readPod(file, styleBottom);
   serialization::readPod(file, styleLeft);
+  serialization::readPod(file, radius);
+  serialization::readPod(file, borderTone);
+  serialization::readPod(file, backgroundTone);
   return std::unique_ptr<PageCssBorderBox>(new PageCssBorderBox(x, y, width, height, top, right, bottom, left, styleTop,
-                                                                styleRight, styleBottom, styleLeft));
+                                                                styleRight, styleBottom, styleLeft, radius, borderTone,
+                                                                backgroundTone));
 }
 
 bool Page::anyImageNeedsGrayscale() const {
-  return std::any_of(elements.begin(), elements.end(), [](const std::shared_ptr<PageElement>& element) {
+  return std::any_of(elements.begin(), elements.end(), [](const std::unique_ptr<PageElement>& element) {
     return element->getTag() == TAG_PageImage && needsGrayscalePass(static_cast<const PageImage&>(*element));
   });
 }
 
 bool Page::anyPngImage() const {
-  return std::any_of(elements.begin(), elements.end(), [](const std::shared_ptr<PageElement>& element) {
+  return std::any_of(elements.begin(), elements.end(), [](const std::unique_ptr<PageElement>& element) {
     if (element->getTag() != TAG_PageImage) {
       return false;
     }
@@ -868,6 +969,26 @@ bool Page::getImageBoundingBox(const GfxRenderer& renderer, const int xOffset, c
 
 void Page::render(GfxRenderer& renderer, const int fontId, const int headerFontId, const int xOffset, const int yOffset,
                   bool skipImages, const ImageRenderMode imageMode, const bool skipOnlyGrayscaleImages) const {
+  struct InvertedTextRegion {
+    int16_t x;
+    int16_t y;
+    int16_t w;
+    int16_t h;
+  };
+  std::vector<InvertedTextRegion> invertedTextRegions;
+  auto isInvertedText = [&](const int textX, const int textY, const int textFontId) {
+    const int lineHeight = std::max(1, renderer.text.getLineHeight(textFontId));
+    const int textBottom = textY + lineHeight - 1;
+    for (const auto& region : invertedTextRegions) {
+      const int regionRight = region.x + region.w;
+      const int regionBottom = region.y + region.h;
+      if (textX >= region.x && textX < regionRight && textBottom >= region.y && textY < regionBottom) {
+        return true;
+      }
+    }
+    return false;
+  };
+
   for (auto& element : elements) {
     if (skipImages && element->getTag() == TAG_PageImage) {
       const auto* image = static_cast<const PageImage*>(element.get());
@@ -879,14 +1000,30 @@ void Page::render(GfxRenderer& renderer, const int fontId, const int headerFontI
     uint8_t tag = element->getTag();
     if (tag == TAG_PageLine) {
       const auto* line = static_cast<const PageLine*>(element.get());
-      line->getTextBlock().render(renderer, fontId, line->xPos + xOffset, line->yPos + yOffset);
+      const int textX = line->xPos + xOffset;
+      const int textY = line->yPos + yOffset;
+      line->getTextBlock().render(renderer, fontId, textX, textY, !isInvertedText(textX, textY, fontId));
     } else if (tag == TAG_PageHeader) {
       const auto* header = static_cast<const PageHeader*>(element.get());
       // Use the element's own font id (header font for headings, or a per-block large-font override).
       const int feId = header->getHeaderFontId() > 0 ? header->getHeaderFontId() : headerFontId;
-      header->getTextBlock().render(renderer, feId, header->xPos + xOffset, header->yPos + yOffset);
+      const int textX = header->xPos + xOffset;
+      const int textY = header->yPos + yOffset;
+      header->getTextBlock().render(renderer, feId, textX, textY, !isInvertedText(textX, textY, feId));
+    } else if (tag == TAG_PageSmallCaps) {
+      const auto* smallCaps = static_cast<const PageSmallCaps*>(element.get());
+      const int textX = smallCaps->xPos + xOffset;
+      const int textY = smallCaps->yPos + yOffset;
+      smallCaps->getTextBlock().render(renderer, fontId, textX, textY, !isInvertedText(textX, textY, fontId));
     } else {
       element->render(renderer, fontId, xOffset, yOffset, imageMode);
+      if (tag == TAG_PageCssBorderBox) {
+        const auto* box = static_cast<const PageCssBorderBox*>(element.get());
+        if (box->hasBackground()) {
+          invertedTextRegions.push_back({static_cast<int16_t>(box->xPos + xOffset),
+                                         static_cast<int16_t>(box->yPos + yOffset), box->getWidth(), box->getHeight()});
+        }
+      }
     }
   }
 }
@@ -976,7 +1113,7 @@ std::string Page::extractPlainText(const size_t maxChars) const {
     if (block == nullptr) {
       continue;
     }
-    block->forEachWord([&](size_t, const std::string& word, uint16_t, EpdFontFamily::Style) { appendText(word); });
+    block->forEachWord([&](size_t, const std::string& word, int16_t, EpdFontFamily::Style) { appendText(word); });
   }
   return out;
 }
@@ -1028,6 +1165,8 @@ std::unique_ptr<Page> Page::deserialize(FsFile& file) {
       page->elements.push_back(PageCssBorderLine::deserialize(file));
     } else if (tag == TAG_PageCssBorderBox) {
       page->elements.push_back(PageCssBorderBox::deserialize(file));
+    } else if (tag == TAG_PageListMarker) {
+      page->elements.push_back(PageListMarker::deserialize(file));
     }
   }
   return page;

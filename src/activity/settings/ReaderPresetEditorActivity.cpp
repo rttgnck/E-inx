@@ -13,21 +13,19 @@
 #include <string>
 
 #include "../reader/Epub/SettingsDrawer.h"
+#include "../reader/Epub/StatusBar.h"
 #include "../util/KeyboardEntryActivity.h"
 #include "GfxRenderer.h"
 #include "state/ReaderPreset.h"
+#include "state/ReaderSetting.h"
 #include "state/SystemSetting.h"
 #include "system/FontManager.h"
 #include "system/Fonts.h"
 
 namespace {
 
-const char* kLoremParagraph1 =
-    "The quick brown fox jumps over the lazy dog while the printing press hums softly in the "
-    "background, setting each line of type with patient, deliberate care.";
-const char* kLoremParagraph2 =
-    "Good typography is invisible: it carries the words to the reader without ever calling attention "
-    "to itself, balancing rhythm, spacing, and contrast on every page.";
+const char* kLoremParagraph1 = "The quick brown fox jumps over the lazy dog while the printing press hums softly.";
+const char* kLoremParagraph2 = "Good typography is invisible.";
 constexpr int kPreviewMaxWords = 64;
 constexpr size_t kPreviewWordBufferSize = 48;
 constexpr size_t kPresetNameMaxLen = 40;
@@ -76,6 +74,10 @@ const char* statusPlaceholder(StatusBarItem item) {
       return "27m/52m/30m";
     case StatusBarItem::SESSION_DAILY:
       return "27m/52m";
+    case StatusBarItem::TIME_LEFT_CHAPTER:
+      return "12m";
+    case StatusBarItem::TIME_LEFT_BOOK:
+      return "3h 45m";
     case StatusBarItem::NONE:
     default:
       return "";
@@ -194,9 +196,17 @@ void ReaderPresetEditorActivity::renderPreview() {
   // Clear the preview region (no header label/tag; the demo text is the focus).
   renderer.rectangle.fill(0, 0, screenW, previewHeight_, false);
 
-  const int statusBarHeight = 28;
+  // Mirror EpubActivity::calculateViewport()'s hasStatusBar check and StatusBar::reservedFullBarHeight()
+  // so the preview reclaims the same space the real reader would when a bar has no content (global
+  // SETTINGS, same as the real reader - see StatusBar::render()'s doc comment for why this isn't
+  // per-preset).
+  const bool hasStatusBar = (READER_SETTINGS.statusBarLeft != SystemSetting::STATUS_ITEM_NONE ||
+                             READER_SETTINGS.statusBarMiddle != SystemSetting::STATUS_ITEM_NONE ||
+                             READER_SETTINGS.statusBarRight != SystemSetting::STATUS_ITEM_NONE);
+  const int statusBarHeight = hasStatusBar ? 28 : 0;
+  const int fullBarHeight = StatusBar::reservedFullBarHeight();
   const int bodyTop = 16;
-  const int bodyBottom = previewHeight_ - statusBarHeight - 6;
+  const int bodyBottom = previewHeight_ - statusBarHeight - fullBarHeight - 6;
   const int maxWidth = std::max(40, screenW - 2 * margin);
   const int spaceWidth = std::max(
       1, static_cast<int>(std::lround(renderer.text.getSpaceWidth(fontId) * working_.getReaderWordSpacingFactor())));
@@ -206,10 +216,25 @@ void ReaderPresetEditorActivity::renderPreview() {
   const bool bionic = working_.bionicReadingEnabled != 0;
   const int indentPx = working_.paragraphCssIndentEnabled ? (2 * spaceWidth + 8) : 0;
   const uint8_t align = working_.paragraphAlignment;
+  const int guideStyle = working_.readingGuideLinesEnabled;
+  const int fontAscender = renderer.text.getFontAscenderSize(fontId);
+  constexpr int kGuideClearancePx = 6;
 
-  auto renderWord = [&](int x, int y, const WordSlice& word) {
+  auto drawGuideLineUnder = [&](int lineY) {
+    if (guideStyle != 2) return;
+    const int guideY = lineY + fontAscender + kGuideClearancePx;
+    if (guideY < bodyBottom) {
+      renderer.line.render(margin, guideY, screenW - margin, guideY, true, LineRender::Style::Dotted);
+    }
+  };
+
+  auto renderWord = [&](int x, int y, const WordSlice& word, bool smallCaps) {
     char wordBuf[kPreviewWordBufferSize];
     const char* text = wordToBuffer(word, wordBuf, sizeof(wordBuf));
+    if (smallCaps) {
+      renderer.text.renderSmallCaps(fontId, x, y, text, true, EpdFontFamily::REGULAR);
+      return;
+    }
     const size_t len = std::strlen(text);
     if (!bionic || len < 2) {
       renderer.text.render(fontId, x, y, text, true, EpdFontFamily::REGULAR);
@@ -227,8 +252,22 @@ void ReaderPresetEditorActivity::renderPreview() {
     renderer.text.render(fontId, x + headW, y, tail, true, EpdFontFamily::REGULAR);
   };
 
+  // Paragraph 0 opens with a drop cap ("T", split off kLoremParagraph1's first letter) followed by a
+  // small-caps run for the next few words - the classic chapter-opening treatment - so the preview shows
+  // both effects together, illustrating how they actually look in a real book.
+  constexpr int kDropCapLines = 2;
+  constexpr int kSmallCapsWordCount = 4;
+  const char dropCapLetter[2] = {kLoremParagraph1[0], '\0'};
+  const int dropCapFontId =
+      READER_SETTINGS.getReaderFontIdForFamilyAndSize(working_.fontFamily, SystemSetting::EXTRA_LARGE);
+  // Unlike the body font (ensured in onEnter()/the drawer's change callback), this larger same-family size
+  // is only ever touched here - for an SD custom font it's a distinct, separately-loaded slot, so without
+  // this it silently has no glyph data and the drop cap (and its width, throwing off the wrap indent) is blank.
+  FontManager::ensureFontReady(dropCapFontId, renderer);
+  const int dropCapWidth = renderer.text.getWidth(dropCapFontId, dropCapLetter, EpdFontFamily::BOLD) + 6;
+
   int y = bodyTop;
-  const char* paragraphs[2] = {kLoremParagraph1, kLoremParagraph2};
+  const char* paragraphs[2] = {kLoremParagraph1 + 1, kLoremParagraph2};
   const int paragraphGap = working_.extraParagraphSpacing ? (lineHeight / 2 + 4) : 2;
 
   for (int p = 0; p < 2 && y + lineHeight <= bodyBottom; ++p) {
@@ -236,8 +275,10 @@ void ReaderPresetEditorActivity::renderPreview() {
     const int wordCount = splitWords(paragraphs[p], words, kPreviewMaxWords);
     int i = 0;
     bool firstLine = true;
+    int dropCapLinesLeft = (p == 0) ? kDropCapLines : 0;
+    const int paragraphFirstLineY = y;
     while (i < wordCount && y + lineHeight <= bodyBottom) {
-      const int lineIndent = firstLine ? indentPx : 0;
+      const int lineIndent = dropCapLinesLeft > 0 ? dropCapWidth : (firstLine ? indentPx : 0);
       const int lineMaxWidth = maxWidth - lineIndent;
 
       // Greedily pack words for this line.
@@ -247,7 +288,10 @@ void ReaderPresetEditorActivity::renderPreview() {
       int widthCount = 0;
       while (i < wordCount && widthCount < kPreviewMaxWords) {
         char wordBuf[kPreviewWordBufferSize];
-        const int ww = renderer.text.getWidth(fontId, wordToBuffer(words[i], wordBuf, sizeof(wordBuf)));
+        const char* wordText = wordToBuffer(words[i], wordBuf, sizeof(wordBuf));
+        const bool smallCaps = p == 0 && i < kSmallCapsWordCount;
+        const int ww =
+            smallCaps ? renderer.text.getSmallCapsWidth(fontId, wordText) : renderer.text.getWidth(fontId, wordText);
         const int withWord = naturalWidth + (i > lineStart ? spaceWidth : 0) + ww;
         if (withWord > lineMaxWidth && i > lineStart) break;
         widths[widthCount++] = ww;
@@ -269,17 +313,58 @@ void ReaderPresetEditorActivity::renderPreview() {
       }
 
       for (int k = 0; k < count; ++k) {
-        renderWord(x, y, words[lineStart + k]);
+        renderWord(x, y, words[lineStart + k], p == 0 && (lineStart + k) < kSmallCapsWordCount);
         x += widths[k] + gap;
       }
 
+      drawGuideLineUnder(y);
       y += lineHeight;
       firstLine = false;
+      if (dropCapLinesLeft > 0) --dropCapLinesLeft;
+    }
+    if (p == 0) {
+      // Align the drop cap's cap-top with the first body line's cap-top, same formula as PageDropCap::render.
+      const int dropAscender = renderer.text.getFontAscenderSize(dropCapFontId);
+      const int bodyBaseline = paragraphFirstLineY + fontAscender;
+      renderer.text.render(dropCapFontId, margin, bodyBaseline - dropAscender, dropCapLetter, true,
+                           EpdFontFamily::BOLD);
     }
     y += paragraphGap;
   }
 
-  renderPreviewStatusBar(previewHeight_ - statusBarHeight, statusBarHeight);
+  // A short bulleted list, so the preview also shows list-marker size/spacing (Page::listMarker in the
+  // real reader draws the same plain filled circle rather than relying on font glyph coverage).
+  static const char* kListItems[] = {"First list item here", "Second list item too"};
+  const int bulletRadius = std::max(3, fontAscender / 4);
+  const int bulletIndent = std::max(1, renderer.text.getLineHeight(fontId));
+  for (const char* item : kListItems) {
+    if (y + lineHeight > bodyBottom) break;
+    const int bodyBaseline = y + fontAscender;
+    const int centerX = margin + bulletRadius;
+    const int centerY = bodyBaseline - fontAscender / 2;
+    for (int dy = -bulletRadius; dy <= bulletRadius; ++dy) {
+      const int span = static_cast<int>(std::sqrt(static_cast<double>(bulletRadius * bulletRadius - dy * dy)));
+      for (int dx = -span; dx <= span; ++dx) {
+        renderer.drawPixel(centerX + dx, centerY + dy, true);
+      }
+    }
+    renderer.text.render(fontId, margin + bulletIndent, y, item, true, EpdFontFamily::REGULAR);
+    drawGuideLineUnder(y);
+    y += lineHeight;
+  }
+
+  if (guideStyle == 1) {
+    const int contentWidth = screenW - 2 * margin;
+    const int x1 = margin + contentWidth / 3;
+    const int x2 = margin + (contentWidth * 2) / 3;
+    renderer.line.render(x1, bodyTop, x1, bodyBottom, true, LineRender::Style::Dotted);
+    renderer.line.render(x2, bodyTop, x2, bodyBottom, true, LineRender::Style::Dotted);
+  }
+
+  renderPreviewStatusBar(previewHeight_ - statusBarHeight - fullBarHeight, statusBarHeight);
+  if (fullBarHeight > 0) {
+    renderPreviewFullBar(previewHeight_ - fullBarHeight, fullBarHeight);
+  }
 }
 
 void ReaderPresetEditorActivity::renderPreviewStatusBar(int barTop, int barHeight) {
@@ -301,6 +386,53 @@ void ReaderPresetEditorActivity::renderPreviewStatusBar(int barTop, int barHeigh
     const int width = renderer.text.getWidth(fontId, text.c_str());
     const int sectionStart = margin + i * sectionWidth;
     renderer.text.render(fontId, sectionStart + (sectionWidth - width) / 2, textY, text.c_str(), true);
+  }
+}
+
+void ReaderPresetEditorActivity::renderPreviewFullBar(int barTop, int barHeight) {
+  const StatusBarItem style = static_cast<StatusBarItem>(READER_SETTINGS.statusBarFullStyle);
+  if (style == StatusBarItem::NONE) {
+    return;
+  }
+
+  const int screenW = renderer.getScreenWidth();
+  const int fontId = ATKINSON_HYPERLEGIBLE_8_FONT_ID;
+  const int textY = barTop + (barHeight - renderer.text.getLineHeight(fontId)) / 2 + 2;
+
+  if (style == StatusBarItem::PAGE_BARS) {
+    // Mock: a row of small filled/outline bars across the full width, like real page bars.
+    constexpr int kBars = 24;
+    constexpr int kFilledBars = 9;  // representative "partway through the book" look
+    const int barMarginX = 12;
+    const int totalW = screenW - 2 * barMarginX;
+    const int barW = std::max(2, totalW / kBars - 1);
+    for (int i = 0; i < kBars; ++i) {
+      const int x = barMarginX + i * (barW + 1);
+      if (i < kFilledBars) {
+        renderer.rectangle.fill(x, textY, barW, 5, true);
+      } else {
+        renderer.rectangle.render(x, textY, barW, 5, true);
+      }
+    }
+    return;
+  }
+
+  // PROGRESS_BAR / PROGRESS_BAR_WITH_PERCENT: one full-width bar, ~40% filled for a representative look.
+  const bool withPercent = style == StatusBarItem::PROGRESS_BAR_WITH_PERCENT;
+  const char* pct = "40%";
+  const int pctW = withPercent ? renderer.text.getWidth(fontId, pct) : 0;
+  const int barMarginX = 12;
+  const int barW = screenW - 2 * barMarginX - (withPercent ? pctW + 8 : 0);
+  const int barX = barMarginX;
+  const int barY = textY + 1;
+
+  renderer.rectangle.render(barX, barY, barW, 6, true);
+  const int fillW = barW * 2 / 5;
+  if (fillW > 0) {
+    renderer.rectangle.fill(barX + 1, barY + 1, fillW - 2, 4, true);
+  }
+  if (withPercent) {
+    renderer.text.render(fontId, barX + barW + 8, textY, pct, true);
   }
 }
 

@@ -16,19 +16,17 @@
 #include <iterator>
 #include <string>
 
-#include "../OpdsServerListActivity.h"
 #include "CalibreSettingsActivity.h"
 #include "ClearCacheActivity.h"
 #include "ClockStylePickerActivity.h"
 #include "IfFoundActivity.h"
-#include "KOReaderSettingsActivity.h"
-#include "OtaUpdateActivity.h"
 #include "ReaderFontSettingsDraw.h"
 #include "ReadingStatsBackupActivity.h"
 #include "SleepCoverRepairActivity.h"
 #include "SleepImagePickerActivity.h"
 #include "ThumbnailGeneratorActivity.h"
 #include "TimeSyncActivity.h"
+#include "state/ReaderSetting.h"
 #include "state/SystemSetting.h"
 #include "system/FontManager.h"
 #include "system/Fonts.h"
@@ -50,6 +48,14 @@ bool isSupportedSleepImageFile(const std::string& filename) {
 
 void writeString(FsFile& file, const std::string& s) {
   file.write(reinterpret_cast<const uint8_t*>(s.c_str()), s.length());
+}
+std::string formatTimezoneOption(const uint8_t value) {
+  const int minutes = (static_cast<int>(value) - 48) * 15;
+  const char sign = minutes < 0 ? '-' : '+';
+  const int absMinutes = minutes < 0 ? -minutes : minutes;
+  char buffer[16];
+  std::snprintf(buffer, sizeof(buffer), "UTC%c%02d:%02d", sign, absMinutes / 60, absMinutes % 60);
+  return std::string(buffer);
 }
 }  // namespace
 
@@ -75,7 +81,7 @@ void CategorySettingsActivity::onEnter() {
 
   if (categoryName != nullptr && strcmp(categoryName, "Reader") == 0) {
     FontManager::scanSDFonts("/fonts", true);
-    FontManager::clampReaderFontFamilySlot(SETTINGS.fontFamily);
+    FontManager::clampReaderFontFamilySlot(READER_SETTINGS.fontFamily);
   }
 
   setupMenu();
@@ -243,7 +249,7 @@ void CategorySettingsActivity::setupMenu() {
                   }
                 }
                 if (settingPtr->valuePtr == &SystemSetting::recentLibraryMode &&
-                    current == SystemSetting::RECENT_LIST_DEPRECATED) {
+                    (current == SystemSetting::RECENT_LIST_DEPRECATED || current == SystemSetting::RECENT_SIMPLE)) {
                   for (size_t i = 0; i < settingPtr->enumOptionValues.size(); ++i) {
                     if (settingPtr->enumOptionValues[i] == SystemSetting::RECENT_FLOW) {
                       return settingPtr->enumValues[i].c_str();
@@ -269,7 +275,7 @@ void CategorySettingsActivity::setupMenu() {
                   }
                 }
                 if (settingPtr->valuePtr == &SystemSetting::recentLibraryMode &&
-                    current == SystemSetting::RECENT_LIST_DEPRECATED) {
+                    (current == SystemSetting::RECENT_LIST_DEPRECATED || current == SystemSetting::RECENT_SIMPLE)) {
                   for (size_t i = 0; i < settingPtr->enumOptionValues.size(); ++i) {
                     if (settingPtr->enumOptionValues[i] == SystemSetting::RECENT_FLOW) {
                       currentIndex = static_cast<int>(i);
@@ -294,19 +300,11 @@ void CategorySettingsActivity::setupMenu() {
           }
         }
         if (setting.type == SettingType::VALUE) {
-          if (setting.name != nullptr && strcmp(setting.name, "Timezone") == 0) {
-            entry.getValueText = []() -> const char* {
-              static char buffer[16];
-              SETTINGS.formatTimeZone(buffer, sizeof(buffer));
-              return buffer;
-            };
-          } else {
-            entry.getValueText = [settingPtr]() -> const char* {
-              static char buffer[32];
-              snprintf(buffer, sizeof(buffer), "%d", SETTINGS.*(settingPtr->valuePtr));
-              return buffer;
-            };
-          }
+          entry.getValueText = [settingPtr]() -> const char* {
+            static char buffer[32];
+            snprintf(buffer, sizeof(buffer), "%d", SETTINGS.*(settingPtr->valuePtr));
+            return buffer;
+          };
           entry.change = [this, settingPtr](int delta) {
             int current = SETTINGS.*(settingPtr->valuePtr);
             int newVal = current + (delta * settingPtr->valueRange.step);
@@ -344,20 +342,6 @@ void CategorySettingsActivity::setupMenu() {
                 onAboutPanel();
               }
               return;
-            }
-            if (strcmp(settingPtr->name, "KOReader Sync") == 0) {
-              exitActivity();
-              enterNewActivity(new KOReaderSettingsActivity(renderer, mappedInput, [this] {
-                exitActivity();
-                updateRequired = true;
-              }));
-            }
-            if (strcmp(settingPtr->name, "OPDS Browser") == 0) {
-              exitActivity();
-              enterNewActivity(new OpdsServerListActivity(renderer, mappedInput, [this] {
-                exitActivity();
-                updateRequired = true;
-              }));
             }
             if (strcmp(settingPtr->name, "Delete Cache") == 0) {
               exitActivity();
@@ -425,13 +409,6 @@ void CategorySettingsActivity::setupMenu() {
                 updateRequired = true;
               }));
             }
-            if (strcmp(settingPtr->name, "Check for updates") == 0) {
-              exitActivity();
-              enterNewActivity(new OtaUpdateActivity(renderer, mappedInput, [this] {
-                exitActivity();
-                updateRequired = true;
-              }));
-            }
             updateRequired = true;
           };
         }
@@ -454,17 +431,6 @@ void CategorySettingsActivity::applyChange(int delta) {
   selected.change(delta);
 }
 
-namespace {
-std::string formatTimezoneOption(const uint8_t value) {
-  const int minutes = (static_cast<int>(value) - 48) * 15;
-  const char sign = minutes < 0 ? '-' : '+';
-  const int absMinutes = minutes < 0 ? -minutes : minutes;
-  char buffer[16];
-  std::snprintf(buffer, sizeof(buffer), "UTC%c%02d:%02d", sign, absMinutes / 60, absMinutes % 60);
-  return std::string(buffer);
-}
-}  // namespace
-
 int CategorySettingsActivity::selectedOptionIndex(const MenuEntry& entry) const {
   if (!entry.valuePtr) {
     return 0;
@@ -482,7 +448,8 @@ int CategorySettingsActivity::selectedOptionIndex(const MenuEntry& entry) const 
         return static_cast<int>(i);
       }
     }
-    if (entry.valuePtr == &SystemSetting::recentLibraryMode && current == SystemSetting::RECENT_LIST_DEPRECATED) {
+    if (entry.valuePtr == &SystemSetting::recentLibraryMode &&
+        (current == SystemSetting::RECENT_LIST_DEPRECATED || current == SystemSetting::RECENT_SIMPLE)) {
       for (size_t i = 0; i < setting->enumOptionValues.size(); ++i) {
         if (setting->enumOptionValues[i] == SystemSetting::RECENT_FLOW) {
           return static_cast<int>(i);
@@ -805,18 +772,26 @@ void CategorySettingsActivity::loop() {
   bool needRedraw = false;
 
   if (upPressed) {
-    if (selectedIndex > 0) {
-      selectedIndex--;
+    const int totalItems = static_cast<int>(menuItems.size());
+    if (totalItems > 0) {
+      selectedIndex = (selectedIndex - 1 + totalItems) % totalItems;
+      const int maxScroll = std::max(0, totalItems - itemsPerPage);
       if (selectedIndex < scrollOffset) scrollOffset = selectedIndex;
+      if (selectedIndex >= scrollOffset + itemsPerPage)
+        scrollOffset = std::min(selectedIndex - itemsPerPage + 1, maxScroll);
+      scrollOffset = std::max(0, std::min(scrollOffset, maxScroll));
       needRedraw = true;
     }
   } else if (downPressed) {
-    if (selectedIndex < (int)menuItems.size() - 1) {
-      selectedIndex++;
-      int maxScroll = std::max(0, (int)menuItems.size() - itemsPerPage);
+    const int totalItems = static_cast<int>(menuItems.size());
+    if (totalItems > 0) {
+      selectedIndex = (selectedIndex + 1) % totalItems;
+      int maxScroll = std::max(0, totalItems - itemsPerPage);
+      if (selectedIndex < scrollOffset) scrollOffset = selectedIndex;
       if (selectedIndex > scrollOffset + itemsPerPage - 1) {
         scrollOffset = std::min(selectedIndex - itemsPerPage + 1, maxScroll);
       }
+      scrollOffset = std::max(0, std::min(scrollOffset, maxScroll));
       needRedraw = true;
     }
   } else if (confirmPressed) {
@@ -874,7 +849,7 @@ void CategorySettingsActivity::renderSelectorOverlay() {
   constexpr int titleFont = ATKINSON_HYPERLEGIBLE_10_FONT_ID;
   constexpr int itemFont = ATKINSON_HYPERLEGIBLE_10_FONT_ID;
   constexpr int rowHeight = UiTheme::DRAWER_LIST_ITEM_HEIGHT - 4;
-  constexpr int headerHeight = UiTheme::DRAWER_HEADER_HEIGHT - 4;
+  const int headerHeight = INX_THEME.drawerHeaderHeight() - 4;
   constexpr int visibleRows = 5;
 
   const int rows = std::min(visibleRows, static_cast<int>(selectorOptions.size()));
@@ -943,7 +918,7 @@ void CategorySettingsActivity::render() {
   renderTabBar(renderer);
 
   const int headerY = mainContentTop();
-  const int headerHeight = TAB_BAR_HEIGHT;
+  const int headerHeight = mainHeaderHeight();
   const int headerTextY = headerY + (headerHeight - renderer.text.getLineHeight(ATKINSON_HYPERLEGIBLE_12_FONT_ID)) / 2;
 
   renderer.text.render(ATKINSON_HYPERLEGIBLE_12_FONT_ID, 20, headerTextY, categoryName, true, EpdFontFamily::BOLD);
@@ -963,6 +938,12 @@ void CategorySettingsActivity::render() {
 
   const int dividerY = headerY + headerHeight;
   renderer.line.render(0, dividerY, pageWidth, dividerY, true);
+
+  const char* backLbl = selectorOpen ? "Cancel" : (backButtonLabel ? backButtonLabel : "\xC2\xAB Back");
+  const char* confirmLbl = selectorOpen ? "Select" : "Open";
+  const char* prevLbl = selectorOpen ? "Page -" : "";
+  const char* nextLbl = selectorOpen ? "Page +" : "";
+  const auto labels = mappedInput.mapLabels(backLbl, confirmLbl, prevLbl, nextLbl);
 
   const int startY = dividerY;
   constexpr int itemHeight = UiTheme::DRAWER_LIST_ITEM_HEIGHT;
@@ -1018,12 +999,12 @@ void CategorySettingsActivity::render() {
     } else if (entry.type == SettingType::ENUM && entry.name && strcmp(entry.name, "Font Family") == 0) {
       const char* val = entry.getValueText();
       if (val && val[0] != '\0') {
-        ReaderFontSettingsDraw::drawFontFamilyRowValue(renderer, SETTINGS.fontFamily, pageWidth - 24, itemY, itemHeight,
-                                                       isSelected, val);
+        ReaderFontSettingsDraw::drawFontFamilyRowValue(renderer, READER_SETTINGS.fontFamily, pageWidth - 24, itemY,
+                                                       itemHeight, isSelected, val);
       }
     } else if (entry.type == SettingType::ENUM && entry.name && strcmp(entry.name, "Font Size") == 0) {
       const int valueAreaLeft = std::max(textX + 88, pageWidth * 38 / 100);
-      ReaderFontSettingsDraw::drawFontSizeSliderRowValue(renderer, SETTINGS.fontFamily, SETTINGS.fontSize,
+      ReaderFontSettingsDraw::drawFontSizeSliderRowValue(renderer, READER_SETTINGS.fontFamily, READER_SETTINGS.fontSize,
                                                          valueAreaLeft, pageWidth - 24, itemY, itemHeight, isSelected);
     } else {
       const char* val = entry.getValueText();
@@ -1045,15 +1026,20 @@ void CategorySettingsActivity::render() {
     renderer.rectangle.fill(pageWidth - 4, thumbY, 2, thumbH, true);
   }
 
+  if (INX_THEME.mainTabsAtBottom()) {
+    // Bottom-tabs mode moves the tab bar to the screen bottom, where the classic button-hints row normally
+    // goes, so redraw that same row just above the tab bar instead — only for this settings screen, since
+    // other bottom-tabs screens rely on the tab bar alone.
+    const int hintsAreaTop = mainContentBottom(renderer) - kBottomButtonHintsHeight;
+    const int hintsY = hintsAreaTop + (kBottomButtonHintsHeight - 40) / 2;
+    renderer.ui.buttonHints(ATKINSON_HYPERLEGIBLE_10_FONT_ID, labels.btn1, labels.btn2, labels.btn3, labels.btn4,
+                            hintsY);
+  }
+
   if (selectorOpen) {
     renderSelectorOverlay();
   }
 
-  const char* backLbl = selectorOpen ? "Cancel" : (backButtonLabel ? backButtonLabel : "\xC2\xAB Back");
-  const char* confirmLbl = selectorOpen ? "Select" : "Open";
-  const char* prevLbl = selectorOpen ? "Page -" : "";
-  const char* nextLbl = selectorOpen ? "Page +" : "";
-  const auto labels = mappedInput.mapLabels(backLbl, confirmLbl, prevLbl, nextLbl);
   renderButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   if (forceFullRefreshNext_) {

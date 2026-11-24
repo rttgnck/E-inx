@@ -36,7 +36,8 @@ void ReaderPresetStore::load() {
     return;
   }
 
-  const size_t recordSize = version >= 4   ? BookSettings::kSerializedSize
+  const size_t recordSize = version >= 5   ? BookSettings::kSerializedSize
+                            : version >= 4 ? BookSettings::kSerializedSizeEinx
                             : version >= 3 ? BookSettings::kSerializedSizeV3
                             : version >= 2 ? BookSettings::kSerializedSizeV2
                                            : BookSettings::kLegacySerializedSize;
@@ -53,7 +54,7 @@ void ReaderPresetStore::load() {
     }
     nameBuf[readLen] = '\0';
 
-    uint8_t record[64] = {0};
+    uint8_t record[BookSettings::kSerializedSize] = {0};
     const size_t toRead = recordSize;
     if (f.read(record, toRead) != static_cast<int>(toRead)) {
       break;
@@ -69,6 +70,11 @@ void ReaderPresetStore::load() {
   }
 
   f.close();
+}
+
+void ReaderPresetStore::reload() {
+  loaded_ = false;
+  load();
 }
 
 bool ReaderPresetStore::save() {
@@ -93,7 +99,7 @@ bool ReaderPresetStore::save() {
     if (nameLen > 0) {
       f.write(reinterpret_cast<const uint8_t*>(preset.name.data()), nameLen);
     }
-    uint8_t record[64] = {0};
+    uint8_t record[BookSettings::kSerializedSize] = {0};
     size_t offset = 0;
     preset.settings.serialize(record, offset);
     f.write(record, offset);
@@ -157,9 +163,14 @@ bool ReaderPresetStore::update(int index, const std::string& name, const BookSet
   load();
   if (index <= 0) {
     // Default: write the settings back to the global reader fields.
+    const uint8_t statusBarLeft = READER_SETTINGS.statusBarLeft;
+    const uint8_t statusBarMiddle = READER_SETTINGS.statusBarMiddle;
+    const uint8_t statusBarRight = READER_SETTINGS.statusBarRight;
     settings.applyToGlobalSettings();
-    SETTINGS.saveToFile();
-    return true;
+    READER_SETTINGS.statusBarLeft = statusBarLeft;
+    READER_SETTINGS.statusBarMiddle = statusBarMiddle;
+    READER_SETTINGS.statusBarRight = statusBarRight;
+    return READER_SETTINGS.saveToFile();
   }
   if (index - 1 >= static_cast<int>(userPresets_.size())) {
     return false;

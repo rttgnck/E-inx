@@ -103,7 +103,6 @@ void LocalNetworkActivity::onEnter() {
   ActivityWithSubactivity::onEnter();
 
   Serial.printf("[%lu] [LOCALNET] Starting local network mode\n", millis());
-  Serial.printf("[%lu] [LOCALNET] [MEM] Free heap: %d bytes\n", millis(), ESP.getFreeHeap());
 
   renderingMutex = xSemaphoreCreateMutex();
   updateRequired = true;

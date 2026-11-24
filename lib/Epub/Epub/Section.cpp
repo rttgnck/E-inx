@@ -27,7 +27,8 @@ namespace {
 // 63: chapters parsed while the heap was too fragmented to inflate an image cached a layout with
 // the image missing, and a cache-first load never retried it — so the fix for that fragmentation
 // could not reach the chapters it was meant to repair. Bumping the version retires those layouts.
-constexpr uint8_t SECTION_FILE_VERSION = 66;
+// 77: upstream Inx 1.0.19 merged in (its own history reached 76: natural-size CSS background HRs).
+constexpr uint8_t SECTION_FILE_VERSION = 77;
 constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(float) + sizeof(bool) +
                                  sizeof(uint8_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) +
                                  sizeof(bool) + sizeof(uint16_t) + sizeof(uint32_t);
@@ -382,9 +383,8 @@ bool Section::createSectionFile(const int fontId, const int headerFontId, const 
     if (!SdMan.openFileForWrite("SCT", tmpHtmlPath, tmpHtml)) {
       Serial.printf(
           "[%lu] [SCT] createSectionFile: failed to open temp HTML for write attempt=%d spine=%d href=%s tmp=%s "
-          "book=%s heap=%u\n",
-          millis(), attempt + 1, spineIndex, localPath.c_str(), tmpHtmlPath.c_str(), epub->getPath().c_str(),
-          static_cast<unsigned>(ESP.getFreeHeap()));
+          "book=%s\n",
+          millis(), attempt + 1, spineIndex, localPath.c_str(), tmpHtmlPath.c_str(), epub->getPath().c_str());
       continue;
     }
     success = epub->readItemContentsToStream(localPath, tmpHtml, 1024);
@@ -392,10 +392,9 @@ bool Section::createSectionFile(const int fontId, const int headerFontId, const 
     tmpHtml.close();
     Serial.printf(
         "[%lu] [SCT] createSectionFile: temp HTML extract attempt=%d ok=%d bytes=%lu spine=%d href=%s tmp=%s "
-        "book=%s title=%s heap=%u\n",
+        "book=%s title=%s\n",
         millis(), attempt + 1, success ? 1 : 0, static_cast<unsigned long>(tmpSize), spineIndex, localPath.c_str(),
-        tmpHtmlPath.c_str(), epub->getPath().c_str(), epub->getTitle().c_str(),
-        static_cast<unsigned>(ESP.getFreeHeap()));
+        tmpHtmlPath.c_str(), epub->getPath().c_str(), epub->getTitle().c_str());
     if (!success && SdMan.exists(tmpHtmlPath.c_str())) {
       SdMan.remove(tmpHtmlPath.c_str());
     }
@@ -403,9 +402,8 @@ bool Section::createSectionFile(const int fontId, const int headerFontId, const 
   if (!success) {
     Serial.printf(
         "[%lu] [SCT] createSectionFile: failed to extract chapter after retries spine=%d href=%s book=%s "
-        "title=%s heap=%u\n",
-        millis(), spineIndex, localPath.c_str(), epub->getPath().c_str(), epub->getTitle().c_str(),
-        static_cast<unsigned>(ESP.getFreeHeap()));
+        "title=%s\n",
+        millis(), spineIndex, localPath.c_str(), epub->getPath().c_str(), epub->getTitle().c_str());
     return false;
   }
 
@@ -445,15 +443,16 @@ bool Section::createSectionFile(const int fontId, const int headerFontId, const 
     success = false;
   }
 
+  epub->releaseParsedCssParser();
   SdMan.remove(tmpHtmlPath.c_str());
   const unsigned missingImages = visitor.imageCacheFailures();
 
   if (!success) {
     Serial.printf(
         "[%lu] [SCT] createSectionFile: parser returned false spine=%d href=%s file=%s book=%s title=%s pages=%u "
-        "heap=%u\n",
+        "\n",
         millis(), spineIndex, localPath.c_str(), filePath.c_str(), epub->getPath().c_str(), epub->getTitle().c_str(),
-        static_cast<unsigned>(pageCount), static_cast<unsigned>(ESP.getFreeHeap()));
+        static_cast<unsigned>(pageCount));
     file.close();
     SdMan.remove(filePath.c_str());
     return false;

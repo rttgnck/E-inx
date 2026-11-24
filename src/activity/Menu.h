@@ -116,7 +116,9 @@ class Menu {
 
   void renderButtonHints(const GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                          const char* btn4) const {
-    INX_THEME.drawButtonHints(renderer, ATKINSON_HYPERLEGIBLE_10_FONT_ID, btn1, btn2, btn3, btn4);
+    if (!SETTINGS.hideButtonHints) {
+      INX_THEME.drawButtonHints(renderer, ATKINSON_HYPERLEGIBLE_10_FONT_ID, btn1, btn2, btn3, btn4);
+    }
     if (INX_THEME.mainTabsAtBottom()) {
       renderTabBar(renderer);
     }
@@ -124,24 +126,17 @@ class Menu {
 
   int mainContentTop() const { return INX_THEME.mainContentTop(); }
   int mainContentBottom(const GfxRenderer& renderer) const { return INX_THEME.mainContentBottom(renderer); }
-  int mainHeaderDividerY() const { return mainContentTop() + TAB_BAR_HEIGHT; }
+  int mainHeaderDividerY() const { return mainContentTop() + INX_THEME.mainHeaderHeight(); }
+  int mainHeaderHeight() const { return INX_THEME.mainHeaderHeight(); }
 
   /**
    * @brief Draws the battery icon and percentage on the screen
    * @param renderer Reference to the graphics renderer (const)
    */
   void drawBattery(const GfxRenderer& renderer) const {
-    const int batteryX = renderer.getScreenWidth() - 80;
-    if (SETTINGS.showBottomBarClock) {
-      const std::string time = ScreenComponents::currentTimeText();
-      if (!time.empty()) {
-        const int width = renderer.text.getWidth(ATKINSON_HYPERLEGIBLE_8_FONT_ID, time.c_str());
-        renderer.text.render(ATKINSON_HYPERLEGIBLE_8_FONT_ID, batteryX - width - 12, renderer.getScreenHeight() - 30,
-                             time.c_str());
-      }
-    }
-    ScreenComponents::drawBattery(
-        renderer, batteryX, renderer.getScreenHeight() - 30,
+    // The clock beside it is upstream's X3 menu clock (Settings > Clock > Show Clock).
+    ScreenComponents::drawMenuClockAndBattery(
+        renderer, renderer.getScreenWidth() - 80, renderer.getScreenHeight() - 30,
         SETTINGS.hideBatteryPercentage != SystemSetting::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS);
   }
 

@@ -32,16 +32,17 @@ EpdFontFamily::Style bionicStyleFor(EpdFontFamily::Style style) {
 }
 
 int renderSmallCapsSegment(const GfxRenderer& renderer, const int fontId, const int x, const int y,
-                           const std::string& text, const EpdFontFamily::Style style) {
+                           const std::string& text, const EpdFontFamily::Style style, const bool black) {
   if (text.empty()) {
     return x;
   }
   // renderSmallCaps returns its advance, so no separate width measurement pass is needed.
-  return renderer.text.renderSmallCaps(fontId, x, y, text.c_str(), true, style);
+  return renderer.text.renderSmallCaps(fontId, x, y, text.c_str(), black, style);
 }
 
 int renderWordSegment(const GfxRenderer& renderer, const int fontId, const int x, const int y, const std::string& text,
-                      const EpdFontFamily::Style style, const bool smallCaps, const uint8_t verticalAlign) {
+                      const EpdFontFamily::Style style, const bool smallCaps, const uint8_t verticalAlign,
+                      const bool black) {
   if (text.empty()) {
     return x;
   }
@@ -50,14 +51,14 @@ int renderWordSegment(const GfxRenderer& renderer, const int fontId, const int x
     const int scriptY =
         verticalAlign == TextBlock::SUPERSCRIPT ? y - std::max(1, lineHeight / 3) : y + std::max(1, lineHeight / 5);
     if (smallCaps) {
-      return renderer.text.renderScaled(fontId, x, scriptY, text.c_str(), kScriptScalePct, true, style);
+      return renderer.text.renderScaled(fontId, x, scriptY, text.c_str(), kScriptScalePct, black, style);
     }
-    return renderer.text.renderScaled(fontId, x, scriptY, text.c_str(), kScriptScalePct, true, style);
+    return renderer.text.renderScaled(fontId, x, scriptY, text.c_str(), kScriptScalePct, black, style);
   }
   if (smallCaps) {
-    return renderSmallCapsSegment(renderer, fontId, x, y, text, style);
+    return renderSmallCapsSegment(renderer, fontId, x, y, text, style, black);
   }
-  renderer.text.render(fontId, x, y, text.c_str(), true, style);
+  renderer.text.render(fontId, x, y, text.c_str(), black, style);
   return x + renderer.text.getWidth(fontId, text.c_str(), style);
 }
 
@@ -72,155 +73,374 @@ int measureWordSegment(const GfxRenderer& renderer, const int fontId, const std:
 
 }  // namespace
 
-std::string TextBlock::getWordAt(size_t index) const {
-  if (index >= words.size()) return {};
-  return words[index];
+uint8_t TextBlock::compactByteList(std::list<uint8_t>& values, const uint8_t emptyDefault) {
+  if (values.empty()) {
+    return emptyDefault;
+  }
+  const uint8_t first = values.front();
+  if (std::all_of(values.begin(), values.end(), [first](uint8_t value) { return value == first; })) {
+    values.clear();
+    return first;
+  }
+  return emptyDefault;
 }
 
-uint16_t TextBlock::getWordXAt(size_t index) const {
-  if (index >= wordXpos.size()) return 0;
-  return wordXpos[index];
+uint8_t TextBlock::compactByteVector(std::vector<uint8_t>& values, const uint8_t emptyDefault) {
+  if (values.empty()) {
+    return emptyDefault;
+  }
+  const uint8_t first = values.front();
+  if (std::all_of(values.begin(), values.end(), [first](uint8_t value) { return value == first; })) {
+    values.clear();
+    return first;
+  }
+  return emptyDefault;
 }
 
-EpdFontFamily::Style TextBlock::getWordStyleAt(size_t index) const {
-  if (index >= wordStyles.size()) return EpdFontFamily::REGULAR;
-  return wordStyles[index];
+TextBlock::Extra& TextBlock::ensureExtra() {
+  if (!extra) {
+    extra.reset(new Extra());
+  }
+  return *extra;
 }
 
-void TextBlock::render(GfxRenderer& renderer, const int fontId, const int x, const int y) const {
-  if (words.size() != wordXpos.size() || words.size() != wordStyles.size() ||
-      (!bionicPrefixBytes.empty() && bionicPrefixBytes.size() != words.size()) ||
-      (!wordSmallCaps.empty() && wordSmallCaps.size() != words.size()) ||
-      (!wordVerticalAlign.empty() && wordVerticalAlign.size() != words.size()) ||
-      (!wordImagePaths.empty() && wordImagePaths.size() != words.size())) {
-    Serial.printf("[%lu] [TXB] Render skipped: size mismatch (words=%u, xpos=%u, styles=%u, bionic=%u, sc=%u, va=%u)\n",
-                  millis(), (uint32_t)words.size(), (uint32_t)wordXpos.size(), (uint32_t)wordStyles.size(),
-                  (uint32_t)bionicPrefixBytes.size(), (uint32_t)wordSmallCaps.size(),
-                  (uint32_t)wordVerticalAlign.size());
+void TextBlock::initWordStyles(std::list<EpdFontFamily::Style>& values) {
+  if (values.empty() || std::all_of(values.begin(), values.end(),
+                                    [](EpdFontFamily::Style style) { return style == EpdFontFamily::REGULAR; })) {
+    values.clear();
+    return;
+  }
+  ensureExtra().wordStyles = moveListToVector(values);
+}
+
+void TextBlock::initWordStyles(std::vector<EpdFontFamily::Style>&& values) {
+  if (values.empty() || std::all_of(values.begin(), values.end(),
+                                    [](EpdFontFamily::Style style) { return style == EpdFontFamily::REGULAR; })) {
+    return;
+  }
+  ensureExtra().wordStyles = std::move(values);
+}
+
+std::vector<TextBlock::WordSlot> TextBlock::makeWordSlots(std::list<std::string>& words,
+                                                          std::list<int16_t>& word_xpos) {
+  const size_t count = std::min(words.size(), word_xpos.size());
+  std::vector<WordSlot> out;
+  out.reserve(count);
+  auto wordIt = words.begin();
+  auto xIt = word_xpos.begin();
+  for (size_t i = 0; i < count; ++i, ++wordIt, ++xIt) {
+    out.push_back(WordSlot{std::move(*wordIt), *xIt});
+  }
+  return out;
+}
+
+std::vector<TextBlock::WordSlot> TextBlock::makeWordSlots(std::vector<std::string>&& words,
+                                                          std::vector<int16_t>&& word_xpos) {
+  const size_t count = std::min(words.size(), word_xpos.size());
+  std::vector<WordSlot> out;
+  out.reserve(count);
+  for (size_t i = 0; i < count; ++i) {
+    out.push_back(WordSlot{std::move(words[i]), word_xpos[i]});
+  }
+  return out;
+}
+
+void TextBlock::initExtra(std::list<uint8_t> bionic_prefix_bytes, std::list<uint8_t> word_small_caps,
+                          std::list<uint8_t> word_underline, std::list<uint8_t> word_vertical_align,
+                          std::list<std::string> word_image_paths, std::list<uint16_t> word_image_w,
+                          std::list<uint16_t> word_image_h) {
+  bionicPrefixDefault = compactByteList(bionic_prefix_bytes, 0);
+  smallCapsDefault = compactByteList(word_small_caps, 0);
+  underlineDefault = compactByteList(word_underline, 0);
+  verticalAlignDefault = compactByteList(word_vertical_align, BASELINE);
+  if (word_image_paths.empty()) {
+    word_image_w.clear();
+    word_image_h.clear();
+  }
+
+  if (bionic_prefix_bytes.empty() && word_small_caps.empty() && word_underline.empty() && word_vertical_align.empty() &&
+      word_image_paths.empty()) {
     return;
   }
 
-  auto wordIt = words.begin();
-  auto styleIt = wordStyles.begin();
-  auto xIt = wordXpos.begin();
-  auto prefixIt = bionicPrefixBytes.begin();
-  auto smallCapsIt = wordSmallCaps.begin();
-  auto underlineIt = wordUnderline.begin();
-  auto verticalAlignIt = wordVerticalAlign.begin();
-  auto imgPathIt = wordImagePaths.begin();
-  auto imgWIt = wordImageW.begin();
-  auto imgHIt = wordImageH.begin();
-  const bool hasImages = !wordImagePaths.empty();
+  Extra& extraRef = ensureExtra();
+  extraRef.bionicPrefixBytes = moveListToVector(bionic_prefix_bytes);
+  extraRef.wordSmallCaps = moveListToVector(word_small_caps);
+  extraRef.wordUnderline = moveListToVector(word_underline);
+  extraRef.wordVerticalAlign = moveListToVector(word_vertical_align);
+  extraRef.wordImagePaths = moveListToVector(word_image_paths);
+  extraRef.wordImageW = moveListToVector(word_image_w);
+  extraRef.wordImageH = moveListToVector(word_image_h);
+}
+
+void TextBlock::initExtra(std::vector<uint8_t> bionic_prefix_bytes, std::vector<uint8_t> word_small_caps,
+                          std::vector<uint8_t> word_underline, std::vector<uint8_t> word_vertical_align,
+                          std::vector<std::string> word_image_paths, std::vector<uint16_t> word_image_w,
+                          std::vector<uint16_t> word_image_h) {
+  bionicPrefixDefault = compactByteVector(bionic_prefix_bytes, 0);
+  smallCapsDefault = compactByteVector(word_small_caps, 0);
+  underlineDefault = compactByteVector(word_underline, 0);
+  verticalAlignDefault = compactByteVector(word_vertical_align, BASELINE);
+  if (word_image_paths.empty()) {
+    word_image_w.clear();
+    word_image_h.clear();
+  }
+
+  if (bionic_prefix_bytes.empty() && word_small_caps.empty() && word_underline.empty() && word_vertical_align.empty() &&
+      word_image_paths.empty()) {
+    return;
+  }
+
+  Extra& extraRef = ensureExtra();
+  extraRef.bionicPrefixBytes = std::move(bionic_prefix_bytes);
+  extraRef.wordSmallCaps = std::move(word_small_caps);
+  extraRef.wordUnderline = std::move(word_underline);
+  extraRef.wordVerticalAlign = std::move(word_vertical_align);
+  extraRef.wordImagePaths = std::move(word_image_paths);
+  extraRef.wordImageW = std::move(word_image_w);
+  extraRef.wordImageH = std::move(word_image_h);
+}
+
+TextBlock::TextBlock(std::vector<std::string> words, std::vector<int16_t> word_xpos,
+                     std::vector<EpdFontFamily::Style> word_styles, std::vector<uint8_t> bionic_prefix_bytes,
+                     std::vector<uint8_t> word_small_caps, const Style style, std::vector<uint8_t> word_underline,
+                     std::vector<uint8_t> word_vertical_align, std::vector<std::string> word_image_paths,
+                     std::vector<uint16_t> word_image_w, std::vector<uint16_t> word_image_h)
+    : wordSlots(makeWordSlots(std::move(words), std::move(word_xpos))), style(style) {
+  initExtra(std::move(bionic_prefix_bytes), std::move(word_small_caps), std::move(word_underline),
+            std::move(word_vertical_align), std::move(word_image_paths), std::move(word_image_w),
+            std::move(word_image_h));
+  initWordStyles(std::move(word_styles));
+}
+
+TextBlock::TextBlock(std::vector<std::string> words, std::vector<int16_t> word_xpos,
+                     std::vector<EpdFontFamily::Style> word_styles, const uint8_t bionic_prefix_default,
+                     std::vector<uint8_t> bionic_prefix_bytes, const uint8_t small_caps_default,
+                     std::vector<uint8_t> word_small_caps, const Style style, const uint8_t underline_default,
+                     std::vector<uint8_t> word_underline, const uint8_t vertical_align_default,
+                     std::vector<uint8_t> word_vertical_align, std::vector<std::string> word_image_paths,
+                     std::vector<uint16_t> word_image_w, std::vector<uint16_t> word_image_h)
+    : wordSlots(makeWordSlots(std::move(words), std::move(word_xpos))),
+      bionicPrefixDefault(bionic_prefix_default),
+      smallCapsDefault(small_caps_default),
+      underlineDefault(underline_default),
+      verticalAlignDefault(vertical_align_default),
+      style(style) {
+  if (word_image_paths.empty()) {
+    word_image_w.clear();
+    word_image_h.clear();
+  }
+  if (bionic_prefix_bytes.empty() && word_small_caps.empty() && word_underline.empty() && word_vertical_align.empty() &&
+      word_image_paths.empty()) {
+    initWordStyles(std::move(word_styles));
+    return;
+  }
+  Extra& extraRef = ensureExtra();
+  extraRef.bionicPrefixBytes = std::move(bionic_prefix_bytes);
+  extraRef.wordSmallCaps = std::move(word_small_caps);
+  extraRef.wordUnderline = std::move(word_underline);
+  extraRef.wordVerticalAlign = std::move(word_vertical_align);
+  extraRef.wordImagePaths = std::move(word_image_paths);
+  extraRef.wordImageW = std::move(word_image_w);
+  extraRef.wordImageH = std::move(word_image_h);
+  initWordStyles(std::move(word_styles));
+}
+
+std::string TextBlock::getWordAt(size_t index) const {
+  if (index >= wordSlots.size()) return {};
+  return wordSlots[index].text;
+}
+
+int16_t TextBlock::getWordXAt(size_t index) const {
+  if (index >= wordSlots.size()) return 0;
+  return wordSlots[index].xpos;
+}
+
+EpdFontFamily::Style TextBlock::getWordStyleAt(size_t index) const {
+  const auto* wordStyles = extra && !extra->wordStyles.empty() ? &extra->wordStyles : nullptr;
+  if (!wordStyles || index >= wordStyles->size()) return EpdFontFamily::REGULAR;
+  return (*wordStyles)[index];
+}
+
+void TextBlock::render(GfxRenderer& renderer, const int fontId, const int x, const int y, const bool black) const {
+  const auto* wordStyles = extra && !extra->wordStyles.empty() ? &extra->wordStyles : nullptr;
+  const auto* bionicPrefixBytes = extra ? &extra->bionicPrefixBytes : nullptr;
+  const auto* wordSmallCaps = extra ? &extra->wordSmallCaps : nullptr;
+  const auto* wordUnderline = extra ? &extra->wordUnderline : nullptr;
+  const auto* wordVerticalAlign = extra ? &extra->wordVerticalAlign : nullptr;
+  const auto* wordImagePaths = extra ? &extra->wordImagePaths : nullptr;
+  const auto* wordImageW = extra ? &extra->wordImageW : nullptr;
+  const auto* wordImageH = extra ? &extra->wordImageH : nullptr;
+
+  const size_t wordCount = wordSlots.size();
+  if ((wordStyles && wordCount != wordStyles->size()) ||
+      (bionicPrefixBytes && !bionicPrefixBytes->empty() && bionicPrefixBytes->size() != wordCount) ||
+      (wordSmallCaps && !wordSmallCaps->empty() && wordSmallCaps->size() != wordCount) ||
+      (wordUnderline && !wordUnderline->empty() && wordUnderline->size() != wordCount) ||
+      (wordVerticalAlign && !wordVerticalAlign->empty() && wordVerticalAlign->size() != wordCount) ||
+      (wordImagePaths && !wordImagePaths->empty() && wordImagePaths->size() != wordCount)) {
+    Serial.printf("[%lu] [TXB] Render skipped: size mismatch (words=%u, xpos=%u, styles=%u, bionic=%u, sc=%u, va=%u)\n",
+                  millis(), (uint32_t)wordCount, (uint32_t)wordCount, (uint32_t)(wordStyles ? wordStyles->size() : 0),
+                  (uint32_t)(bionicPrefixBytes ? bionicPrefixBytes->size() : 0),
+                  (uint32_t)(wordSmallCaps ? wordSmallCaps->size() : 0),
+                  (uint32_t)(wordVerticalAlign ? wordVerticalAlign->size() : 0));
+    return;
+  }
+
+  auto slotIt = wordSlots.begin();
+  auto styleIt = wordStyles ? wordStyles->begin() : std::vector<EpdFontFamily::Style>::const_iterator();
+  auto prefixIt = bionicPrefixBytes ? bionicPrefixBytes->begin() : std::vector<uint8_t>::const_iterator();
+  auto smallCapsIt = wordSmallCaps ? wordSmallCaps->begin() : std::vector<uint8_t>::const_iterator();
+  auto underlineIt = wordUnderline ? wordUnderline->begin() : std::vector<uint8_t>::const_iterator();
+  auto verticalAlignIt = wordVerticalAlign ? wordVerticalAlign->begin() : std::vector<uint8_t>::const_iterator();
+  auto imgPathIt = wordImagePaths ? wordImagePaths->begin() : std::vector<std::string>::const_iterator();
+  auto imgWIt = wordImageW ? wordImageW->begin() : std::vector<uint16_t>::const_iterator();
+  auto imgHIt = wordImageH ? wordImageH->begin() : std::vector<uint16_t>::const_iterator();
+  const bool hasBionicVector = bionicPrefixBytes && !bionicPrefixBytes->empty();
+  const bool hasSmallCapsVector = wordSmallCaps && !wordSmallCaps->empty();
+  const bool hasUnderlineVector = wordUnderline && !wordUnderline->empty();
+  const bool hasVerticalAlignVector = wordVerticalAlign && !wordVerticalAlign->empty();
+  const bool hasImages = wordImagePaths && !wordImagePaths->empty();
 
   // Underline sits just below the baseline.
   const int underlineY = y + renderer.text.getFontAscenderSize(fontId) + 1;
   const int lineHeight = renderer.text.getLineHeight(fontId);
 
-  for (; wordIt != words.end() && styleIt != wordStyles.end() && xIt != wordXpos.end(); ++wordIt, ++styleIt, ++xIt) {
-    const uint8_t prefixBytes = bionicPrefixBytes.empty() ? 0 : *prefixIt;
-    const bool smallCaps = !wordSmallCaps.empty() && (*smallCapsIt != 0);
-    const bool underline = !wordUnderline.empty() && (*underlineIt != 0);
-    const uint8_t verticalAlign = wordVerticalAlign.empty() ? BASELINE : *verticalAlignIt;
-    const int startX = *xIt + x;
+  for (; slotIt != wordSlots.end(); ++slotIt) {
+    const EpdFontFamily::Style wordStyle = wordStyles ? *styleIt : EpdFontFamily::REGULAR;
+    const uint8_t prefixBytes = hasBionicVector ? *prefixIt : bionicPrefixDefault;
+    const bool smallCaps = hasSmallCapsVector ? (*smallCapsIt != 0) : (smallCapsDefault != 0);
+    const bool underline = hasUnderlineVector ? (*underlineIt != 0) : (underlineDefault != 0);
+    const uint8_t verticalAlign = hasVerticalAlignVector ? *verticalAlignIt : verticalAlignDefault;
+    const int startX = slotIt->xpos + x;
     int endX = startX;
 
     // Inline image word: draw the cached image vertically centered on the line and skip the text path.
-    if (hasImages && imgPathIt != wordImagePaths.end() && !imgPathIt->empty()) {
-      const int imgW = (imgWIt != wordImageW.end()) ? *imgWIt : 0;
-      const int imgH = (imgHIt != wordImageH.end()) ? *imgHIt : 0;
+    if (hasImages && imgPathIt != wordImagePaths->end() && !imgPathIt->empty()) {
+      const int imgW = (wordImageW && imgWIt != wordImageW->end()) ? *imgWIt : 0;
+      const int imgH = (wordImageH && imgHIt != wordImageH->end()) ? *imgHIt : 0;
       if (imgW > 0 && imgH > 0) {
         const int imgY = y + std::max(0, (lineHeight - imgH) / 2);
         ImageRender::create(renderer, *imgPathIt).render(startX, imgY, imgW, imgH, ImageRenderMode::OneBit);
       }
-      if (!bionicPrefixBytes.empty()) ++prefixIt;
-      if (!wordSmallCaps.empty()) ++smallCapsIt;
-      if (!wordUnderline.empty()) ++underlineIt;
-      if (!wordVerticalAlign.empty()) ++verticalAlignIt;
+      if (hasBionicVector) ++prefixIt;
+      if (hasSmallCapsVector) ++smallCapsIt;
+      if (hasUnderlineVector) ++underlineIt;
+      if (hasVerticalAlignVector) ++verticalAlignIt;
       ++imgPathIt;
-      if (imgWIt != wordImageW.end()) ++imgWIt;
-      if (imgHIt != wordImageH.end()) ++imgHIt;
+      if (wordImageW && imgWIt != wordImageW->end()) ++imgWIt;
+      if (wordImageH && imgHIt != wordImageH->end()) ++imgHIt;
+      if (wordStyles) ++styleIt;
       continue;
     }
 
-    if (prefixBytes == 0 || prefixBytes >= wordIt->size()) {
-      endX = renderWordSegment(renderer, fontId, startX, y, *wordIt, *styleIt, smallCaps, verticalAlign);
+    if (prefixBytes == 0 || prefixBytes >= slotIt->text.size()) {
+      endX = renderWordSegment(renderer, fontId, startX, y, slotIt->text, wordStyle, smallCaps, verticalAlign, black);
     } else {
-      const std::string prefix = wordIt->substr(0, prefixBytes);
-      const std::string suffix = wordIt->substr(prefixBytes);
-      const auto prefixStyle = bionicStyleFor(*styleIt);
-      const int suffixX = renderWordSegment(renderer, fontId, startX, y, prefix, prefixStyle, smallCaps, verticalAlign);
-      endX = renderWordSegment(renderer, fontId, suffixX, y, suffix, *styleIt, smallCaps, verticalAlign);
+      const std::string prefix = slotIt->text.substr(0, prefixBytes);
+      const std::string suffix = slotIt->text.substr(prefixBytes);
+      const auto prefixStyle = bionicStyleFor(wordStyle);
+      const int suffixX =
+          renderWordSegment(renderer, fontId, startX, y, prefix, prefixStyle, smallCaps, verticalAlign, black);
+      endX = renderWordSegment(renderer, fontId, suffixX, y, suffix, wordStyle, smallCaps, verticalAlign, black);
     }
     if (underline && endX <= startX) {
-      endX = startX + measureWordSegment(renderer, fontId, *wordIt, *styleIt, smallCaps, verticalAlign);
+      endX = startX + measureWordSegment(renderer, fontId, slotIt->text, wordStyle, smallCaps, verticalAlign);
     }
     if (underline && endX > startX) {
-      renderer.line.render(startX, underlineY, endX - 1, underlineY, true);
+      renderer.line.render(startX, underlineY, endX - 1, underlineY, black);
     }
-    if (!bionicPrefixBytes.empty()) {
+    if (hasBionicVector) {
       ++prefixIt;
     }
-    if (!wordSmallCaps.empty()) {
+    if (hasSmallCapsVector) {
       ++smallCapsIt;
     }
-    if (!wordUnderline.empty()) {
+    if (hasUnderlineVector) {
       ++underlineIt;
     }
-    if (!wordVerticalAlign.empty()) {
+    if (hasVerticalAlignVector) {
       ++verticalAlignIt;
     }
     if (hasImages) {
-      if (imgPathIt != wordImagePaths.end()) ++imgPathIt;
-      if (imgWIt != wordImageW.end()) ++imgWIt;
-      if (imgHIt != wordImageH.end()) ++imgHIt;
+      if (imgPathIt != wordImagePaths->end()) ++imgPathIt;
+      if (wordImageW && imgWIt != wordImageW->end()) ++imgWIt;
+      if (wordImageH && imgHIt != wordImageH->end()) ++imgHIt;
+    }
+    if (wordStyles) {
+      ++styleIt;
     }
   }
 }
 
 bool TextBlock::serialize(FsFile& file) const {
-  if (words.size() != wordXpos.size() || words.size() != wordStyles.size() ||
-      (!bionicPrefixBytes.empty() && bionicPrefixBytes.size() != words.size()) ||
-      (!wordSmallCaps.empty() && wordSmallCaps.size() != words.size()) ||
-      (!wordVerticalAlign.empty() && wordVerticalAlign.size() != words.size())) {
+  const auto* wordStyles = extra && !extra->wordStyles.empty() ? &extra->wordStyles : nullptr;
+  const auto* bionicPrefixBytes = extra ? &extra->bionicPrefixBytes : nullptr;
+  const auto* wordSmallCaps = extra ? &extra->wordSmallCaps : nullptr;
+  const auto* wordUnderline = extra ? &extra->wordUnderline : nullptr;
+  const auto* wordVerticalAlign = extra ? &extra->wordVerticalAlign : nullptr;
+  const auto* wordImagePaths = extra ? &extra->wordImagePaths : nullptr;
+  const auto* wordImageW = extra ? &extra->wordImageW : nullptr;
+  const auto* wordImageH = extra ? &extra->wordImageH : nullptr;
+
+  const size_t wordCount = wordSlots.size();
+  if ((wordStyles && wordCount != wordStyles->size()) ||
+      (bionicPrefixBytes && !bionicPrefixBytes->empty() && bionicPrefixBytes->size() != wordCount) ||
+      (wordSmallCaps && !wordSmallCaps->empty() && wordSmallCaps->size() != wordCount) ||
+      (wordUnderline && !wordUnderline->empty() && wordUnderline->size() != wordCount) ||
+      (wordVerticalAlign && !wordVerticalAlign->empty() && wordVerticalAlign->size() != wordCount)) {
     Serial.printf(
         "[%lu] [TXB] Serialization failed: size mismatch (words=%u, xpos=%u, styles=%u, bionic=%u, sc=%u, va=%u)\n",
-        millis(), words.size(), wordXpos.size(), wordStyles.size(), bionicPrefixBytes.size(), wordSmallCaps.size(),
-        wordVerticalAlign.size());
+        millis(), wordCount, wordCount, wordStyles ? wordStyles->size() : 0,
+        bionicPrefixBytes ? bionicPrefixBytes->size() : 0, wordSmallCaps ? wordSmallCaps->size() : 0,
+        wordVerticalAlign ? wordVerticalAlign->size() : 0);
     return false;
   }
 
-  serialization::writePod(file, static_cast<uint16_t>(words.size()));
-  for (const auto& w : words) serialization::writeString(file, w);
-  for (auto x : wordXpos) serialization::writePod(file, x);
-  for (auto s : wordStyles) serialization::writePod(file, s);
-  if (bionicPrefixBytes.empty()) {
-    for (size_t i = 0; i < words.size(); ++i) serialization::writePod(file, static_cast<uint8_t>(0));
+  serialization::writePod(file, static_cast<uint16_t>(wordCount));
+  for (const auto& slot : wordSlots) serialization::writeString(file, slot.text);
+  for (const auto& slot : wordSlots) serialization::writePod(file, slot.xpos);
+  if (!wordStyles) {
+    for (size_t i = 0; i < wordCount; ++i) serialization::writePod(file, EpdFontFamily::REGULAR);
   } else {
-    for (auto b : bionicPrefixBytes) serialization::writePod(file, b);
+    for (auto s : *wordStyles) serialization::writePod(file, s);
   }
-  if (wordSmallCaps.empty()) {
-    for (size_t i = 0; i < words.size(); ++i) serialization::writePod(file, static_cast<uint8_t>(0));
+  if (!bionicPrefixBytes || bionicPrefixBytes->empty()) {
+    for (size_t i = 0; i < wordCount; ++i) serialization::writePod(file, bionicPrefixDefault);
   } else {
-    for (auto f : wordSmallCaps) serialization::writePod(file, f);
+    for (auto b : *bionicPrefixBytes) serialization::writePod(file, b);
   }
-  if (wordUnderline.empty()) {
-    for (size_t i = 0; i < words.size(); ++i) serialization::writePod(file, static_cast<uint8_t>(0));
+  if (!wordSmallCaps || wordSmallCaps->empty()) {
+    for (size_t i = 0; i < wordCount; ++i) serialization::writePod(file, smallCapsDefault);
   } else {
-    for (auto f : wordUnderline) serialization::writePod(file, f);
+    for (auto f : *wordSmallCaps) serialization::writePod(file, f);
   }
-  if (wordVerticalAlign.empty()) {
-    for (size_t i = 0; i < words.size(); ++i) serialization::writePod(file, static_cast<uint8_t>(BASELINE));
+  if (!wordUnderline || wordUnderline->empty()) {
+    for (size_t i = 0; i < wordCount; ++i) serialization::writePod(file, underlineDefault);
   } else {
-    for (auto f : wordVerticalAlign) serialization::writePod(file, f);
+    for (auto f : *wordUnderline) serialization::writePod(file, f);
+  }
+  if (!wordVerticalAlign || wordVerticalAlign->empty()) {
+    for (size_t i = 0; i < wordCount; ++i) serialization::writePod(file, verticalAlignDefault);
+  } else {
+    for (auto f : *wordVerticalAlign) serialization::writePod(file, f);
   }
   // Inline image fields (path + display size), parallel to words. A single flag keeps text-only lines free of
   // any per-word image data on disk (and avoids allocating empty placeholders on load).
-  const uint8_t hasImages = wordImagePaths.empty() ? 0 : 1;
+  const uint8_t hasImages = (wordImagePaths && !wordImagePaths->empty()) ? 1 : 0;
   serialization::writePod(file, hasImages);
   if (hasImages) {
-    for (const auto& p : wordImagePaths) serialization::writeString(file, p);
-    for (auto v : wordImageW) serialization::writePod(file, v);
-    for (auto v : wordImageH) serialization::writePod(file, v);
+    for (const auto& p : *wordImagePaths) serialization::writeString(file, p);
+    if (wordImageW && wordImageW->size() == wordCount) {
+      for (auto v : *wordImageW) serialization::writePod(file, v);
+    } else {
+      for (size_t i = 0; i < wordCount; ++i) serialization::writePod(file, static_cast<uint16_t>(0));
+    }
+    if (wordImageH && wordImageH->size() == wordCount) {
+      for (auto v : *wordImageH) serialization::writePod(file, v);
+    } else {
+      for (size_t i = 0; i < wordCount; ++i) serialization::writePod(file, static_cast<uint16_t>(0));
+    }
   }
   serialization::writePod(file, style);
 
@@ -228,9 +448,11 @@ bool TextBlock::serialize(FsFile& file) const {
 }
 
 std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file) {
+  // Vectors, not lists: a page load would otherwise make one heap node per word per field, and
+  // on the X3's heap those scattered nodes are what later starve the 32 KB inflate window.
   uint16_t wc;
   std::vector<std::string> words;
-  std::vector<uint16_t> wordXpos;
+  std::vector<int16_t> wordXpos;
   std::vector<EpdFontFamily::Style> wordStyles;
   std::vector<uint8_t> bionicPrefixBytes;
   std::vector<uint8_t> wordSmallCaps;
@@ -258,6 +480,10 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file) {
   for (auto& w : words) serialization::readString(file, w);
   for (auto& x : wordXpos) serialization::readPod(file, x);
   for (auto& s : wordStyles) serialization::readPod(file, s);
+  if (std::all_of(wordStyles.begin(), wordStyles.end(),
+                  [](EpdFontFamily::Style style) { return style == EpdFontFamily::REGULAR; })) {
+    wordStyles.clear();
+  }
   for (auto& b : bionicPrefixBytes) serialization::readPod(file, b);
   for (auto& f : wordSmallCaps) serialization::readPod(file, f);
   for (auto& f : wordUnderline) serialization::readPod(file, f);

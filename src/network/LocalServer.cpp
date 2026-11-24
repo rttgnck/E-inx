@@ -29,6 +29,7 @@
 #include <functional>
 #include <set>
 
+#include "../state/ReaderSetting.h"
 #include "../state/SystemSetting.h"
 #include "state/Session.h"
 #include "state/SleepImageSelection.h"
@@ -47,6 +48,7 @@
 #include "html/JsZipMinJs.generated.h"
 #include "html/LibraryPageHtml.generated.h"
 #include "html/LibraryPageJs.generated.h"
+#include "html/QrCreatorLogoJs.generated.h"
 #include "html/SettingsPageHtml.generated.h"
 #include "html/TagsPageHtml.generated.h"
 #include "html/UpdatePageHtml.generated.h"
@@ -101,6 +103,10 @@ const char* otaErrorMessage(const OtaUpdater::OtaUpdaterError error) {
   }
 }
 #endif
+constexpr const char* DEVICE_IDENTITY_DIR = "/.system/identity";
+constexpr const char* DEVICE_IDENTITY_JSON = "/.system/identity/device.json";
+constexpr const char* DEVICE_IDENTITY_PHOTO = "/.system/identity/device-photo.png";
+constexpr const char* DEVICE_IDENTITY_CARD = "/sleep/device-identity.jpg";
 
 LocalServer* wsInstance = nullptr;
 
@@ -129,6 +135,112 @@ void copySettingString(char* dest, size_t destSize, const char* value) {
   }
   strncpy(dest, value, destSize - 1);
   dest[destSize - 1] = '\0';
+}
+
+String escapeJsonString(const String& input) {
+  String out;
+  for (size_t i = 0; i < input.length(); ++i) {
+    const char c = input.charAt(i);
+    switch (c) {
+      case '\\':
+        out += "\\\\";
+        break;
+      case '"':
+        out += "\\\"";
+        break;
+      case '\n':
+        out += "\\n";
+        break;
+      case '\r':
+        out += "\\r";
+        break;
+      case '\t':
+        out += "\\t";
+        break;
+      default:
+        out += c;
+        break;
+    }
+  }
+  return out;
+}
+
+bool ensureDeviceIdentityDir() {
+  if (!SdMan.exists("/.system")) {
+    SdMan.mkdir("/.system");
+  }
+  if (!SdMan.exists(DEVICE_IDENTITY_DIR)) {
+    return SdMan.mkdir(DEVICE_IDENTITY_DIR);
+  }
+  return true;
+}
+
+bool readDeviceIdentity(String& name, String& link, String& label, String& tmpl) {
+  name = "";
+  link = "";
+  label = "";
+  tmpl = "photo";
+  if (!SdMan.exists(DEVICE_IDENTITY_JSON)) {
+    return false;
+  }
+
+  FsFile file = SdMan.open(DEVICE_IDENTITY_JSON, O_READ);
+  if (!file) {
+    return false;
+  }
+
+  JsonDocument doc;
+  const DeserializationError error = deserializeJson(doc, file);
+  file.close();
+  if (error) {
+    return false;
+  }
+
+  name = doc["name"] | "";
+  link = doc["link"] | "";
+  label = doc["label"] | "";
+  tmpl = doc["template"] | "photo";
+  return true;
+}
+
+bool writeDeviceIdentity(const String& name, const String& link, const String& label, const String& tmpl) {
+  if (!ensureDeviceIdentityDir()) {
+    return false;
+  }
+
+  FsFile file;
+  if (!SdMan.openFileForWrite("DID", DEVICE_IDENTITY_JSON, file)) {
+    return false;
+  }
+
+  JsonDocument doc;
+  doc["name"] = name;
+  doc["link"] = link;
+  doc["label"] = label;
+  doc["template"] = tmpl;
+  const bool ok = serializeJson(doc, file) > 0;
+  file.close();
+  return ok;
+}
+
+void sendIdentityImage(WebServer* server, const char* path, const char* contentType) {
+  if (!SdMan.exists(path)) {
+    server->send(404, "text/plain", "Image not found");
+    return;
+  }
+
+  FsFile file = SdMan.open(path, O_READ);
+  if (!file) {
+    server->send(500, "text/plain", "Failed to open image");
+    return;
+  }
+
+  server->setContentLength(file.size());
+  server->sendHeader("Cache-Control", "no-store");
+  server->send(200, contentType, "");
+  WiFiClient client = server->client();
+  client.write(file);
+  file.close();
 }
 
 void clearEpubCacheIfNeeded(const String& filePath) {
@@ -792,15 +904,12 @@ void LocalServer::begin() {
 
   apMode = isInApMode;
 
-  Serial.printf("[%lu] [WEB] [MEM] Free heap before begin: %d bytes\n", millis(), ESP.getFreeHeap());
   Serial.printf("[%lu] [WEB] Network mode: %s\n", millis(), apMode ? "AP" : "STA");
 
   Serial.printf("[%lu] [WEB] Creating web server on port %d...\n", millis(), port);
   server.reset(new WebServer(port));
 
   WiFi.setSleep(false);
-
-  Serial.printf("[%lu] [WEB] [MEM] Free heap after WebServer allocation: %d bytes\n", millis(), ESP.getFreeHeap());
 
   if (!server) {
     Serial.printf("[%lu] [WEB] Failed to create WebServer!\n", millis());
@@ -828,12 +937,17 @@ void LocalServer::begin() {
   server->on("/tags", HTTP_GET, [this] { handleTagsPage(); });
   server->on("/js/inx_font_pack.js", HTTP_GET, [this] { handleInxFontPackJs(); });
   server->on("/js/jszip.min.js", HTTP_GET, [this] { handleJsZipMinJs(); });
+  server->on("/js/qr_creator_logo.min.js", HTTP_GET, [this] { handleQrCreatorLogoJs(); });
   server->on("/js/epub_page.js", HTTP_GET, [this] { handleEpubPageJs(); });
   server->on("/js/files_page.js", HTTP_GET, [this] { handleFilesPageJs(); });
   server->on("/js/library_page.js", HTTP_GET, [this] { handleLibraryPageJs(); });
   server->on("/update", HTTP_GET, [this] { handleUpdatePage(); });
 
   server->on("/api/status", HTTP_GET, [this] { handleStatus(); });
+  server->on("/api/device-identity", HTTP_GET, [this] { handleDeviceIdentityGet(); });
+  server->on("/api/device-identity", HTTP_POST, [this] { handleDeviceIdentityPost(); });
+  server->on("/api/device-identity/photo", HTTP_GET, [this] { handleDeviceIdentityPhoto(); });
+  server->on("/api/device-identity/card", HTTP_GET, [this] { handleDeviceIdentityCardImage(); });
   server->on("/api/files", HTTP_GET, [this] { handleFileListData(); });
   server->on("/api/library", HTTP_GET, [this] { handleLibraryData(); });
   server->on("/api/export-notes", HTTP_GET, [this] { handleExportNotesData(); });
@@ -886,7 +1000,6 @@ void LocalServer::begin() {
   server->on("/api/fonts/rescan", HTTP_POST, [this] { handleFontsRescan(); });
 
   server->onNotFound([this] { handleNotFound(); });
-  Serial.printf("[%lu] [WEB] [MEM] Free heap after route setup: %d bytes\n", millis(), ESP.getFreeHeap());
   Serial.printf("✓ jszip.min.js from firmware flash (%u bytes)\n", static_cast<unsigned>(sizeof(JSZIP_MIN_JS) - 1));
   Serial.printf("✓ epub_page.js from firmware flash (%u bytes)\n", static_cast<unsigned>(sizeof(EPUB_PAGE_JS) - 1));
   Serial.printf("✓ files_page.js from firmware flash (%u bytes)\n", static_cast<unsigned>(sizeof(FILES_PAGE_JS) - 1));
@@ -913,7 +1026,6 @@ void LocalServer::begin() {
   const String ipAddr = apMode ? WiFi.softAPIP().toString() : WiFi.localIP().toString();
   Serial.printf("[%lu] [WEB] Access at http://%s/\n", millis(), ipAddr.c_str());
   Serial.printf("[%lu] [WEB] WebSocket at ws://%s:%d/\n", millis(), ipAddr.c_str(), wsPort);
-  Serial.printf("[%lu] [WEB] [MEM] Free heap after server.begin(): %d bytes\n", millis(), ESP.getFreeHeap());
 }
 
 void LocalServer::stop() {
@@ -935,8 +1047,6 @@ void LocalServer::stop() {
 
   Serial.printf("[%lu] [WEB] STOP INITIATED - setting running=false first\n", millis());
   running = false;
-
-  Serial.printf("[%lu] [WEB] [MEM] Free heap before stop: %d bytes\n", millis(), ESP.getFreeHeap());
 
   if (wsUploadInProgress && wsUploadFile) {
     wsUploadFile.close();
@@ -963,15 +1073,11 @@ void LocalServer::stop() {
   delay(20);
 
   server->stop();
-  Serial.printf("[%lu] [WEB] [MEM] Free heap after server->stop(): %d bytes\n", millis(), ESP.getFreeHeap());
 
   delay(10);
 
   server.reset();
   Serial.printf("[%lu] [WEB] Web server stopped and deleted\n", millis());
-  Serial.printf("[%lu] [WEB] [MEM] Free heap after delete server: %d bytes\n", millis(), ESP.getFreeHeap());
-
-  Serial.printf("[%lu] [WEB] [MEM] Free heap final: %d bytes\n", millis(), ESP.getFreeHeap());
 }
 
 void LocalServer::handleClient() {
@@ -1563,6 +1669,70 @@ void LocalServer::handleFirmwareUploadPost() {
   server->send(200, "application/json", json);
 }
 
+void LocalServer::handleDeviceIdentityGet() const {
+  String name;
+  String link;
+  String label;
+  String tmpl;
+  readDeviceIdentity(name, link, label, tmpl);
+
+  String json = "{\"ok\":true";
+  json += ",\"name\":\"" + escapeJsonString(name) + "\"";
+  json += ",\"link\":\"" + escapeJsonString(link) + "\"";
+  json += ",\"label\":\"" + escapeJsonString(label) + "\"";
+  json += ",\"template\":\"" + escapeJsonString(tmpl) + "\"";
+  json += ",\"hasPhoto\":";
+  json += SdMan.exists(DEVICE_IDENTITY_PHOTO) ? "true" : "false";
+  json += ",\"hasCard\":";
+  json += SdMan.exists(DEVICE_IDENTITY_CARD) ? "true" : "false";
+  json += "}";
+  server->send(200, "application/json", json);
+}
+
+void LocalServer::handleDeviceIdentityPost() const {
+  JsonDocument doc;
+  const DeserializationError error = deserializeJson(doc, server->arg("plain"));
+  if (error) {
+    server->send(400, "application/json", "{\"ok\":false,\"error\":\"Invalid JSON\"}");
+    return;
+  }
+
+  String name = doc["name"] | "";
+  String link = doc["link"] | "";
+  String label = doc["label"] | "";
+  String tmpl = doc["template"] | "photo";
+  name.trim();
+  link.trim();
+  label.trim();
+  if (name.length() > 64) {
+    name = name.substring(0, 64);
+  }
+  if (link.length() > 180) {
+    link = link.substring(0, 180);
+  }
+  if (label.length() > 48) {
+    label = label.substring(0, 48);
+  }
+  if (tmpl != "minimal") {
+    tmpl = "photo";
+  }
+
+  if (!writeDeviceIdentity(name, link, label, tmpl)) {
+    server->send(500, "application/json", "{\"ok\":false,\"error\":\"Could not save identity\"}");
+    return;
+  }
+
+  server->send(200, "application/json", "{\"ok\":true}");
+}
+
+void LocalServer::handleDeviceIdentityPhoto() const {
+  sendIdentityImage(server.get(), DEVICE_IDENTITY_PHOTO, "image/png");
+}
+
+void LocalServer::handleDeviceIdentityCardImage() const {
+  sendIdentityImage(server.get(), DEVICE_IDENTITY_CARD, "image/jpeg");
+}
+
 void LocalServer::scanFiles(const char* path, const std::function<void(FileInfo)>& callback) const {
   FsFile root = SdMan.open(path);
   if (!root) {
@@ -1656,6 +1826,10 @@ void LocalServer::handleInxFontPackJs() const {
 
 void LocalServer::handleJsZipMinJs() const {
   server->send_P(200, PSTR("text/javascript; charset=utf-8"), JSZIP_MIN_JS, sizeof(JSZIP_MIN_JS) - 1);
+}
+
+void LocalServer::handleQrCreatorLogoJs() const {
+  server->send_P(200, PSTR("text/javascript; charset=utf-8"), QR_CREATOR_LOGO_JS, sizeof(QR_CREATOR_LOGO_JS) - 1);
 }
 
 void LocalServer::handleEpubPageJs() const {
@@ -2152,7 +2326,6 @@ void LocalServer::handleUpload() const {
     }
 
     Serial.printf("[%lu] [WEB] [UPLOAD] START: %s to path: %s\n", millis(), uploadFileName.c_str(), uploadPath.c_str());
-    Serial.printf("[%lu] [WEB] [UPLOAD] Free heap: %d bytes\n", millis(), ESP.getFreeHeap());
 
     String filePath = uploadPath;
     if (!filePath.endsWith("/")) filePath += "/";
@@ -2694,7 +2867,7 @@ void LocalServer::handleSettingsGet() const {
   }
   doc["hideBatteryPercentage"] = SETTINGS.hideBatteryPercentage;
   doc["uiTheme"] = SETTINGS.uiTheme;
-  doc["showBottomBarClock"] = SETTINGS.showBottomBarClock;
+  doc["showBottomBarClock"] = SETTINGS.showMenuClock;  // web key kept; it is the menu clock
   doc["appDrawerNews"] = SETTINGS.appDrawerNews;
   doc["appDrawerGames"] = SETTINGS.appDrawerGames;
   doc["appDrawerCrossPlay"] = SETTINGS.appDrawerCrossPlay;
@@ -2706,37 +2879,34 @@ void LocalServer::handleSettingsGet() const {
   doc["libraryShelfEnabled"] = SETTINGS.libraryShelfEnabled;
   doc["librarySortMode"] = SETTINGS.librarySortMode;
 
-  doc["fontFamily"] = SETTINGS.fontFamily;
-  doc["fontSize"] = SETTINGS.fontSize;
+  doc["fontFamily"] = READER_SETTINGS.fontFamily;
+  doc["fontSize"] = READER_SETTINGS.fontSize;
 
-  doc["lineHeight"] = SETTINGS.lineHeight;
-  doc["textSpace"] = SETTINGS.textSpace;
-  doc["screenMargin"] = SETTINGS.screenMargin;
-  doc["paragraphAlignment"] = SETTINGS.paragraphAlignment;
-  doc["paragraphCssIndentEnabled"] = SETTINGS.paragraphCssIndentEnabled;
-  doc["extraParagraphSpacing"] = SETTINGS.extraParagraphSpacing;
-  doc["orientation"] = SETTINGS.orientation;
-  doc["hyphenationEnabled"] = SETTINGS.hyphenationEnabled;
-  doc["bionicReadingEnabled"] = SETTINGS.bionicReadingEnabled;
+  doc["lineHeight"] = READER_SETTINGS.lineHeight;
+  doc["textSpace"] = READER_SETTINGS.textSpace;
+  doc["screenMargin"] = READER_SETTINGS.screenMargin;
+  doc["paragraphAlignment"] = READER_SETTINGS.paragraphAlignment;
+  doc["paragraphCssIndentEnabled"] = READER_SETTINGS.paragraphCssIndentEnabled;
+  doc["extraParagraphSpacing"] = READER_SETTINGS.extraParagraphSpacing;
+  doc["orientation"] = READER_SETTINGS.orientation;
+  doc["hyphenationEnabled"] = READER_SETTINGS.hyphenationEnabled;
+  doc["bionicReadingEnabled"] = READER_SETTINGS.bionicReadingEnabled;
 
-  doc["readerDirectionMapping"] = SETTINGS.readerDirectionMapping;
-  doc["readerMenuButton"] = SETTINGS.readerMenuButton;
-  doc["longPressChapterSkip"] = SETTINGS.longPressChapterSkip;
-  doc["readerShortPwrBtn"] = SETTINGS.readerShortPwrBtn;
   doc["shakePageTurn"] = SETTINGS.shakePageTurn;
   doc["shakePageTurnSensitivity"] = SETTINGS.shakePageTurnSensitivity;
 
-  doc["textAntiAliasing"] = SETTINGS.textAntiAliasing;
-  doc["refreshFrequency"] = SETTINGS.refreshFrequency;
+  doc["textAntiAliasing"] = READER_SETTINGS.textAntiAliasing;
+  doc["refreshFrequency"] = READER_SETTINGS.refreshFrequency;
   doc["readerRefreshMode"] = SETTINGS.readerRefreshMode;
-  doc["readerImageGrayscale"] = SETTINGS.readerImageGrayscale;
-  doc["readerSmartRefreshOnImages"] = SETTINGS.readerSmartRefreshOnImages;
-  doc["statusBar"] = SETTINGS.statusBar;
-  doc["statusBarLeft"] = SETTINGS.statusBarLeft;
+  doc["readerImageGrayscale"] = READER_SETTINGS.readerImageGrayscale;
+  doc["readerSmartRefreshOnImages"] = READER_SETTINGS.readerSmartRefreshOnImages;
+  doc["statusBar"] = READER_SETTINGS.statusBar;
+  doc["statusBarLeft"] = READER_SETTINGS.statusBarLeft;
   doc["statusBarInnerLeft"] = SETTINGS.statusBarInnerLeft;
-  doc["statusBarMiddle"] = SETTINGS.statusBarMiddle;
+  doc["statusBarMiddle"] = READER_SETTINGS.statusBarMiddle;
   doc["statusBarInnerRight"] = SETTINGS.statusBarInnerRight;
-  doc["statusBarRight"] = SETTINGS.statusBarRight;
+  doc["statusBarRight"] = READER_SETTINGS.statusBarRight;
+  doc["statusBarFullStyle"] = READER_SETTINGS.statusBarFullStyle;
 
   doc["frontButtonLayout"] = SETTINGS.frontButtonLayout;
   doc["shortPwrBtn"] = SETTINGS.shortPwrBtn;
@@ -2752,7 +2922,7 @@ void LocalServer::handleSettingsGet() const {
   doc["refreshOnLoadSettings"] = SETTINGS.refreshOnLoadSettings;
   doc["refreshOnLoadSync"] = SETTINGS.refreshOnLoadSync;
   doc["refreshOnLoadStatistics"] = SETTINGS.refreshOnLoadStatistics;
-  doc["pageAutoTurnSeconds"] = SETTINGS.pageAutoTurnSeconds;
+  doc["pageAutoTurnSeconds"] = READER_SETTINGS.pageAutoTurnSeconds;
   doc["bitmapRoundedCorners"] = SETTINGS.bitmapRoundedCorners;
   doc["sunlightFadingFix"] = SETTINGS.sunlightFadingFix;
   doc["antiGhostingExperimental"] = SETTINGS.antiGhostingExperimental;
@@ -2794,6 +2964,7 @@ void LocalServer::handleSettingsUpdate() const {
   }
 
   bool changed = false;
+  bool readerChanged = false;
   const bool clockAvailable = clockSettingsAvailable();
 
   for (JsonPair kv : doc.as<JsonObject>()) {
@@ -2916,62 +3087,43 @@ void LocalServer::handleSettingsUpdate() const {
       SETTINGS.librarySortMode = static_cast<uint8_t>(v);
       changed = true;
     } else if (strcmp(key, "fontFamily") == 0) {
-      SETTINGS.fontFamily = (uint8_t)value;
-      changed = true;
+      READER_SETTINGS.fontFamily = (uint8_t)value;
+      readerChanged = true;
     } else if (strcmp(key, "fontSize") == 0) {
-      SETTINGS.fontSize = (uint8_t)value;
-      changed = true;
+      READER_SETTINGS.fontSize = (uint8_t)value;
+      readerChanged = true;
     } else if (strcmp(key, "lineHeight") == 0) {
       uint8_t v = (uint8_t)value;
-      SETTINGS.lineHeight = (v < 10 || v > 200) ? 100 : v;
-      changed = true;
+      READER_SETTINGS.lineHeight = (v < 10 || v > 200) ? 100 : v;
+      readerChanged = true;
     } else if (strcmp(key, "textSpace") == 0) {
       uint8_t v = (uint8_t)value;
-      SETTINGS.textSpace = (v < 10 || v > 200) ? 100 : v;
-      changed = true;
+      READER_SETTINGS.textSpace = (v < 10 || v > 200) ? 100 : v;
+      readerChanged = true;
     } else if (strcmp(key, "screenMargin") == 0) {
-      SETTINGS.screenMargin = (uint8_t)value;
-      changed = true;
+      READER_SETTINGS.screenMargin = (uint8_t)value;
+      readerChanged = true;
     } else if (strcmp(key, "paragraphAlignment") == 0) {
-      SETTINGS.paragraphAlignment = (uint8_t)value;
-      if (SETTINGS.paragraphAlignment >= SystemSetting::PARAGRAPH_ALIGNMENT_COUNT) {
-        SETTINGS.paragraphAlignment = SystemSetting::JUSTIFIED;
+      READER_SETTINGS.paragraphAlignment = (uint8_t)value;
+      if (READER_SETTINGS.paragraphAlignment >= SystemSetting::PARAGRAPH_ALIGNMENT_COUNT) {
+        READER_SETTINGS.paragraphAlignment = SystemSetting::JUSTIFIED;
       }
-      changed = true;
+      readerChanged = true;
     } else if (strcmp(key, "extraParagraphSpacing") == 0) {
-      SETTINGS.extraParagraphSpacing = (uint8_t)value;
-      changed = true;
+      READER_SETTINGS.extraParagraphSpacing = (uint8_t)value;
+      readerChanged = true;
     } else if (strcmp(key, "paragraphCssIndentEnabled") == 0) {
-      SETTINGS.paragraphCssIndentEnabled = (uint8_t)value ? 1 : 0;
-      changed = true;
+      READER_SETTINGS.paragraphCssIndentEnabled = (uint8_t)value ? 1 : 0;
+      readerChanged = true;
     } else if (strcmp(key, "orientation") == 0) {
-      SETTINGS.orientation = (uint8_t)value;
-      changed = true;
+      READER_SETTINGS.orientation = (uint8_t)value;
+      readerChanged = true;
     } else if (strcmp(key, "hyphenationEnabled") == 0) {
-      SETTINGS.hyphenationEnabled = (uint8_t)value;
-      changed = true;
+      READER_SETTINGS.hyphenationEnabled = (uint8_t)value;
+      readerChanged = true;
     } else if (strcmp(key, "bionicReadingEnabled") == 0) {
-      SETTINGS.bionicReadingEnabled = (uint8_t)value ? 1 : 0;
-      changed = true;
-    } else if (strcmp(key, "readerDirectionMapping") == 0) {
-      SETTINGS.readerDirectionMapping = (uint8_t)value;
-      changed = true;
-    } else if (strcmp(key, "readerMenuButton") == 0) {
-      uint8_t v = (uint8_t)value;
-      if (v >= SystemSetting::READER_MENU_BUTTON_COUNT) {
-        v = SystemSetting::MENU_UP;
-      }
-      SETTINGS.readerMenuButton = v;
-      changed = true;
-    } else if (strcmp(key, "longPressChapterSkip") == 0) {
-      const int v = static_cast<int>(value);
-      SETTINGS.longPressChapterSkip =
-          (v < 0) ? 0
-                  : (v > SystemSetting::LONG_PRESS_PAGE_SKIP_5 ? SystemSetting::LONG_PRESS_PAGE_SKIP_5 : (uint8_t)v);
-      changed = true;
-    } else if (strcmp(key, "readerShortPwrBtn") == 0) {
-      SETTINGS.readerShortPwrBtn = (uint8_t)value;
-      changed = true;
+      READER_SETTINGS.bionicReadingEnabled = (uint8_t)value ? 1 : 0;
+      readerChanged = true;
     } else if (strcmp(key, "shakePageTurn") == 0) {
       const int motionMode = static_cast<int>(value);
       SETTINGS.shakePageTurn = static_cast<uint8_t>(motionMode < 0 ? 0 : motionMode > 2 ? 2 : motionMode);
@@ -2981,10 +3133,10 @@ void LocalServer::handleSettingsUpdate() const {
       SETTINGS.shakePageTurnSensitivity = static_cast<uint8_t>(sensitivity < 0 ? 0 : sensitivity > 2 ? 2 : sensitivity);
       changed = true;
     } else if (strcmp(key, "textAntiAliasing") == 0) {
-      SETTINGS.textAntiAliasing = (uint8_t)value;
-      changed = true;
+      READER_SETTINGS.textAntiAliasing = (uint8_t)value;
+      readerChanged = true;
     } else if (strcmp(key, "refreshFrequency") == 0) {
-      SETTINGS.refreshFrequency = (uint8_t)value;
+      READER_SETTINGS.refreshFrequency = (uint8_t)value;
       changed = true;
     } else if (strcmp(key, "readerRefreshMode") == 0) {
       SETTINGS.readerRefreshMode = (value >= 0 && value < SystemSetting::READER_REFRESH_MODE_COUNT)
@@ -2992,30 +3144,30 @@ void LocalServer::handleSettingsUpdate() const {
                                        : SystemSetting::READER_REFRESH_AUTO;
       changed = true;
     } else if (strcmp(key, "readerImageGrayscale") == 0) {
-      SETTINGS.readerImageGrayscale = (value >= 0 && value < SystemSetting::READER_IMAGE_QUALITY_COUNT)
-                                          ? (uint8_t)value
-                                          : SystemSetting::READER_IMAGE_LOW;
-      changed = true;
+      READER_SETTINGS.readerImageGrayscale = (value >= 0 && value < SystemSetting::READER_IMAGE_QUALITY_COUNT)
+                                                 ? (uint8_t)value
+                                                 : SystemSetting::READER_IMAGE_LOW;
+      readerChanged = true;
     } else if (strcmp(key, "readerSmartRefreshOnImages") == 0) {
-      SETTINGS.readerSmartRefreshOnImages = (uint8_t)value ? 1 : 0;
-      changed = true;
+      READER_SETTINGS.readerSmartRefreshOnImages = (uint8_t)value ? 1 : 0;
+      readerChanged = true;
     } else if (strcmp(key, "statusBar") == 0) {
-      SETTINGS.statusBar = (uint8_t)value;
-      changed = true;
+      READER_SETTINGS.statusBar = (uint8_t)value;
+      readerChanged = true;
     } else if (strcmp(key, "statusBarLeft") == 0) {
-      SETTINGS.statusBarLeft = value >= 0 && value < SystemSetting::STATUS_BAR_ITEM_COUNT ? (uint8_t)value : 0;
+      READER_SETTINGS.statusBarLeft = value >= 0 && value < SystemSetting::STATUS_BAR_ITEM_COUNT ? (uint8_t)value : 0;
       changed = true;
     } else if (strcmp(key, "statusBarInnerLeft") == 0) {
       SETTINGS.statusBarInnerLeft = value >= 0 && value < SystemSetting::STATUS_BAR_ITEM_COUNT ? (uint8_t)value : 0;
       changed = true;
     } else if (strcmp(key, "statusBarMiddle") == 0) {
-      SETTINGS.statusBarMiddle = value >= 0 && value < SystemSetting::STATUS_BAR_ITEM_COUNT ? (uint8_t)value : 0;
+      READER_SETTINGS.statusBarMiddle = value >= 0 && value < SystemSetting::STATUS_BAR_ITEM_COUNT ? (uint8_t)value : 0;
       changed = true;
     } else if (strcmp(key, "statusBarInnerRight") == 0) {
       SETTINGS.statusBarInnerRight = value >= 0 && value < SystemSetting::STATUS_BAR_ITEM_COUNT ? (uint8_t)value : 0;
       changed = true;
     } else if (strcmp(key, "statusBarRight") == 0) {
-      SETTINGS.statusBarRight = value >= 0 && value < SystemSetting::STATUS_BAR_ITEM_COUNT ? (uint8_t)value : 0;
+      READER_SETTINGS.statusBarRight = value >= 0 && value < SystemSetting::STATUS_BAR_ITEM_COUNT ? (uint8_t)value : 0;
       changed = true;
     } else if (strcmp(key, "appDrawerNews") == 0) {
       SETTINGS.appDrawerNews = (uint8_t)value ? 1 : 0;
@@ -3026,8 +3178,11 @@ void LocalServer::handleSettingsUpdate() const {
     } else if (strcmp(key, "appDrawerAgentIsland") == 0) {
       SETTINGS.appDrawerAgentIsland = (uint8_t)value ? 1 : 0;
     } else if (strcmp(key, "showBottomBarClock") == 0) {
-      SETTINGS.showBottomBarClock = (uint8_t)value ? 1 : 0;
+      SETTINGS.showMenuClock = (uint8_t)value ? 1 : 0;
       changed = true;
+    } else if (strcmp(key, "statusBarFullStyle") == 0) {
+      READER_SETTINGS.statusBarFullStyle = (uint8_t)value;
+      readerChanged = true;
     } else if (strcmp(key, "frontButtonLayout") == 0) {
       SETTINGS.frontButtonLayout = (uint8_t)value;
       changed = true;
@@ -3072,8 +3227,8 @@ void LocalServer::handleSettingsUpdate() const {
       if (v < 0) v = 0;
       if (v > 180) v = 180;
       v = (v / 10) * 10;
-      SETTINGS.pageAutoTurnSeconds = static_cast<uint8_t>(v);
-      changed = true;
+      READER_SETTINGS.pageAutoTurnSeconds = static_cast<uint8_t>(v);
+      readerChanged = true;
     } else if (strcmp(key, "bitmapRoundedCorners") == 0) {
       int cornerStyle = static_cast<int>(value);
       if (cornerStyle < 0) cornerStyle = 0;
@@ -3155,6 +3310,10 @@ void LocalServer::handleSettingsUpdate() const {
   if (changed) {
     SETTINGS.saveToFile();
     Serial.printf("[%lu] [WEB] Settings updated and saved\n", millis());
+  }
+  if (readerChanged || changed) {  // E-inx keys still flag `changed`; the save is skipped when nothing moved
+    READER_SETTINGS.saveToFile();
+    Serial.printf("[%lu] [WEB] Reader settings updated and saved\n", millis());
   }
 
   server->send(200, "application/json", "{\"status\":\"ok\"}");

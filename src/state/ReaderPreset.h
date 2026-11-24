@@ -30,6 +30,8 @@ class ReaderPresetStore {
 
   /** Loads user presets from SD (idempotent). */
   void load();
+  /** Forces user presets to be re-read from SD. */
+  void reload();
   /** Persists user presets to SD. */
   bool save();
 
@@ -67,7 +69,7 @@ class ReaderPresetStore {
   static constexpr const char* kDir = "/.system";
   static constexpr const char* kPath = "/.system/reader_presets.bin";
   static constexpr uint32_t kMagic = 0x52505253;  // "RPRS"
-  static constexpr uint8_t kVersion = 4;
+  static constexpr uint8_t kVersion = 5;          // 5: 25-byte records (upstream's guide-lines byte after E-inx's 24)
 };
 
 #define READER_PRESETS ReaderPresetStore::getInstance()

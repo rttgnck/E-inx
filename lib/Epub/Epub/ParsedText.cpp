@@ -5,6 +5,7 @@
 
 #include "ParsedText.h"
 
+#include <Arduino.h>
 #include <GfxRenderer.h>
 #include <Utf8.h>
 
@@ -13,9 +14,9 @@
 #include <cstdint>
 #include <functional>
 #include <iterator>
-#include <type_traits>
 #include <limits>
 #include <new>
+#include <type_traits>
 
 #ifndef SIMULATOR
 #include <esp_heap_caps.h>
@@ -251,7 +252,7 @@ bool ParsedText::reserveForNextWord() {
   if (!reserveOrFail(words, target) || !reserveOrFail(wordStyles, target) ||
       !reserveOrFail(bionicPrefixBytes, target) || !reserveOrFail(wordSmallCaps, target) ||
       !reserveOrFail(wordUnderline, target) || !reserveOrFail(wordVerticalAlign, target) ||
-      !reserveOrFail(wordJoinPrevious, target)) {
+      !reserveOrFail(wordXOffset, target) || !reserveOrFail(wordJoinPrevious, target)) {
     return false;
   }
 
@@ -266,7 +267,8 @@ bool ParsedText::reserveForNextWord() {
 }
 
 void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle, const bool smallCaps,
-                         const bool underline, const bool joinPrevious, const uint8_t verticalAlign) {
+                         const bool underline, const bool joinPrevious, const uint8_t verticalAlign,
+                         const int16_t xOffset) {
   if (word.empty()) return;
 
   if (!reserveForNextWord()) {
@@ -285,7 +287,11 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
   wordSmallCaps.push_back(smallCaps ? 1 : 0);
   wordUnderline.push_back(underline ? 1 : 0);
   wordVerticalAlign.push_back(verticalAlign);
-  wordJoinPrevious.push_back(joinPrevious && words.size() > 1 ? 1 : 0);
+  wordXOffset.push_back(xOffset);
+  hasWordXOffsets_ = hasWordXOffsets_ || xOffset != 0;
+  const uint8_t joined = joinPrevious && words.size() > 1 ? 1 : 0;
+  wordJoinPrevious.push_back(joined);
+  hasJoinedWords_ = hasJoinedWords_ || joined != 0;
   // Only carry image-list entries once this block has an inline image (keeps plain text blocks lean).
   if (hasInlineImages_) {
     wordImagePaths.emplace_back();
@@ -331,6 +337,7 @@ void ParsedText::addImage(std::string cachePath, const uint16_t displayW, const 
   wordSmallCaps.push_back(0);
   wordUnderline.push_back(0);
   wordVerticalAlign.push_back(TextBlock::BASELINE);
+  wordXOffset.push_back(0);
   wordJoinPrevious.push_back(0);
   wordImagePaths.push_back(std::move(cachePath));
   wordImageW.push_back(displayW);
@@ -338,7 +345,7 @@ void ParsedText::addImage(std::string cachePath, const uint16_t displayW, const 
 }
 
 void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fontId, const uint16_t viewportWidth,
-                                       const std::function<void(std::shared_ptr<TextBlock>)>& processLine,
+                                       const std::function<void(TextBlock&&)>& processLine,
                                        const bool includeLastLine) {
   if (words.empty()) {
     return;
@@ -359,8 +366,12 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
   } else {
     lineBreakIndices = computeLineBreaks(renderer, fontId, pageWidth, spaceWidth, wordWidths, dropW, dropL);
   }
+  if (lineBreakIndices.empty() || (!includeLastLine && lineBreakIndices.size() <= 1)) {
+    return;
+  }
   const size_t lineCount = includeLastLine ? lineBreakIndices.size() : lineBreakIndices.size() - 1;
-  const std::vector<uint8_t> joinPreviousSnapshot(wordJoinPrevious.begin(), wordJoinPrevious.end());
+  const std::vector<uint8_t> joinPreviousSnapshot =
+      hasJoinedWords_ ? std::vector<uint8_t>(wordJoinPrevious.begin(), wordJoinPrevious.end()) : std::vector<uint8_t>();
 
   for (size_t i = 0; i < lineCount; ++i) {
     extractLine(i, pageWidth, spaceWidth, wordWidths, lineBreakIndices, joinPreviousSnapshot, processLine);
@@ -737,6 +748,7 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   wordSmallCaps.insert(at(wordSmallCaps), smallCaps ? 1 : 0);
   wordUnderline.insert(at(wordUnderline), underline ? 1 : 0);
   wordVerticalAlign.insert(at(wordVerticalAlign), verticalAlign);
+  wordXOffset.insert(at(wordXOffset), 0);
   wordJoinPrevious.insert(at(wordJoinPrevious), 0);
   // The split halves are plain text — keep the parallel image lists aligned (only when this block has any).
   if (blockHasImages) {
@@ -754,7 +766,7 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
 void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const int spaceWidth,
                              const std::vector<uint16_t>& wordWidths, const std::vector<size_t>& lineBreakIndices,
                              const std::vector<uint8_t>& joinPreviousSnapshot,
-                             const std::function<void(std::shared_ptr<TextBlock>)>& processLine) {
+                             const std::function<void(TextBlock&&)>& processLine) {
   const size_t lineBreak = lineBreakIndices[breakIndex];
   const size_t lastBreakAt = breakIndex > 0 ? lineBreakIndices[breakIndex - 1] : 0;
   const size_t lineWordCount = lineBreak - lastBreakAt;
@@ -812,11 +824,14 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     xpos += (spareSpace - gapCount * spaceWidth) / 2;
   }
 
-  std::vector<uint16_t> lineXPos;
+  std::vector<int16_t> lineXPos;
+  lineXPos.reserve(lineWordCount);
   int naturalGapIndex = 0;
   for (size_t i = lastBreakAt; i < lineBreak; i++) {
     const uint16_t currentWordWidth = wordWidths[i];
-    lineXPos.push_back(xpos);
+    const int xOffset = hasWordXOffsets_ && i < wordXOffset.size() ? wordXOffset[i] : 0;
+    lineXPos.push_back(static_cast<int16_t>(std::max<int>(
+        std::numeric_limits<int16_t>::min(), std::min<int>(std::numeric_limits<int16_t>::max(), xpos + xOffset))));
     int gapAfter = 0;
     if (i + 1 < lineBreak) {
       const bool nextJoinsThis = joinedAt(i + 1);
@@ -859,7 +874,8 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   auto lineWordSmallCaps = takeFront(wordSmallCaps);
   auto lineWordUnderline = takeFront(wordUnderline);
   auto lineWordVerticalAlign = takeFront(wordVerticalAlign);
-  auto lineWordJoinPrevious = takeFront(wordJoinPrevious);
+  takeFront(wordJoinPrevious);  // consumed by joinPreviousSnapshot; only dropped here
+  takeFront(wordXOffset);       // already applied to lineXPos above
 
   // Image vectors are only populated when this block has inline images.
   std::vector<std::string> lineWordImagePaths;
@@ -881,8 +897,31 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     }
   }
 
-  processLine(std::make_shared<TextBlock>(
-      std::move(lineWords), std::move(lineXPos), std::move(lineWordStyles), std::move(lineBionicPrefixBytes),
-      std::move(lineWordSmallCaps), style, std::move(lineWordUnderline), std::move(lineWordVerticalAlign),
-      std::move(lineWordImagePaths), std::move(lineWordImageW), std::move(lineWordImageH)));
+  // Upstream Inx's compact TextBlock: a line whose styles are all regular stores none, and a byte
+  // field with one value across the line stores that value instead of a per-word array.
+  if (std::all_of(lineWordStyles.begin(), lineWordStyles.end(),
+                  [](EpdFontFamily::Style s) { return s == EpdFontFamily::REGULAR; })) {
+    lineWordStyles.clear();
+  }
+  const auto compactBytes = [](std::vector<uint8_t>& values, const uint8_t emptyDefault) -> uint8_t {
+    if (values.empty()) {
+      return emptyDefault;
+    }
+    const uint8_t first = values.front();
+    if (std::all_of(values.begin(), values.end(), [first](uint8_t v) { return v == first; })) {
+      values.clear();
+      return first;
+    }
+    return emptyDefault;
+  };
+  const uint8_t bionicDefault = compactBytes(lineBionicPrefixBytes, 0);
+  const uint8_t smallCapsDefault = compactBytes(lineWordSmallCaps, 0);
+  const uint8_t underlineDefault = compactBytes(lineWordUnderline, 0);
+  const uint8_t verticalAlignDefault = compactBytes(lineWordVerticalAlign, TextBlock::BASELINE);
+
+  processLine(TextBlock(std::move(lineWords), std::move(lineXPos), std::move(lineWordStyles), bionicDefault,
+                        std::move(lineBionicPrefixBytes), smallCapsDefault, std::move(lineWordSmallCaps), style,
+                        underlineDefault, std::move(lineWordUnderline), verticalAlignDefault,
+                        std::move(lineWordVerticalAlign), std::move(lineWordImagePaths), std::move(lineWordImageW),
+                        std::move(lineWordImageH)));
 }

@@ -63,18 +63,20 @@ std::vector<SettingInfo> buildSystemPageSettings(const bool x3) {
   settings.push_back(SettingInfo::Enum("Hide Battery %", &SystemSetting::hideBatteryPercentage,
                                        {"Never", "In Reader", "Always"}, GroupType::DEVICE_DISPLAY));
   settings.push_back(
-      SettingInfo::Toggle("Time beside battery", &SystemSetting::showBottomBarClock, GroupType::DEVICE_DISPLAY));
-  settings.push_back(
       SettingInfo::Enum("Theme", &SystemSetting::uiTheme, {"Classic", "Bottom Tabs"}, GroupType::DEVICE_DISPLAY));
   settings.push_back(
       SettingInfo::Enum("Recent Library Mode", &SystemSetting::recentLibraryMode,
-                        {"Grid", "Current | Previous", "Flow", "Simple", "List", "Icons", "Cover", "Reading Stats"},
+                        {"Grid", "Flow", "List", "Icons", "Cover", "Reading Stats"},
+                        {SystemSetting::RECENT_GRID, SystemSetting::RECENT_FLOW, SystemSetting::RECENT_BOOK_LIST,
+                         SystemSetting::RECENT_ICONS, SystemSetting::RECENT_COVER, SystemSetting::RECENT_STATS},
                         GroupType::DEVICE_DISPLAY));
   settings.push_back(
       SettingInfo::Enum("Library Mode", &SystemSetting::libraryMode, {"List", "Grid"}, GroupType::DEVICE_DISPLAY));
   settings.push_back(SettingInfo::Toggle("Shelf mode", &SystemSetting::libraryShelfEnabled, GroupType::DEVICE_DISPLAY));
   settings.push_back(SettingInfo::Enum("Tab 2 Content", &SystemSetting::tab2Content, {"News", "Games", "Apps"},
                                        GroupType::DEVICE_DISPLAY));
+  settings.push_back(
+      SettingInfo::Toggle("Hide button hints", &SystemSetting::hideButtonHints, GroupType::DEVICE_DISPLAY));
   settings.push_back(SettingInfo::Enum("Files default page", &SystemSetting::libraryViewMode,
                                        {"Folders", "Books", "Tags", "Shelf"}, GroupType::DEVICE_DISPLAY));
   settings.push_back(SettingInfo::Value("Recent books shown", &SystemSetting::recentVisibleCount, {1, 8, 1},
@@ -91,6 +93,7 @@ std::vector<SettingInfo> buildSystemPageSettings(const bool x3) {
 
   if (x3) {
     settings.push_back(SettingInfo::Separator("Clock", GroupType::CLOCK));
+    settings.push_back(SettingInfo::Toggle("Show Clock", &SystemSetting::showMenuClock, GroupType::CLOCK));
     settings.push_back(SettingInfo::Action("Face", GroupType::CLOCK));
     settings.push_back(
         SettingInfo::Enum("Format", &SystemSetting::sleepClockTimeFormat, {"12 hour", "24 hour"}, GroupType::CLOCK));
@@ -112,10 +115,11 @@ std::vector<SettingInfo> buildSystemPageSettings(const bool x3) {
                                        {"Square", "Rounded", "Subtle"}, GroupType::IMAGE));
 
   settings.push_back(SettingInfo::Separator("Buttons", GroupType::DEVICE_BUTTONS));
-  settings.push_back(SettingInfo::Enum("Front Button", &SystemSetting::frontButtonLayout,
-                                       {"Back, Confirm, Left, Right", "Left, Right, Back, Confirm",
-                                        "Left, Back, Confirm, Right", "Back, Confirm, Right, Left"},
-                                       GroupType::DEVICE_BUTTONS));
+  settings.push_back(
+      SettingInfo::Enum("Front Button", &SystemSetting::frontButtonLayout,
+                        {"Back, Confirm, Left, Right", "Left, Right, Back, Confirm", "Left, Back, Confirm, Right",
+                         "Back, Confirm, Right, Left", "Left, Right, Confirm, Back"},
+                        GroupType::DEVICE_BUTTONS));
   settings.push_back(SettingInfo::Enum("Short Power Button Click", &SystemSetting::shortPwrBtn,
                                        {"Ignore", "Sleep", "Page Refresh"}, GroupType::DEVICE_BUTTONS));
   settings.push_back(
@@ -191,9 +195,6 @@ std::vector<SettingInfo> buildSystemPageSettings(const bool x3) {
   settings.push_back(SettingInfo::Action("Delete Cache", GroupType::DEVICE_ACTIONS));
   settings.push_back(SettingInfo::Action("Index your library", GroupType::DEVICE_ACTIONS));
   settings.push_back(SettingInfo::Action("Generate thumbnails", GroupType::DEVICE_ACTIONS));
-  settings.push_back(SettingInfo::Action("KOReader Sync", GroupType::DEVICE_ACTIONS));
-  settings.push_back(SettingInfo::Action("OPDS Browser", GroupType::DEVICE_ACTIONS));
-  settings.push_back(SettingInfo::Action("Check for updates", GroupType::DEVICE_ACTIONS));
   settings.push_back(SettingInfo::Action("About", GroupType::NONE));
 
   return settings;
@@ -255,6 +256,11 @@ void SettingsActivity::loop() {
 
   if (subActivity) {
     subActivity->loop();
+    // subActivity->loop() may have deferred a switchTo<T>() (via deferExternalNav) that deletes `this`.
+    // Run it now and return immediately without touching any member below.
+    if (runPendingExternalNav()) {
+      return;
+    }
     processPendingPanelSwap();
     return;
   }
@@ -286,11 +292,13 @@ void SettingsActivity::loop() {
 
   if (mappedInput.wasPressed(tabPrevButton())) {
     handleTabNavigation(true, false);
+    runPendingExternalNav();
     return;
   }
 
   if (mappedInput.wasPressed(tabNextButton())) {
     handleTabNavigation(false, true);
+    runPendingExternalNav();
     return;
   }
 
@@ -326,16 +334,16 @@ void SettingsActivity::openCurrentPanel() {
     enterNewActivity(new ReaderPresetsActivity(
         renderer, mappedInput, [this] { requestPanelSwap(); },
         [this] {
-          if (onRecentOpen) onRecentOpen();
+          if (onRecentOpen) deferExternalNav(onRecentOpen);
         },
         [this] {
-          if (onLibraryOpen) onLibraryOpen();
+          if (onLibraryOpen) deferExternalNav(onLibraryOpen);
         },
         [this] {
-          if (onSyncOpen) onSyncOpen();
+          if (onSyncOpen) deferExternalNav(onSyncOpen);
         },
         [this] {
-          if (onStatisticsOpen) onStatisticsOpen();
+          if (onStatisticsOpen) deferExternalNav(onStatisticsOpen);
         }));
     return;
   }
@@ -358,16 +366,16 @@ void SettingsActivity::openCurrentPanel() {
       },
       panelBackLabel(currentPanel),
       [this] {
-        if (onRecentOpen) onRecentOpen();
+        if (onRecentOpen) deferExternalNav(onRecentOpen);
       },
       [this] {
-        if (onLibraryOpen) onLibraryOpen();
+        if (onLibraryOpen) deferExternalNav(onLibraryOpen);
       },
       [this] {
-        if (onSyncOpen) onSyncOpen();
+        if (onSyncOpen) deferExternalNav(onSyncOpen);
       },
       [this] {
-        if (onStatisticsOpen) onStatisticsOpen();
+        if (onStatisticsOpen) deferExternalNav(onStatisticsOpen);
       }));
 }
 

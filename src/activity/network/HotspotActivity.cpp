@@ -77,7 +77,6 @@ void HotspotActivity::onEnter() {
   Activity::onEnter();
 
   Serial.printf("[%lu] [HOTSPOT] Starting hotspot mode\n", millis());
-  Serial.printf("[%lu] [HOTSPOT] [MEM] Free heap at onEnter: %d bytes\n", millis(), ESP.getFreeHeap());
 
   renderingMutex = xSemaphoreCreateMutex();
   updateRequired = true;
@@ -123,7 +122,6 @@ void HotspotActivity::onExit() {
  */
 void HotspotActivity::startAccessPoint() {
   Serial.printf("[%lu] [HOTSPOT] Starting Access Point...\n", millis());
-  Serial.printf("[%lu] [HOTSPOT] [MEM] Free heap before AP start: %d bytes\n", millis(), ESP.getFreeHeap());
 
   WiFi.mode(WIFI_AP);
   delay(100);
@@ -162,8 +160,6 @@ void HotspotActivity::startAccessPoint() {
   dnsServer->setErrorReplyCode(DNSReplyCode::NoError);
   dnsServer->start(DNS_PORT, "*", apIP);
   Serial.printf("[%lu] [HOTSPOT] DNS server started for captive portal\n", millis());
-
-  Serial.printf("[%lu] [HOTSPOT] [MEM] Free heap after AP start: %d bytes\n", millis(), ESP.getFreeHeap());
 
   startWebServer();
 }
