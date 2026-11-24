@@ -3,9 +3,10 @@
 
 Runs `git clang-format --diff <base>` (clang-format 21, the repo's .clang-format) over the lines changed since
 <base>, then drops every hunk whose original text appears verbatim in an upstream Inx version merged in that
-range (the second parent of each merge commit on the first-parent chain). Upstream's code is therefore never
-reformatted here, which keeps later upstream merges free of whitespace conflicts, while new E-inx code still
-has to be formatted.
+range: a parent of a merge commit that is itself an upstream commit (an ancestor of a ref under refs/upstream*
+or refs/remotes/upstream*). Upstream's code is therefore never reformatted here, which keeps later upstream
+merges free of whitespace conflicts, while E-inx's own changes, including merged E-inx branches, are checked.
+CI fetches upstream Inx into refs/remotes/upstream* first; locally the refs/upstream* refs serve.
 
 Usage: check_format_changed.py <base-commit>     (exit 1 and print the diff if E-inx lines need formatting)
 Fix locally with: git clang-format --binary clang-format-21 <base-commit>
@@ -33,11 +34,40 @@ def git(*args):
     return subprocess.run(["git", *args], capture_output=True, text=True, check=True).stdout
 
 
+def upstream_refs():
+    refs = git("for-each-ref", "--format=%(objectname)", "refs/upstream", "refs/upstream-tags", "refs/upstream-heads",
+               "refs/remotes/upstream", "refs/remotes/upstream-tags").split()
+    return sorted(set(refs))
+
+
+def is_upstream(commit, refs):
+    for ref in refs:
+        r = subprocess.run(["git", "merge-base", "--is-ancestor", commit, ref], capture_output=True)
+        if r.returncode == 0:
+            return True
+    return False
+
+
+def merged_upstream_commits(base):
+    """Upstream Inx commits merged in between base and HEAD: the upstream-side parent of each merge."""
+    refs = upstream_refs()
+    if not refs:
+        print("check_format_changed: no upstream refs found; every changed line is checked.")
+        return []
+    found = []
+    for merge in git("rev-list", "--merges", f"{base}..HEAD").split():
+        for parent in git("rev-list", "--parents", "-n", "1", merge).split()[1:]:
+            if parent not in found and is_upstream(parent, refs):
+                found.append(parent)
+    return found
+
+
 def upstream_versions(base, path, cache):
-    """Contents of `path` in every merged-in (second-parent) commit between base and HEAD."""
+    """Contents of `path` in every upstream Inx commit merged between base and HEAD."""
     if "refs" not in cache:
-        merges = git("rev-list", "--first-parent", "--merges", f"{base}..HEAD").split()
-        cache["refs"] = [f"{m}^2" for m in merges]
+        cache["refs"] = merged_upstream_commits(base)
+        print(f"Base {base[:10]}; upstream Inx versions merged in this range: "
+              f"{', '.join(r[:10] for r in cache['refs']) or 'none'}")
     out = []
     for ref in cache["refs"]:
         key = (ref, path)
