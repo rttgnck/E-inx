@@ -148,7 +148,6 @@ void FontManager::initialize(GfxRenderer& renderer) {
   static EpdFontFamily literata16RegularFontFamily(&literata16RegularFont, &literata16BoldFont, &literata16ItalicFont,
                                                    &literata16BoldItalicFont);
 
-
   static EpdFont atkinson_hyperlegible8RegularFont(&atkinson_hyperlegible_8_regular);
   static EpdFontFamily atkinson_hyperlegible8FontFamily(&atkinson_hyperlegible8RegularFont, nullptr, nullptr, nullptr);
 
@@ -183,7 +182,6 @@ void FontManager::initialize(GfxRenderer& renderer) {
   static EpdFontFamily atkinson_hyperlegible16FontFamily(
       &atkinson_hyperlegible16RegularFont, &atkinson_hyperlegible16BoldFont, &atkinson_hyperlegible16ItalicFont,
       &atkinson_hyperlegible16BoldItalicFont);
-
 
   static EpdFont montserratClock70RegularFont(&montserrat_clock_70_regular);
   static EpdFont montserratClock70BoldFont(&montserrat_clock_70_bold);

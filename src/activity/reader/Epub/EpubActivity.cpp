@@ -29,8 +29,8 @@
 
 #include "ChapterRestart.h"
 #include "EpubAnnotations.h"
-#include "EpubReadingStats.h"
 #include "EpubNavigation.h"
+#include "EpubReadingStats.h"
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
 #include "SettingsDrawer.h"

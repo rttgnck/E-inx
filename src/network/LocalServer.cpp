@@ -72,7 +72,6 @@
 #include "state/OpdsServerStore.h"
 #endif
 
-
 // Every embedded page and script is stored gzipped (scripts/build_html.py). Browsers unpack it.
 template <typename Server>
 static void sendGzippedAsset(Server& server, PGM_P contentType, const uint8_t* data, const size_t size) {
@@ -1010,7 +1009,8 @@ void LocalServer::begin() {
   server->onNotFound([this] { handleNotFound(); });
   Serial.printf("✓ jszip.min.js from firmware flash (%u bytes gzipped)\n", static_cast<unsigned>(sizeof(JSZIP_MIN_JS)));
   Serial.printf("✓ epub_page.js from firmware flash (%u bytes gzipped)\n", static_cast<unsigned>(sizeof(EPUB_PAGE_JS)));
-  Serial.printf("✓ files_page.js from firmware flash (%u bytes gzipped)\n", static_cast<unsigned>(sizeof(FILES_PAGE_JS)));
+  Serial.printf("✓ files_page.js from firmware flash (%u bytes gzipped)\n",
+                static_cast<unsigned>(sizeof(FILES_PAGE_JS)));
   Serial.printf("✓ inx_font_pack.js from firmware flash (%u bytes gzipped)\n",
                 static_cast<unsigned>(sizeof(INX_FONT_PACK_JS)));
 

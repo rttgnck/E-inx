@@ -6,8 +6,8 @@
 #include "RecentActivity.h"
 
 #include <Bitmap.h>
-#include <Epub/BookMetadataCache.h>
 #include <EpdFontFamily.h>
+#include <Epub/BookMetadataCache.h>
 #include <GfxRenderer.h>
 #include <HalGPIO.h>
 #include <HardwareSerial.h>
