@@ -39,16 +39,12 @@ const char* releaseUrl() {
   return SETTINGS.otaReleaseUrl[0] != '\0' ? SETTINGS.otaReleaseUrl : defaultReleaseUrl;
 }
 
-// GitHub's release JSON is mostly boilerplate the filter throws away — the
-// author and per-asset uploader objects alone are several KB — so the size
-// tracks the length of the release notes. Historically these payloads have run
-// 8.8KB to 10.9KB, which left the old 12KB ceiling about one paragraph of
-// changelog away from rejecting a perfectly good release. The ceiling is now
-// well clear of that, and when the length is not known in advance the buffer
-// starts small and doubles instead of reserving the whole ceiling up front,
-// which is the allocation most likely to fail on a fragmented heap.
-constexpr size_t kInitialReleaseJsonBytes = 4096;
-constexpr size_t kMaxReleaseJsonBytes = 32768;
+// GitHub's release JSON runs 9 to 11 KB, most of it author and uploader objects the filter throws away. It is
+// parsed straight off the connection through a small window, so the check never needs one contiguous block for
+// the whole reply. With TLS open the X3 often has no 9.5 KB block to spare, and the old buffered read then lost
+// the first chunk (ESP-IDF ignores an event handler's error) and parsed a reply with its start missing.
+constexpr int kReleaseReadWindowBytes = 512;
+constexpr int kMaxReleaseRedirects = 3;
 
 constexpr int kGithubCheckTaskStack = 16384;
 constexpr int kGithubCheckTaskPrio = 3;
@@ -143,10 +139,6 @@ bool isFirmwareAssetName(const std::string& name) {
   return lower == "firmware.bin" || lower.find("firmware") != std::string::npos || lower.rfind("e-inx", 0) == 0;
 }
 
-char* local_buf = nullptr;
-int output_len = 0;
-size_t local_buf_cap = 0;
-
 extern "C" {
 extern esp_err_t esp_crt_bundle_attach(void* conf);
 }
@@ -156,73 +148,61 @@ esp_err_t http_client_set_header_cb(esp_http_client_handle_t http_client) {
   return esp_http_client_set_header(http_client, "User-Agent", "Inx-ESP32-" INX_VERSION);
 }
 
-/** esp_http_client event handler that accumulates the GitHub release JSON response into local_buf. */
-esp_err_t event_handler(esp_http_client_event_t* event) {
-  if (event->event_id != HTTP_EVENT_ON_DATA) return ESP_OK;
-  if (event->data == nullptr || event->data_len <= 0) return ESP_OK;
+/** Feeds an open esp_http_client response to ArduinoJson one small window at a time. */
+class HttpBodyReader {
+ public:
+  explicit HttpBodyReader(esp_http_client_handle_t client) : client_(client) {}
 
-  const int chunk = event->data_len;
-  const size_t need = static_cast<size_t>(output_len) + static_cast<size_t>(chunk) + 1;
-
-  if (local_buf == nullptr) {
-    const int content_len = esp_http_client_get_content_length(event->client);
-    const bool chunked = esp_http_client_is_chunked_response(event->client);
-    if (!chunked && content_len > 0) {
-      if (static_cast<size_t>(content_len) + 1 > kMaxReleaseJsonBytes) {
-        Serial.printf("[%lu] [OTA] HTTP body too large from Content-Length (%d cap %u)\n", millis(), content_len,
-                      static_cast<unsigned>(kMaxReleaseJsonBytes));
-        return ESP_ERR_NO_MEM;
-      }
-      local_buf_cap = static_cast<size_t>(content_len) + 1;
-      local_buf = static_cast<char*>(calloc(local_buf_cap, 1));
-    } else {
-      local_buf_cap = kInitialReleaseJsonBytes;
-      local_buf = static_cast<char*>(calloc(local_buf_cap, 1));
-    }
-    if (local_buf == nullptr) {
-      Serial.printf("[%lu] [OTA] HTTP body buffer alloc failed (cap %u for need %u)\n", millis(),
-                    static_cast<unsigned>(local_buf_cap), static_cast<unsigned>(need));
-      return ESP_ERR_NO_MEM;
-    }
-    output_len = 0;
+  int read() {
+    if (pos_ >= len_ && !fill()) return -1;
+    return static_cast<unsigned char>(window_[pos_++]);
   }
 
-  if (need > local_buf_cap) {
-    if (need > kMaxReleaseJsonBytes) {
-      Serial.printf("[%lu] [OTA] HTTP body too large (need %u cap %u free %u largest %u)\n", millis(),
-                    static_cast<unsigned>(need), static_cast<unsigned>(kMaxReleaseJsonBytes),
-                    static_cast<unsigned>(ESP.getFreeHeap()),
-                    static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)));
-      return ESP_ERR_NO_MEM;
+  size_t readBytes(char* out, const size_t length) {
+    size_t done = 0;
+    while (done < length) {
+      if (pos_ >= len_ && !fill()) break;
+      const size_t n = std::min(length - done, static_cast<size_t>(len_ - pos_));
+      memcpy(out + done, window_ + pos_, n);
+      pos_ += static_cast<int>(n);
+      done += n;
     }
-
-    size_t ncap = local_buf_cap * 2;
-    if (ncap < need) {
-      ncap = need;
-    }
-    if (ncap > kMaxReleaseJsonBytes) {
-      ncap = kMaxReleaseJsonBytes;
-    }
-    char* nb = static_cast<char*>(realloc(local_buf, ncap));
-    if (nb == nullptr) {
-      Serial.printf("[%lu] [OTA] HTTP body buffer realloc failed (cap %u need %u free %u largest %u)\n", millis(),
-                    static_cast<unsigned>(ncap), static_cast<unsigned>(need), static_cast<unsigned>(ESP.getFreeHeap()),
-                    static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)));
-      return ESP_ERR_NO_MEM;
-    }
-    local_buf = nb;
-    local_buf_cap = ncap;
+    return done;
   }
 
-  memcpy(local_buf + output_len, event->data, static_cast<size_t>(chunk));
-  output_len += chunk;
-  local_buf[output_len] = '\0';
+  bool failed() const { return failed_; }
+  size_t bytesRead() const { return total_; }
 
-  if (output_len % 4096 < chunk) {
+ private:
+  bool fill() {
+    if (failed_ || ended_) return false;
+    const int n = esp_http_client_read(client_, window_, sizeof(window_));
+    if (n < 0) {
+      failed_ = true;
+      return false;
+    }
+    if (n == 0) {
+      ended_ = true;
+      return false;
+    }
+    len_ = n;
+    pos_ = 0;
+    total_ += static_cast<size_t>(n);
     esp_task_wdt_reset();
+    return true;
   }
 
-  return ESP_OK;
+  esp_http_client_handle_t client_;
+  char window_[kReleaseReadWindowBytes];
+  int len_ = 0;
+  int pos_ = 0;
+  size_t total_ = 0;
+  bool failed_ = false;
+  bool ended_ = false;
+};
+
+bool isRedirect(const int status) {
+  return status == 301 || status == 302 || status == 303 || status == 307 || status == 308;
 }
 }  // namespace
 
@@ -273,25 +253,6 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
 
 /** Fetch and parse the latest GitHub release JSON to find a firmware.bin asset. */
 OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdateWorker() {
-  JsonDocument filter;
-  esp_err_t esp_err;
-  JsonDocument doc;
-
-  esp_http_client_config_t client_config = {};
-  client_config.url = releaseUrl();
-  client_config.event_handler = event_handler;
-  client_config.buffer_size = 2048;
-  client_config.buffer_size_tx = 1024;
-  client_config.timeout_ms = 25000;
-  client_config.crt_bundle_attach = esp_crt_bundle_attach;
-  client_config.keep_alive_enable = false;
-
-  if (local_buf != nullptr) {
-    free(local_buf);
-    local_buf = nullptr;
-  }
-  output_len = 0;
-  local_buf_cap = 0;
   updateAvailable = false;
   latestVersion.clear();
   releaseNotes.clear();
@@ -301,73 +262,76 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdateWorker() {
   processedSize = 0;
   totalSize = 0;
 
-  struct localBufCleaner {
-    char** bufPtr;
-    ~localBufCleaner() {
-      if (*bufPtr) {
-        free(*bufPtr);
-        *bufPtr = nullptr;
-      }
-      output_len = 0;
-      local_buf_cap = 0;
-    }
-  } localBufCleaner = {&local_buf};
+  esp_http_client_config_t client_config = {};
+  client_config.url = releaseUrl();
+  client_config.buffer_size = 2048;
+  client_config.buffer_size_tx = 1024;
+  client_config.timeout_ms = 25000;
+  client_config.crt_bundle_attach = esp_crt_bundle_attach;
+  client_config.keep_alive_enable = false;
 
-  esp_http_client_handle_t client_handle = esp_http_client_init(&client_config);
-  if (!client_handle) {
+  esp_http_client_handle_t client = esp_http_client_init(&client_config);
+  if (!client) {
     Serial.printf("[%lu] [OTA] HTTP Client Handle Failed\n", millis());
     return INTERNAL_UPDATE_ERROR;
   }
+  struct ClientCleaner {
+    esp_http_client_handle_t client;
+    ~ClientCleaner() { esp_http_client_cleanup(client); }
+  } clientCleaner = {client};
 
-  esp_err = esp_http_client_set_header(client_handle, "User-Agent", "Inx-ESP32-" INX_VERSION);
+  esp_err_t esp_err = esp_http_client_set_header(client, "User-Agent", "Inx-ESP32-" INX_VERSION);
   if (esp_err != ESP_OK) {
     Serial.printf("[%lu] [OTA] esp_http_client_set_header Failed : %s\n", millis(), esp_err_to_name(esp_err));
-    esp_http_client_cleanup(client_handle);
     return INTERNAL_UPDATE_ERROR;
   }
 
   vTaskDelay(pdMS_TO_TICKS(200));
   esp_task_wdt_reset();
 
-  esp_err = esp_http_client_perform(client_handle);
-
-  esp_task_wdt_reset();
-  if (esp_err != ESP_OK) {
-    Serial.printf("[%lu] [OTA] esp_http_client_perform Failed : %s\n", millis(), esp_err_to_name(esp_err));
-    esp_http_client_cleanup(client_handle);
-    return HTTP_ERROR;
+  int statusCode = 0;
+  for (int hop = 0;; ++hop) {
+    esp_err = esp_http_client_open(client, 0);
+    if (esp_err != ESP_OK) {
+      Serial.printf("[%lu] [OTA] esp_http_client_open Failed : %s\n", millis(), esp_err_to_name(esp_err));
+      return HTTP_ERROR;
+    }
+    esp_http_client_fetch_headers(client);
+    esp_task_wdt_reset();
+    statusCode = esp_http_client_get_status_code(client);
+    if (!isRedirect(statusCode) || hop >= kMaxReleaseRedirects) break;
+    esp_http_client_flush_response(client, nullptr);
+    if (esp_http_client_set_redirection(client) != ESP_OK) break;
+    esp_http_client_close(client);
   }
 
-  const int statusCode = esp_http_client_get_status_code(client_handle);
   if (statusCode != 200) {
     Serial.printf("[%lu] [OTA] GitHub returned HTTP %d\n", millis(), statusCode);
-    esp_http_client_cleanup(client_handle);
+    if (statusCode > 0) failureDetail = "GitHub answered HTTP " + std::to_string(statusCode);
     return HTTP_ERROR;
   }
 
-  esp_err = esp_http_client_cleanup(client_handle);
-  if (esp_err != ESP_OK) {
-    Serial.printf("[%lu] [OTA] esp_http_client_cleanupp Failed : %s\n", millis(), esp_err_to_name(esp_err));
-    return INTERNAL_UPDATE_ERROR;
-  }
-
+  JsonDocument filter;
   filter["tag_name"] = true;
   filter["body"] = true;
   filter["assets"][0]["name"] = true;
   filter["assets"][0]["browser_download_url"] = true;
   filter["assets"][0]["size"] = true;
-  if (local_buf == nullptr || output_len <= 0) {
-    Serial.printf("[%lu] [OTA] Empty HTTP body (len=%d)\n", millis(), output_len);
+
+  JsonDocument doc;
+  HttpBodyReader body(client);
+  const DeserializationError error = deserializeJson(doc, body, DeserializationOption::Filter(filter));
+  if (body.failed()) {
+    Serial.printf("[%lu] [OTA] Connection dropped after %u bytes\n", millis(), static_cast<unsigned>(body.bytesRead()));
+    failureDetail = "the connection dropped after " + std::to_string(body.bytesRead()) + " bytes";
     return HTTP_ERROR;
   }
-
-  const DeserializationError error = deserializeJson(doc, local_buf, DeserializationOption::Filter(filter));
   if (error) {
-    Serial.printf("[%lu] [OTA] JSON parse failed: %s (%d bytes, cap %u, free heap %u)\n", millis(), error.c_str(),
-                  output_len, static_cast<unsigned>(kMaxReleaseJsonBytes),
-                  static_cast<unsigned>(ESP.getFreeHeap()));
-    failureDetail = std::string(error.c_str()) + " after " + std::to_string(output_len) + " bytes";
-    return JSON_PARSE_ERROR;
+    Serial.printf("[%lu] [OTA] JSON parse failed: %s (%u bytes, free heap %u, largest block %u)\n", millis(),
+                  error.c_str(), static_cast<unsigned>(body.bytesRead()), static_cast<unsigned>(ESP.getFreeHeap()),
+                  static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)));
+    failureDetail = std::string(error.c_str()) + " after " + std::to_string(body.bytesRead()) + " bytes";
+    return error == DeserializationError::NoMemory ? OOM_ERROR : JSON_PARSE_ERROR;
   }
 
   if (!doc["tag_name"].is<std::string>()) {

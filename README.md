@@ -10,6 +10,15 @@ E-inx is a community firmware for Xteink e-paper readers, forked from [Inx](http
 
 ![](./docs/images/cover.jpg)
 
+## What's New in E-inx 1.20.9-3
+
+- **Check for Updates no longer fails with "Could not read the GitHub release details".** The reader
+  needed one 9.5 KB block of free memory for GitHub's reply while the secure connection was open. When it
+  wasn't there, the start of the reply was lost. The reply is now read as it arrives, a few hundred bytes at
+  a time. A connection that drops now shows as a network error, and a real lack of memory as a memory error.
+- If your reader is on 1.20.9-2 or earlier and shows that message, install this update by uploading
+  `firmware.bin` on the web manager's **Update** page.
+
 ## What's New in E-inx 1.20.9-2
 
 - **Some color covers drew with dark or inverted stripes** every few lines, on the cover page, sleep screen
