@@ -10,6 +10,21 @@ E-inx is a community firmware for Xteink e-paper readers, forked from [Inx](http
 
 ![](./docs/images/cover.jpg)
 
+## What's New in E-inx 1.20.9-2
+
+- **Some color covers drew with dark or inverted stripes** every few lines, on the cover page, sleep screen
+  and thumbnails. This came from JPEGs whose color is stored at half height (8×16-pixel blocks, common in
+  calibre-made EPUBs). They now draw cleanly. A thumbnail made before this update keeps its stripes: open
+  the book and choose **Regenerate Thumbnail** from the reader menu.
+- **Refreshing the library from the web manager no longer restarts the reader.** The refresh ran out of
+  stack while making a thumbnail for each new book. The same applied to the refresh the Library page runs
+  after an upload or delete. The refresh now also takes turns with the web manager on the SD card.
+- **New books appear without a manual refresh.** Uploading, deleting or renaming in the web manager, or
+  sending a book over Bluetooth, marks the library index out of date. The device's Library and the web
+  manager's Library rebuild it the next time they open.
+- A refresh that stops partway no longer leaves an empty library: the new index replaces the old one only
+  once it is complete.
+
 ## What's New in E-inx 1.20.9
 
 Frees about 1.1 MB of flash (the firmware drops from 97% to 80% of its partition), so later updates have room.

@@ -52,6 +52,7 @@
 #include "html/SettingsPageHtml.generated.h"
 #include "html/TagsPageHtml.generated.h"
 #include "html/UpdatePageHtml.generated.h"
+#include "util/SdIoMutex.h"
 #ifndef INX_SIMULATOR_WEB_ONLY
 #include "activity/settings/LibraryIndexer.h"
 #include "state/BookState.h"
@@ -258,6 +259,17 @@ void clearEpubCacheIfNeeded(const String& filePath) {
   }
 #else
   (void)filePath;
+#endif
+}
+
+// Book files changed: the device and web libraries rebuild their index the next time they open.
+void markLibraryStale(const String& changedPath = String()) {
+#ifndef INX_SIMULATOR_WEB_ONLY
+  if (changedPath.isEmpty() || LibraryIndexer::isBookName(changedPath.c_str())) {
+    LibraryIndexer::markStale();
+  }
+#else
+  (void)changedPath;
 #endif
 }
 
@@ -858,9 +870,14 @@ void webLibraryIndexTask(void*) {
   webLibraryIndexTotal = 0;
   webLibraryIndexPath[0] = '\0';
 
-  FsFile root = SdMan.open("/");
+  FsFile root;
+  {
+    SdIoMutex::Lock lock;
+    root = SdMan.open("/");
+  }
   if (root) {
     webLibraryIndexTotal = LibraryIndexer::countBooks(root);
+    SdIoMutex::Lock lock;
     root.close();
   }
 
@@ -881,6 +898,24 @@ void webLibraryIndexTask(void*) {
   SETTINGS.saveToFile();
   webLibraryIndexing = false;
   vTaskDelete(nullptr);
+}
+
+// Starts the background rebuild unless one is already running. False only when the task can't be created.
+bool startWebLibraryIndex() {
+  if (webLibraryIndexing) {
+    return true;
+  }
+  webLibraryIndexing = true;
+  webLibraryIndexCurrent = 0;
+  webLibraryIndexTotal = 0;
+  webLibraryIndexPath[0] = '\0';
+  if (xTaskCreate(webLibraryIndexTask, "WebLibIndex", LibraryIndexer::kTaskStackBytes, nullptr, 1, nullptr) != pdPASS) {
+    Serial.printf("[%lu] [WEB] Library refresh task not created (free heap %u, largest block %u)\n", millis(),
+                  static_cast<unsigned>(ESP.getFreeHeap()), static_cast<unsigned>(ESP.getMaxAllocHeap()));
+    webLibraryIndexing = false;
+    return false;
+  }
+  return true;
 }
 #endif
 }  // namespace
@@ -1105,7 +1140,13 @@ void LocalServer::handleClient() {
     lastDebugPrint = millis();
   }
 
-  server->handleClient();
+  {
+    // Request handlers read and write the SD card; the library refresh task does too. SdFat isn't safe for
+    // two tasks at once, so each request runs between the refresh's per-book steps.
+    SdIoMutex::Lock sdLock;
+    server->handleClient();
+  }
+  yield();  // hand the SD lock to the refresh task if it is waiting (same priority, so it wouldn't preempt)
 
   if (firmwareRestartAt != 0 && static_cast<long>(millis() - firmwareRestartAt) >= 0) {
     firmwareRestartAt = 0;
@@ -1911,6 +1952,12 @@ void LocalServer::handleLibraryData() const {
                "\"tag\":\"Manga\",\"type\":\"XTC\",\"size\":524288,\"coverUrl\":\"\",\"progress\":12,"
                "\"readingTimeMs\":900000,\"pagesRead\":18,\"sessions\":2}]}");
 #else
+  // Books changed since the last index (an upload from the Files page, a delete, a rename): rebuild in the
+  // background and list what the current index has meanwhile; the page polls until the rebuild finishes.
+  if (LibraryIndexer::hasIndex() && LibraryIndexer::isStale()) {
+    startWebLibraryIndex();
+  }
+
   std::vector<IndexedBookInfo> books;
   const bool hasIndex = loadIndexedBooksWithTags(books);
   std::sort(books.begin(), books.end(), [](const IndexedBookInfo& a, const IndexedBookInfo& b) {
@@ -2077,23 +2124,10 @@ void LocalServer::handleLibraryIndexRefresh() const {
 #ifdef INX_SIMULATOR_WEB_ONLY
   server->send(501, "application/json", "{\"ok\":false,\"error\":\"unavailable_in_simulator\"}");
 #else
-  if (webLibraryIndexing) {
-    server->send(200, "application/json", "{\"ok\":true,\"indexing\":true}");
+  if (!startWebLibraryIndex()) {
+    server->send(503, "text/plain", "Not enough free memory to refresh the library. Try again in a moment.");
     return;
   }
-
-  webLibraryIndexing = true;
-  webLibraryIndexCurrent = 0;
-  webLibraryIndexTotal = 0;
-  webLibraryIndexPath[0] = '\0';
-
-  BaseType_t created = xTaskCreate(webLibraryIndexTask, "WebLibIndex", 4096, nullptr, 1, nullptr);
-  if (created != pdPASS) {
-    webLibraryIndexing = false;
-    server->send(500, "application/json", "{\"ok\":false,\"error\":\"task\"}");
-    return;
-  }
-
   server->send(200, "application/json", "{\"ok\":true,\"indexing\":true}");
 #endif
 }
@@ -2419,6 +2453,7 @@ void LocalServer::handleUpload() const {
         if (!filePath.endsWith("/")) filePath += "/";
         filePath += uploadFileName;
         clearEpubCacheIfNeeded(filePath);
+        markLibraryStale(filePath);
       }
     }
   } else if (upload.status == UPLOAD_FILE_ABORTED) {
@@ -2482,6 +2517,7 @@ void LocalServer::handleCreateFolder() const {
 
   if (SdMan.mkdir(folderPath.c_str())) {
     Serial.printf("[%lu] [WEB] Folder created successfully: %s\n", millis(), folderPath.c_str());
+    markLibraryStale();
     server->send(200, "text/plain", "Folder created: " + folderName);
   } else {
     Serial.printf("[%lu] [WEB] Failed to create folder: %s\n", millis(), folderPath.c_str());
@@ -2553,6 +2589,7 @@ void LocalServer::handleDelete() const {
 
   if (success) {
     Serial.printf("[%lu] [WEB] Successfully deleted: %s\n", millis(), itemPath.c_str());
+    markLibraryStale();
     server->send(200, "text/plain", "Deleted successfully");
   } else {
     Serial.printf("[%lu] [WEB] Failed to delete: %s\n", millis(), itemPath.c_str());
@@ -2683,6 +2720,7 @@ void LocalServer::handleRename() const {
   }
 
   Serial.printf("[%lu] [WEB] Successfully renamed: %s -> %s\n", millis(), itemPath.c_str(), newPath.c_str());
+  markLibraryStale();
   server->send(200, "text/plain", "Renamed successfully");
 }
 

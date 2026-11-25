@@ -171,7 +171,6 @@ constexpr int LIB_BOOK_LIST_BADGE_ICON_SIZE = 24;
 constexpr int LIB_SUBHEADING_HEIGHT = 36;
 constexpr int LIB_SUBHEADING_BOTTOM_THEME_EXTRA_HEIGHT = 8;
 constexpr uint32_t LIBRARY_TASK_STACK_SIZE = 8192;
-constexpr uint32_t LIBRARY_INDEX_TASK_STACK_SIZE = 6144;
 constexpr size_t LIBRARY_MAX_IN_MEMORY_ITEMS = 256;
 constexpr uint32_t LIBRARY_MIN_FREE_HEAP_FOR_APPEND = 28000;
 constexpr const char* TAG_UNTAGGED_KEY = "\x01";
@@ -1919,7 +1918,7 @@ void LibraryActivity::startLibraryIndexing() {
         activity->updateRequired = true;
         vTaskDelete(nullptr);
       },
-      "LibIdxBtnTask", LIBRARY_INDEX_TASK_STACK_SIZE, this, 1, nullptr);
+      "LibIdxBtnTask", LibraryIndexer::kTaskStackBytes, this, 1, nullptr);
 
   if (created != pdPASS) {
     isIndexing_ = false;
@@ -1971,6 +1970,11 @@ void LibraryActivity::onEnter() {
   } else {
     loadAllBooksRecursive();
     updateRequired = true;
+  }
+
+  // Books were added, removed or renamed (web upload, Bluetooth transfer) since the last index.
+  if (SETTINGS.useLibraryIndex && LibraryIndexer::hasIndex() && LibraryIndexer::isStale()) {
+    startLibraryIndexing();
   }
 }
 

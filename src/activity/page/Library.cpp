@@ -177,6 +177,10 @@ void Library::onEnter() {
   indexingPopupVisible_ = false;
   indexingDisplayedProgress_ = -1;
   loadIndexedItems();
+  if (LibraryIndex::hasIndex() && LibraryIndexer::isStale()) {
+    // Books were added, removed or renamed (web upload, Bluetooth transfer) since the last index.
+    startIndexing();
+  }
   if (!indexLoaded_) {
     // With no usable index, make the recovery action obvious and immediately
     // actionable: the refresh control owns focus when the page opens.
@@ -1605,7 +1609,6 @@ void Library::startIndexing() {
   indexingPopupVisible_ = true;
   ScreenComponents::fillPopupProgress(renderer, indexingPopupLayout_, 0);
 
-  constexpr uint32_t taskStackSize = 6144;
   const BaseType_t created = xTaskCreate(
       [](void* parameter) {
         auto* page = static_cast<Library*>(parameter);
@@ -1625,7 +1628,7 @@ void Library::startIndexing() {
         page->requestRender();
         vTaskDelete(nullptr);
       },
-      "LibIdxBtnTask", taskStackSize, this, 1, nullptr);
+      "LibIdxBtnTask", LibraryIndexer::kTaskStackBytes, this, 1, nullptr);
 
   if (created != pdPASS) {
     isIndexing_ = false;
