@@ -46,6 +46,7 @@
 #include "system/Fonts.h"
 #include "system/MappedInputManager.h"
 #include "system/UiTheme.h"
+#include "util/BookCovers.h"
 #include "util/StringUtils.h"
 
 extern bool sdCardAvailable;

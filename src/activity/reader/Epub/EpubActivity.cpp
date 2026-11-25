@@ -1647,6 +1647,11 @@ void EpubActivity::regenerateThumbnail() {
   SdMan.remove(thumbPath.c_str());
   SdMan.remove(thumbJpegPath.c_str());
   SdMan.remove(smallThumbPath.c_str());
+  // The cover page and sleep screen images are made again from the book the next time they are drawn.
+  for (const bool cropped : {false, true}) {
+    SdMan.remove(epub->getCoverBmpPath(cropped).c_str());
+    SdMan.remove(epub->getCoverJpegPath(cropped).c_str());
+  }
 
   // Free the SD reader font around the heap-intensive JPEG resize so it can't OOM (then reload it).
   bool ok = false;

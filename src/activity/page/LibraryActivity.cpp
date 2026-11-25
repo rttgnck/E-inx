@@ -1893,15 +1893,6 @@ void LibraryActivity::startLibraryIndexing() {
   BaseType_t created = xTaskCreate(
       [](void* param) {
         auto* activity = static_cast<LibraryActivity*>(param);
-
-        FsFile root = SdMan.open("/");
-        if (root) {
-          activity->indexingTotal_ = LibraryIndexer::countBooks(root);
-          root.close();
-        }
-
-        vTaskDelay(pdMS_TO_TICKS(10));
-
         LibraryIndexer::indexAll([activity](int current, int total, const char*) {
           activity->indexingProgress_ = current;
           activity->indexingTotal_ = total;
@@ -1963,6 +1954,14 @@ void LibraryActivity::onEnter() {
     xTaskCreate(&LibraryActivity::taskTrampoline, "LibraryTask", LIBRARY_TASK_STACK_SIZE, this, 1, &displayTaskHandle);
   }
 
+  // Books were added, removed or renamed (web upload, Bluetooth transfer) since the last index. Rebuild first
+  // and load once it finishes (loop() reloads on libraryIndexReloadRequested_): loading alongside the rebuild
+  // put two tasks on the SD card and two cover decodes on the heap at once, and restarted the reader.
+  if (SETTINGS.useLibraryIndex && LibraryIndexer::hasIndex() && LibraryIndexer::isStale()) {
+    startLibraryIndexing();
+    return;
+  }
+
   // Folder/List/Tag loads are fast enough not to need a loading placeholder - only shelf mode's flat
   // all-books scan, plus the cover thumbnail decodes right after, is slow enough to warrant one.
   if (currentViewMode == ViewMode::SHELF_VIEW) {
@@ -1970,11 +1969,6 @@ void LibraryActivity::onEnter() {
   } else {
     loadAllBooksRecursive();
     updateRequired = true;
-  }
-
-  // Books were added, removed or renamed (web upload, Bluetooth transfer) since the last index.
-  if (SETTINGS.useLibraryIndex && LibraryIndexer::hasIndex() && LibraryIndexer::isStale()) {
-    startLibraryIndexing();
   }
 }
 
@@ -2025,6 +2019,11 @@ void LibraryActivity::beginLibraryLoadWithLoadingScreen() {
 void LibraryActivity::onExit() {
   displayTaskStopRequested_ = true;
   isInitialLoading_ = false;
+
+  // The indexing task reports progress into this activity; let it finish before the activity goes away.
+  while (isIndexing_) {
+    vTaskDelay(pdMS_TO_TICKS(10));
+  }
 
   const unsigned long loadStopStart = millis();
   while (initialLoadTaskHandle_ && millis() - loadStopStart < 5000) {
@@ -2134,8 +2133,17 @@ void LibraryActivity::loop() {
       basepath = "/";
     }
     resetNavigation();
+    if (currentViewMode == ViewMode::SHELF_VIEW) {
+      beginLibraryLoadWithLoadingScreen();
+      return;
+    }
     loadAllBooksRecursive();
     updateRequired = true;
+  }
+
+  // The rebuild replaces the index the item lists came from; act on input again once it has reloaded.
+  if (isIndexing_) {
+    return;
   }
 
   if (letterPickerVisible_) {

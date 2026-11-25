@@ -10,6 +10,17 @@ E-inx is a community firmware for Xteink e-paper readers, forked from [Inx](http
 
 ![](./docs/images/cover.jpg)
 
+## What's New in E-inx 1.20.9-4
+
+- **Opening the Library no longer restarts the reader after books are added.** When the library was out of
+  date, the original Library page loaded the shelf, with its cover images, while rebuilding the index on the
+  SD card at the same time. It now rebuilds first ("Refreshing library") and then loads.
+- **Regenerate Thumbnail outside the reader.** It makes a new thumbnail and cover from the book itself. In
+  the original layout it's in **Menu → Recents → (book) → Book options** and in the book editor (long-press a
+  book in the Library). In the New UI it's in the book menu (long-press) on Home and in the Library.
+- Regenerate Thumbnail in the reader menu now also clears the cover page and sleep screen images, so a
+  striped cover there is redrawn too.
+
 ## What's New in E-inx 1.20.9-3
 
 - **Check for Updates no longer fails with "Could not read the GitHub release details".** The reader

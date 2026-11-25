@@ -5,11 +5,12 @@
 
 #include "Home.h"
 
-#include "HomeSubPage.h"
-
 #include <Arduino.h>
 #include <GfxRenderer.h>
 #include <SDCardManager.h>
+#include <esp_task_wdt.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 #include <algorithm>
 #include <cstdlib>
@@ -17,22 +18,21 @@
 #include <functional>
 #include <string>
 
-#include <esp_task_wdt.h>
-#include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
-
+#include "HomeSubPage.h"
 #include "components/global/PopUp.h"
+#include "components/widget/bookshelf/Bookshelf.h"
 #include "components/widget/grid/Grid.h"
 #include "components/widget/grid2x2/Grid2x2.h"
 #include "components/widget/list/List.h"
-#include "components/widget/bookshelf/Bookshelf.h"
 #include "components/widget/verticalbookshelf/VerticalBookshelf.h"
 #include "images/Hamburger.h"
 #include "state/RecentBooks.h"
 #include "state/SystemSetting.h"
 #include "system/Fonts.h"
 #include "system/MappedInputManager.h"
+#include "system/ScreenComponents.h"
 #include "system/UiLayout.h"
+#include "util/BookCovers.h"
 
 extern void onGoToLibrary(std::string path);
 extern void onGoToReader(std::string path);
@@ -43,6 +43,10 @@ extern void openHomeSubPage(HomeSubPage::Section section);
 extern void onGoToStatistics();
 
 namespace {
+constexpr const char* kRemoveRecentAction = "Remove Recent";
+constexpr const char* kDeleteCacheAction = "Delete cache";
+constexpr const char* kRegenerateThumbnailAction = "Regenerate Thumbnail";
+constexpr const char* kViewDescriptionAction = "View description";
 
 constexpr unsigned long kDoubleBackWindowMs = 450;
 constexpr unsigned long kConfirmLongPressMs = 500;
@@ -558,7 +562,7 @@ bool Home::recentPopupInput() {
     return true;
   }
   if (mappedInput.wasPressed(itemNextButton())) {
-    recentPopupAction_ = std::min(2, recentPopupAction_ + 1);
+    recentPopupAction_ = std::min(static_cast<int>(recentPopupActions().size()) - 1, recentPopupAction_ + 1);
     if (restoreRecentPopupPageBuffer()) {
       renderRecentPopup();
       renderer.displayBuffer();
@@ -568,10 +572,18 @@ bool Home::recentPopupInput() {
     return true;
   }
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    if (recentPopupAction_ == 0) {
+    const std::string action = recentPopupActions()[static_cast<size_t>(recentPopupAction_)];
+    if (action == kRemoveRecentAction) {
       removeSelectedRecent();
-    } else if (recentPopupAction_ == 1) {
+    } else if (action == kDeleteCacheAction) {
       deleteSelectedRecentCache();
+    } else if (action == kRegenerateThumbnailAction) {
+      ScreenComponents::drawPopup(renderer, "Updating thumbnail");
+      if (!BookCovers::regenerate(recentPopupPath_)) {
+        ScreenComponents::drawPopup(renderer, "Could not make a thumbnail");
+        vTaskDelay(pdMS_TO_TICKS(1500));
+      }
+      invalidateGridPageBuffer();
     } else {
       const std::string path = recentPopupPath_;
       recentPopupPath_.clear();
@@ -589,8 +601,15 @@ bool Home::recentPopupInput() {
   return false;
 }
 
+std::vector<std::string> Home::recentPopupActions() const {
+  std::vector<std::string> actions = {kRemoveRecentAction, kDeleteCacheAction};
+  if (BookCovers::supports(recentPopupPath_)) actions.push_back(kRegenerateThumbnailAction);
+  actions.push_back(kViewDescriptionAction);
+  return actions;
+}
+
 void Home::renderRecentPopup() const {
-  const std::vector<std::string> actions = {"Remove Recent", "Delete cache", "View description"};
+  const std::vector<std::string> actions = recentPopupActions();
   const PopUpBounds box = PopUp::bounds(renderer, static_cast<int>(actions.size()), top());
   PopUp::background(renderer, box);
   PopUp::title(renderer, box, "Book");
