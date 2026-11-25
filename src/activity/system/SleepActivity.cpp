@@ -439,6 +439,10 @@ bool SleepActivity::shouldEnablePowerDoublePressImageAdvance(const bool sleptFro
   return showingCustomImage && SETTINGS.sleepImagePowerDoublePress;
 }
 
+void SleepActivity::purgeCoverDisplayCaches(GfxRenderer& renderer, const std::string& imagePath) {
+  purgeSleepImageDisplayCaches(renderer, imagePath);
+}
+
 bool SleepActivity::regenerateLastReadCoverForSleep(GfxRenderer* renderer) {
   if (APP_STATE.lastRead.empty()) {
     return false;

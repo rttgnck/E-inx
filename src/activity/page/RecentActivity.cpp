@@ -6,8 +6,8 @@
 #include "RecentActivity.h"
 
 #include <Bitmap.h>
-#include <Epub/BookMetadataCache.h>
 #include <EpdFontFamily.h>
+#include <Epub/BookMetadataCache.h>
 #include <GfxRenderer.h>
 #include <HalGPIO.h>
 #include <HardwareSerial.h>
@@ -22,7 +22,6 @@
 #include <cstring>
 #include <functional>
 #include <memory>
-#include <sstream>
 #include <vector>
 
 #include "../reader/Epub/EpubActivity.h"
@@ -47,6 +46,7 @@
 #include "system/Fonts.h"
 #include "system/MappedInputManager.h"
 #include "system/UiTheme.h"
+#include "util/BookCovers.h"
 #include "util/StringUtils.h"
 
 extern bool sdCardAvailable;

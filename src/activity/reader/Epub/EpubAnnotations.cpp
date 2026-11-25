@@ -12,7 +12,6 @@
 #include <algorithm>
 #include <cstdio>
 #include <map>
-#include <sstream>
 
 #include "state/EpubNotesIndex.h"
 
@@ -21,11 +20,18 @@ namespace {
 constexpr uint32_t kAnnMagicV3 = 0x334E4E41;  // "ANN3"
 
 std::vector<std::string> splitAnnotationWords(const std::string& text) {
+  // Same split as `istringstream >> word` (C-locale whitespace), without pulling libstdc++'s stream and
+  // locale code into the image (~120 KB of flash).
   std::vector<std::string> words;
-  std::istringstream iss(text);
-  std::string w;
-  while (iss >> w) {
-    words.push_back(std::move(w));
+  const auto isSpace = [](const char c) {
+    return c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' || c == '\r';
+  };
+  size_t i = 0;
+  while (i < text.size()) {
+    while (i < text.size() && isSpace(text[i])) ++i;
+    const size_t start = i;
+    while (i < text.size() && !isSpace(text[i])) ++i;
+    if (i > start) words.emplace_back(text, start, i - start);
   }
   return words;
 }

@@ -120,6 +120,7 @@ class Library final : public Page {
   void renderItemPopup() const;
   void markFavorite(const LibraryIndex::Book& book);
   void resetBook(const LibraryIndex::Book& book);
+  void regenerateThumbnail(const LibraryIndex::Book& book);
   void eraseBook(const LibraryIndex::Book& book);
   void eraseFolder(const LibraryIndex::Book& folder);
 

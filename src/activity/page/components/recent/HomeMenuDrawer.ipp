@@ -271,6 +271,7 @@ class RecentActivity::HomeMenuDrawer {
     RemoveDeleteCache,
     DeleteBookMetadata,
     ResetProgressStats,
+    RegenerateThumbnail,
   };
 
   struct DrawerRow {
@@ -970,6 +971,13 @@ class RecentActivity::HomeMenuDrawer {
     reset.actionId = static_cast<int>(RecentBookAction::ResetProgressStats);
     rows_.push_back(std::move(reset));
 
+    if (BookCovers::supports(selectedBookRow_.bookPath)) {
+      DrawerRow thumbnail;
+      thumbnail.label = "Regenerate Thumbnail";
+      thumbnail.actionId = static_cast<int>(RecentBookAction::RegenerateThumbnail);
+      rows_.push_back(std::move(thumbnail));
+    }
+
     mode_ = HomeDrawerMode::RecentsActions;
     selected_ = 0;
     scroll_ = 0;
@@ -1036,6 +1044,14 @@ class RecentActivity::HomeMenuDrawer {
         break;
       case RecentBookAction::ResetProgressStats:
         resetSelectedBookProgressAndStats();
+        break;
+      case RecentBookAction::RegenerateThumbnail:
+        renderLoading("Book options", "Updating thumbnail");
+        if (!BookCovers::regenerate(selectedBookRow_.bookPath, renderer_)) {
+          renderLoading("Book options", "Could not make a thumbnail");
+          vTaskDelay(pdMS_TO_TICKS(1500));
+        }
+        owner_.freeRecentPageBuffer();
         break;
       default:
         break;

@@ -171,7 +171,6 @@ constexpr int LIB_BOOK_LIST_BADGE_ICON_SIZE = 24;
 constexpr int LIB_SUBHEADING_HEIGHT = 36;
 constexpr int LIB_SUBHEADING_BOTTOM_THEME_EXTRA_HEIGHT = 8;
 constexpr uint32_t LIBRARY_TASK_STACK_SIZE = 8192;
-constexpr uint32_t LIBRARY_INDEX_TASK_STACK_SIZE = 6144;
 constexpr size_t LIBRARY_MAX_IN_MEMORY_ITEMS = 256;
 constexpr uint32_t LIBRARY_MIN_FREE_HEAP_FOR_APPEND = 28000;
 constexpr const char* TAG_UNTAGGED_KEY = "\x01";
@@ -1894,15 +1893,6 @@ void LibraryActivity::startLibraryIndexing() {
   BaseType_t created = xTaskCreate(
       [](void* param) {
         auto* activity = static_cast<LibraryActivity*>(param);
-
-        FsFile root = SdMan.open("/");
-        if (root) {
-          activity->indexingTotal_ = LibraryIndexer::countBooks(root);
-          root.close();
-        }
-
-        vTaskDelay(pdMS_TO_TICKS(10));
-
         LibraryIndexer::indexAll([activity](int current, int total, const char*) {
           activity->indexingProgress_ = current;
           activity->indexingTotal_ = total;
@@ -1919,7 +1909,7 @@ void LibraryActivity::startLibraryIndexing() {
         activity->updateRequired = true;
         vTaskDelete(nullptr);
       },
-      "LibIdxBtnTask", LIBRARY_INDEX_TASK_STACK_SIZE, this, 1, nullptr);
+      "LibIdxBtnTask", LibraryIndexer::kTaskStackBytes, this, 1, nullptr);
 
   if (created != pdPASS) {
     isIndexing_ = false;
@@ -1962,6 +1952,14 @@ void LibraryActivity::onEnter() {
 
   if (displayTaskHandle == nullptr) {
     xTaskCreate(&LibraryActivity::taskTrampoline, "LibraryTask", LIBRARY_TASK_STACK_SIZE, this, 1, &displayTaskHandle);
+  }
+
+  // Books were added, removed or renamed (web upload, Bluetooth transfer) since the last index. Rebuild first
+  // and load once it finishes (loop() reloads on libraryIndexReloadRequested_): loading alongside the rebuild
+  // put two tasks on the SD card and two cover decodes on the heap at once, and restarted the reader.
+  if (SETTINGS.useLibraryIndex && LibraryIndexer::hasIndex() && LibraryIndexer::isStale()) {
+    startLibraryIndexing();
+    return;
   }
 
   // Folder/List/Tag loads are fast enough not to need a loading placeholder - only shelf mode's flat
@@ -2021,6 +2019,11 @@ void LibraryActivity::beginLibraryLoadWithLoadingScreen() {
 void LibraryActivity::onExit() {
   displayTaskStopRequested_ = true;
   isInitialLoading_ = false;
+
+  // The indexing task reports progress into this activity; let it finish before the activity goes away.
+  while (isIndexing_) {
+    vTaskDelay(pdMS_TO_TICKS(10));
+  }
 
   const unsigned long loadStopStart = millis();
   while (initialLoadTaskHandle_ && millis() - loadStopStart < 5000) {
@@ -2130,8 +2133,17 @@ void LibraryActivity::loop() {
       basepath = "/";
     }
     resetNavigation();
+    if (currentViewMode == ViewMode::SHELF_VIEW) {
+      beginLibraryLoadWithLoadingScreen();
+      return;
+    }
     loadAllBooksRecursive();
     updateRequired = true;
+  }
+
+  // The rebuild replaces the index the item lists came from; act on input again once it has reloaded.
+  if (isIndexing_) {
+    return;
   }
 
   if (letterPickerVisible_) {

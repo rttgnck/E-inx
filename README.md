@@ -10,6 +10,62 @@ E-inx is a community firmware for Xteink e-paper readers, forked from [Inx](http
 
 ![](./docs/images/cover.jpg)
 
+## What's New in E-inx 1.20.9-5
+
+- **Striped covers on the sleep screen and pictures inside books are redrawn.** The reader keeps finished
+  drawings of images to show them faster, and the drawings made before 1.20.9-2 kept their stripes even after
+  the cover was regenerated, because the image file itself never changed. Those old drawings are dropped once
+  after this update, so the first sleep screen and each picture take a moment longer the first time.
+- Regenerate Thumbnail also drops the saved full-screen drawings of the book's cover.
+
+## What's New in E-inx 1.20.9-4
+
+- **Opening the Library no longer restarts the reader after books are added.** When the library was out of
+  date, the original Library page loaded the shelf, with its cover images, while rebuilding the index on the
+  SD card at the same time. It now rebuilds first ("Refreshing library") and then loads.
+- **Regenerate Thumbnail outside the reader.** It makes a new thumbnail and cover from the book itself. In
+  the original layout it's in **Menu → Recents → (book) → Book options** and in the book editor (long-press a
+  book in the Library). In the New UI it's in the book menu (long-press) on Home and in the Library.
+- Regenerate Thumbnail in the reader menu now also clears the cover page and sleep screen images, so a
+  striped cover there is redrawn too.
+
+## What's New in E-inx 1.20.9-3
+
+- **Check for Updates no longer fails with "Could not read the GitHub release details".** The reader
+  needed one 9.5 KB block of free memory for GitHub's reply while the secure connection was open. When it
+  wasn't there, the start of the reply was lost. The reply is now read as it arrives, a few hundred bytes at
+  a time. A connection that drops now shows as a network error, and a real lack of memory as a memory error.
+- If your reader is on 1.20.9-2 or earlier and shows that message, install this update by uploading
+  `firmware.bin` on the web manager's **Update** page.
+
+## What's New in E-inx 1.20.9-2
+
+- **Some color covers drew with dark or inverted stripes** every few lines, on the cover page, sleep screen
+  and thumbnails. This came from JPEGs whose color is stored at half height (8×16-pixel blocks, common in
+  calibre-made EPUBs). They now draw cleanly. A thumbnail made before this update keeps its stripes: open
+  the book and choose **Regenerate Thumbnail** from the reader menu.
+- **Refreshing the library from the web manager no longer restarts the reader.** The refresh ran out of
+  stack while making a thumbnail for each new book. The same applied to the refresh the Library page runs
+  after an upload or delete. The refresh now also takes turns with the web manager on the SD card.
+- **New books appear without a manual refresh.** Uploading, deleting or renaming in the web manager, or
+  sending a book over Bluetooth, marks the library index out of date. The device's Library and the web
+  manager's Library rebuild it the next time they open.
+- A refresh that stops partway no longer leaves an empty library: the new index replaces the old one only
+  once it is complete.
+
+## What's New in E-inx 1.20.9
+
+Frees about 1.1 MB of flash (the firmware drops from 97% to 80% of its partition), so later updates have room.
+
+- **The largest reading size (18 pt, "Extra Large") now comes from the SD card.** Download
+  `sd-fonts-18pt.zip` from this release and copy its `fonts` folder to the root of the card, so it holds
+  `/fonts/Literata/` and `/fonts/Atkinson Hyperlegible/`. The glyphs are the same ones that were built in.
+  Without the files, Extra Large shows at 16 pt. Text the interface drew at 18 pt (the Flow home layout,
+  the end-of-book stats, the sleep clock's labels, About) now uses 16 pt.
+  `scripts/export_sd_font.py` regenerates the files from the font headers.
+- The web manager's pages are stored compressed and load faster on a weak connection; nothing else changes.
+- A word-splitting helper no longer pulls in C++ stream code (about 120 KB).
+
 ## What's New in E-inx 1.20.8-2
 
 Catches up with upstream Inx 1.0.20 (its `release/1.0.20` branch; upstream has not tagged 1.0.20 yet).

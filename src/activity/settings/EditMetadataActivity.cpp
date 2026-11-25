@@ -18,6 +18,7 @@
 #include "state/Statistics.h"
 #include "system/Fonts.h"
 #include "system/MappedInputManager.h"
+#include "util/BookCovers.h"
 #include "util/StringUtils.h"
 
 namespace {
@@ -68,7 +69,7 @@ bool ensureDirectoryPath(const std::string& path) {
   return SdMan.exists(path.c_str());
 }
 
-constexpr int kRowCount = 6;
+constexpr int kRowCount = 7;
 }  // namespace
 
 void EditMetadataActivity::onEnter() {
@@ -145,6 +146,12 @@ void EditMetadataActivity::activateSelected() {
       clearBookCache();
       break;
     case 5:
+      statusMessage = "Updating thumbnail...";
+      render();
+      statusMessage = BookCovers::regenerate(bookPath, renderer) ? "Thumbnail updated" : "Could not make a thumbnail";
+      render();
+      break;
+    case 6:
       save();
       break;
     default:
@@ -242,7 +249,8 @@ void EditMetadataActivity::render() {
   renderer.text.render(titleFont, 24, 24, "Edit Metadata", true, EpdFontFamily::BOLD);
   renderer.line.render(0, 58, screenW, 58, true);
 
-  const char* labels[kRowCount] = {"Title", "Author", "Language", "Favorite", "Clear Cache", "Save"};
+  const char* labels[kRowCount] = {"Title", "Author", "Language", "Favorite", "Clear Cache", "Regenerate Thumbnail",
+                                   "Save"};
   const int rowH = 54;
   const int firstY = 72;
   const int rowLh = renderer.text.getLineHeight(rowFont);
@@ -287,6 +295,8 @@ void EditMetadataActivity::render() {
   } else if (selected == 4) {
     confirmLabel = "Clear";
   } else if (selected == 5) {
+    confirmLabel = "Update";
+  } else if (selected == 6) {
     confirmLabel = "Save";
   }
   const auto lbls = mappedInput.mapLabels("\xC2\xAB Back", confirmLabel, "\xE2\x96\xB2", "\xE2\x96\xBC");

@@ -23,10 +23,6 @@
 #include "font/atkinson_hyperlegible_16_bolditalic.h"
 #include "font/atkinson_hyperlegible_16_italic.h"
 #include "font/atkinson_hyperlegible_16_regular.h"
-#include "font/atkinson_hyperlegible_18_bold.h"
-#include "font/atkinson_hyperlegible_18_bolditalic.h"
-#include "font/atkinson_hyperlegible_18_italic.h"
-#include "font/atkinson_hyperlegible_18_regular.h"
 #include "font/atkinson_hyperlegible_8_regular.h"
 #include "font/literata_10_bold.h"
 #include "font/literata_10_bolditalic.h"
@@ -44,10 +40,6 @@
 #include "font/literata_16_bolditalic.h"
 #include "font/literata_16_italic.h"
 #include "font/literata_16_regular.h"
-#include "font/literata_18_bold.h"
-#include "font/literata_18_bolditalic.h"
-#include "font/literata_18_italic.h"
-#include "font/literata_18_regular.h"
 #include "font/montserrat_clock_70_bold.h"
 #include "font/montserrat_clock_70_regular.h"
 
@@ -72,6 +64,8 @@
 #define LITERATA_12_FONT_ID (3002)
 #define LITERATA_14_FONT_ID (3003)
 #define LITERATA_16_FONT_ID (3004)
+// 18 pt is not in flash: this id draws the 16 pt face, and the reader uses /fonts/Literata/*_18.bin from
+// the SD card when present (FontManager::findSdFontId). Same for ATKINSON_HYPERLEGIBLE_18_FONT_ID.
 #define LITERATA_18_FONT_ID (3005)
 
 #define MONTSERRAT_CLOCK_70_FONT_ID (4001)

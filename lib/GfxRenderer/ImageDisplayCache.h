@@ -39,4 +39,6 @@ class ImageDisplayCache {
  private:
   static std::string pathFor(GfxRenderer& renderer, const std::string& sourcePath, int x, int y, int width, int height,
                              const ImageDisplayCacheOptions& options);
+  static std::string pathFor(GfxRenderer& renderer, const std::string& sourcePath, int x, int y, int width, int height,
+                             const ImageDisplayCacheOptions& options, bool darkMode);
 };

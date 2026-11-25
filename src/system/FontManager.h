@@ -31,6 +31,9 @@ class FontManager {
 
   static void initialize(GfxRenderer& renderer);
 
+  /** The SD font id for /fonts/<family> at `size` pt, or -1 if the card has none. */
+  static int findSdFontId(const std::string& family, int size);
+
   /** Points every interface font id, E-inx's and upstream's, at Atkinson Hyperlegible. */
   static void applyUiFont(GfxRenderer& renderer, bool modern);
 

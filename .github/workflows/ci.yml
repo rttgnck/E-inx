@@ -11,6 +11,10 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
+          # The PR's own commit, not GitHub's temporary merge of it into the base branch, and full history:
+          # the formatting check compares it with the base and looks at the upstream commits it merges.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
 
       - uses: actions/setup-python@v6
         with:
@@ -27,11 +31,28 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y clang-format-21
 
+      # Medium and high only; style notes (low) are advisory. Suppressions are in platformio.ini.
       - name: Run cppcheck
-        run: pio check --fail-on-defect low --fail-on-defect medium --fail-on-defect high
+        run: pio check --fail-on-defect medium --fail-on-defect high
 
+      # Only the lines this change touches, and not code merged unchanged from upstream Inx, so upstream's
+      # files are never reformatted (that would make every later upstream merge conflict on whitespace).
       - name: Run clang-format
-        run: PATH="/usr/lib/llvm-21/bin:$PATH" ./bin/clang-format-fix && git diff --exit-code || (echo "Please run 'bin/clang-format-fix' to fix formatting issues" && exit 1)
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          export PATH="/usr/lib/llvm-21/bin:$PATH"
+          git fetch --quiet --no-tags https://github.com/obijuankenobiii/inx.git \
+            '+refs/heads/*:refs/remotes/upstream/*' '+refs/tags/*:refs/remotes/upstream-tags/*'
+          if [ -n "$BASE_REF" ]; then
+            BASE=$(git merge-base "origin/$BASE_REF" HEAD)
+          elif [ -n "$BEFORE" ] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            BASE=$(git merge-base "$BEFORE" HEAD)
+          else
+            BASE=$(git rev-parse HEAD~1)
+          fi
+          python3 scripts/check_format_changed.py "$BASE"
 
       - name: Build Inx
         run: pio run

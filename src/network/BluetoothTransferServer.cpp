@@ -53,6 +53,7 @@ BleTransferStatus BluetoothTransferServer::status() const {
 #include <cstring>
 #include <functional>
 
+#include "activity/settings/LibraryIndexer.h"
 #include "state/SystemSetting.h"
 
 namespace {
@@ -935,6 +936,7 @@ void BluetoothTransferServer::poll() {
     notifyError("ERR_STORAGE", "Could not save the book to the library");
     return;
   }
+  LibraryIndexer::markStale();
 
   // The book is in place, so its metadata override can be written against its final path. This
   // is the same per-book override Edit Metadata writes, not a rewrite of the file — the EPUB

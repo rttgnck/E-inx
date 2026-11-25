@@ -8,6 +8,7 @@
 #include <EInkDisplay.h>
 #include <SDCardManager.h>
 #include <picojpeg.h>
+#include <picojpeg_mcu.h>
 
 #include <algorithm>
 #include <cmath>
@@ -581,8 +582,7 @@ bool JpegRender::render(FsFile& jpegFile, int x, int y, int targetWidth, int tar
           for (int bx = 0; bx < blocksPerMcuX; bx++) {
             const int pX = mcuX * blocksPerMcuX + bx;
             if (pX >= imgW) continue;
-            const int blockIdx = by * blocksPerMcuX + bx;
-            const int off = blockIdx * 64;
+            const int off = pjpegMcuOffset(bx * 8, by * 8);
             uint8_t gray = (imageInfo.m_comps == 1) ? imageInfo.m_pMCUBufR[off]
                                                     : grayFromRgb(imageInfo.m_pMCUBufR[off], imageInfo.m_pMCUBufG[off],
                                                                   imageInfo.m_pMCUBufB[off]);
@@ -594,7 +594,7 @@ bool JpegRender::render(FsFile& jpegFile, int x, int y, int targetWidth, int tar
           for (int bX = 0; bX < imageInfo.m_MCUWidth; bX++) {
             const int pX = mcuX * imageInfo.m_MCUWidth + bX;
             if (pX >= imgW) continue;
-            const int off = (bY / 8 * blocksPerMcuX + bX / 8) * 64 + (bY % 8) * 8 + (bX % 8);
+            const int off = pjpegMcuOffset(bX, bY);
             uint8_t gray = (imageInfo.m_comps == 1) ? imageInfo.m_pMCUBufR[off]
                                                     : grayFromRgb(imageInfo.m_pMCUBufR[off], imageInfo.m_pMCUBufG[off],
                                                                   imageInfo.m_pMCUBufB[off]);

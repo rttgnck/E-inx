@@ -148,13 +148,6 @@ void FontManager::initialize(GfxRenderer& renderer) {
   static EpdFontFamily literata16RegularFontFamily(&literata16RegularFont, &literata16BoldFont, &literata16ItalicFont,
                                                    &literata16BoldItalicFont);
 
-  static EpdFont literata18RegularFont(&literata_18_regular);
-  static EpdFont literata18BoldFont(&literata_18_bold);
-  static EpdFont literata18ItalicFont(&literata_18_italic);
-  static EpdFont literata18BoldItalicFont(&literata_18_bolditalic);
-  static EpdFontFamily literata18RegularFontFamily(&literata18RegularFont, &literata18BoldFont, &literata18ItalicFont,
-                                                   &literata18BoldItalicFont);
-
   static EpdFont atkinson_hyperlegible8RegularFont(&atkinson_hyperlegible_8_regular);
   static EpdFontFamily atkinson_hyperlegible8FontFamily(&atkinson_hyperlegible8RegularFont, nullptr, nullptr, nullptr);
 
@@ -190,14 +183,6 @@ void FontManager::initialize(GfxRenderer& renderer) {
       &atkinson_hyperlegible16RegularFont, &atkinson_hyperlegible16BoldFont, &atkinson_hyperlegible16ItalicFont,
       &atkinson_hyperlegible16BoldItalicFont);
 
-  static EpdFont atkinson_hyperlegible18RegularFont(&atkinson_hyperlegible_18_regular);
-  static EpdFont atkinson_hyperlegible18BoldFont(&atkinson_hyperlegible_18_bold);
-  static EpdFont atkinson_hyperlegible18ItalicFont(&atkinson_hyperlegible_18_italic);
-  static EpdFont atkinson_hyperlegible18BoldItalicFont(&atkinson_hyperlegible_18_bolditalic);
-  static EpdFontFamily atkinson_hyperlegible18FontFamily(
-      &atkinson_hyperlegible18RegularFont, &atkinson_hyperlegible18BoldFont, &atkinson_hyperlegible18ItalicFont,
-      &atkinson_hyperlegible18BoldItalicFont);
-
   static EpdFont montserratClock70RegularFont(&montserrat_clock_70_regular);
   static EpdFont montserratClock70BoldFont(&montserrat_clock_70_bold);
   static EpdFontFamily montserratClock70FontFamily(&montserratClock70RegularFont, &montserratClock70BoldFont, nullptr,
@@ -207,14 +192,15 @@ void FontManager::initialize(GfxRenderer& renderer) {
   renderer.insertFont(LITERATA_12_FONT_ID, literata12RegularFontFamily);
   renderer.insertFont(LITERATA_14_FONT_ID, literata14RegularFontFamily);
   renderer.insertFont(LITERATA_16_FONT_ID, literata16RegularFontFamily);
-  renderer.insertFont(LITERATA_18_FONT_ID, literata18RegularFontFamily);
+  // 18 pt lives on the SD card (see Fonts.h); without it, the 18 pt id draws 16 pt.
+  renderer.insertFont(LITERATA_18_FONT_ID, literata16RegularFontFamily);
 
   g_uiFonts[0] = &atkinson_hyperlegible8FontFamily;
   g_uiFonts[1] = &atkinson_hyperlegible10FontFamily;
   g_uiFonts[2] = &atkinson_hyperlegible12FontFamily;
   g_uiFonts[3] = &atkinson_hyperlegible14FontFamily;
   g_uiFonts[4] = &atkinson_hyperlegible16FontFamily;
-  g_uiFonts[5] = &atkinson_hyperlegible18FontFamily;
+  g_uiFonts[5] = &atkinson_hyperlegible16FontFamily;  // 18 pt is not in flash; interface 18 draws 16
   applyUiFont(renderer, false);  // main.cpp applies the saved choice once settings are loaded
   renderer.insertFont(MONTSERRAT_CLOCK_70_FONT_ID, montserratClock70FontFamily);
 
@@ -904,6 +890,18 @@ void FontManager::printFontStats() {
 /**
  * @brief Gets font ID for a specific family and size
  */
+int FontManager::findSdFontId(const std::string& family, const int size) {
+  if (!g_scannedForFonts) {
+    (void)scanSDFonts("/fonts", false);
+  }
+  for (const auto& e : g_sdFonts) {
+    if (e.size == size && e.family == family) {
+      return e.id;
+    }
+  }
+  return -1;
+}
+
 int FontManager::getFontId(const std::string& family, int size) {
   if (family == "Atkinson Hyperlegible") {
     switch (size) {

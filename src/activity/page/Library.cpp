@@ -8,6 +8,7 @@
 #include <Arduino.h>
 #include <GfxRenderer.h>
 #include <SDCardManager.h>
+#include <esp_task_wdt.h>
 
 #include <algorithm>
 #include <cctype>
@@ -18,16 +19,15 @@
 #include <unordered_set>
 #include <utility>
 
-#include <esp_task_wdt.h>
-
 #include "../settings/LibraryIndexer.h"
 #include "BitmapRender.h"
+#include "activity/page/components/global/PopUp.h"
+#include "images/CarretFilled.h"
 #include "images/Filter.h"
 #include "images/Hamburger.h"
 #include "images/LibraryViewGrid.h"
 #include "images/LibraryViewList.h"
 #include "images/LibraryViewThumb.h"
-#include "images/CarretFilled.h"
 #include "images/Refresh.h"
 #include "images/SortAsc.h"
 #include "images/SortDesc.h"
@@ -35,11 +35,11 @@
 #include "state/EpubNotesIndex.h"
 #include "state/RecentBooks.h"
 #include "state/Session.h"
+#include "state/SystemSetting.h"
 #include "system/Fonts.h"
 #include "system/ScreenComponents.h"
-#include "state/SystemSetting.h"
 #include "system/UiLayout.h"
-#include "activity/page/components/global/PopUp.h"
+#include "util/BookCovers.h"
 #include "util/SdIoMutex.h"
 
 extern void onGoToRecent();
@@ -177,6 +177,10 @@ void Library::onEnter() {
   indexingPopupVisible_ = false;
   indexingDisplayedProgress_ = -1;
   loadIndexedItems();
+  if (LibraryIndex::hasIndex() && LibraryIndexer::isStale()) {
+    // Books were added, removed or renamed (web upload, Bluetooth transfer) since the last index.
+    startIndexing();
+  }
   if (!indexLoaded_) {
     // With no usable index, make the recovery action obvious and immediately
     // actionable: the refresh control owns focus when the page opens.
@@ -1379,7 +1383,7 @@ bool Library::handleItemPopupInput() {
 
   const LibraryIndex::Book& book = items_[static_cast<size_t>(popupItemIndex_)];
   const bool folder = book.type == LibraryIndex::Book::Type::FOLDER;
-  const int actionCount = popupDeleteConfirm_ ? 2 : (folder ? 1 : 3);
+  const int actionCount = popupDeleteConfirm_ ? 2 : (folder ? 1 : (BookCovers::supports(book.path) ? 4 : 3));
   if (mappedInput.wasPressed(itemPrevButton())) {
     popupActionIndex_ = (popupActionIndex_ + actionCount - 1) % actionCount;
     requestRender();
@@ -1414,8 +1418,10 @@ bool Library::handleItemPopupInput() {
     markFavorite(book);
   } else if (popupActionIndex_ == 1) {
     eraseBook(book);
-  } else {
+  } else if (popupActionIndex_ == 2) {
     resetBook(book);
+  } else {
+    regenerateThumbnail(book);
   }
   return true;
 }
@@ -1435,6 +1441,7 @@ void Library::renderItemPopup() const {
     title = book.title.empty() ? "Book" : book.title;
     actions = {favoritePaths_.find(book.path) == favoritePaths_.end() ? "Mark as favorite" : "Remove favorite",
                "Delete Book", "Reset"};
+    if (BookCovers::supports(book.path)) actions.push_back("Regenerate Thumbnail");
   }
 
   const PopUpBounds box = PopUp::bounds(renderer, static_cast<int>(actions.size()));
@@ -1454,6 +1461,18 @@ void Library::markFavorite(const LibraryIndex::Book& book) {
   }
   popupItemIndex_ = -1;
   popupDeleteConfirm_ = false;
+  requestRender();
+}
+
+void Library::regenerateThumbnail(const LibraryIndex::Book& book) {
+  const std::string path = book.path;
+  popupItemIndex_ = -1;
+  popupDeleteConfirm_ = false;
+  ScreenComponents::drawPopup(renderer, "Updating thumbnail");
+  if (!BookCovers::regenerate(path, renderer)) {
+    ScreenComponents::drawPopup(renderer, "Could not make a thumbnail");
+    vTaskDelay(pdMS_TO_TICKS(1500));
+  }
   requestRender();
 }
 
@@ -1605,7 +1624,6 @@ void Library::startIndexing() {
   indexingPopupVisible_ = true;
   ScreenComponents::fillPopupProgress(renderer, indexingPopupLayout_, 0);
 
-  constexpr uint32_t taskStackSize = 6144;
   const BaseType_t created = xTaskCreate(
       [](void* parameter) {
         auto* page = static_cast<Library*>(parameter);
@@ -1625,7 +1643,7 @@ void Library::startIndexing() {
         page->requestRender();
         vTaskDelete(nullptr);
       },
-      "LibIdxBtnTask", taskStackSize, this, 1, nullptr);
+      "LibIdxBtnTask", LibraryIndexer::kTaskStackBytes, this, 1, nullptr);
 
   if (created != pdPASS) {
     isIndexing_ = false;

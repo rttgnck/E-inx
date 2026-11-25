@@ -8,6 +8,7 @@
 #include <HardwareSerial.h>
 #include <SdFat.h>
 #include <picojpeg.h>
+#include <picojpeg_mcu.h>
 #include <toojpeg.h>
 
 #include <algorithm>
@@ -292,7 +293,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
             int pX = mcuX * mcuWidth + bX;
             if (pX >= imgWidth) continue;
 
-            int off = (bY / 8 * (mcuWidth / 8) + bX / 8) * 64 + (bY % 8) * 8 + (bX % 8);
+            int off = pjpegMcuOffset(bX, bY);
             destRow[pX] = imageInfo.m_pMCUBufR[off];
           }
         }
@@ -307,7 +308,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
             int pX = mcuX * mcuWidth + bX;
             if (pX >= imgWidth) continue;
 
-            int off = (bY / 8 * (mcuWidth / 8) + bX / 8) * 64 + (bY % 8) * 8 + (bX % 8);
+            int off = pjpegMcuOffset(bX, bY);
 
             destRow[pX] = (rBuf[off] * 77 + gBuf[off] * 150 + bBuf[off] * 29) >> 8;
           }
@@ -497,7 +498,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternalCentered(FsFile& jpegFile, P
           int pX = mcuX * imageInfo.m_MCUWidth + bX;
           if (pX >= imageInfo.m_width) continue;
 
-          int off = (bY / 8 * (imageInfo.m_MCUWidth / 8) + bX / 8) * 64 + (bY % 8) * 8 + (bX % 8);
+          int off = pjpegMcuOffset(bX, bY);
           uint8_t g;
 
           if (imageInfo.m_comps == 1) {
@@ -685,7 +686,7 @@ bool JpegToBmpConverter::jpegFileToThumbnailBmp(FsFile& jpegFile, Print& bmpOut,
           int pX = mcuX * imageInfo.m_MCUWidth + bX;
           if (pX >= imageInfo.m_width) continue;
 
-          int off = (bY / 8 * (imageInfo.m_MCUWidth / 8) + bX / 8) * 64 + (bY % 8) * 8 + (bX % 8);
+          int off = pjpegMcuOffset(bX, bY);
           uint8_t g;
 
           if (imageInfo.m_comps == 1) {
@@ -868,7 +869,7 @@ bool JpegToBmpConverter::jpegFileToThumbnailJpegPass(FsFile& jpegFile, Print& jp
       while (outX < outWidth && srcColForOut[outX] < mcuColEnd) {
         const int bX = srcColForOut[outX] - mcuColStart;  // local column within this MCU, in [0, MCUWidth)
         for (int bY = 0; bY < imageInfo.m_MCUHeight; bY++) {
-          const int off = (bY / 8 * (imageInfo.m_MCUWidth / 8) + bX / 8) * 64 + (bY % 8) * 8 + (bX % 8);
+          const int off = pjpegMcuOffset(bX, bY);
           uint8_t r = imageInfo.m_pMCUBufR[off];
           uint8_t g = r;
           uint8_t b = r;
@@ -1004,7 +1005,7 @@ bool JpegToBmpConverter::jpegFileTo1BitThumbnailBmp(FsFile& jpegFile, Print& bmp
           int pX = mcuX * imageInfo.m_MCUWidth + bX;
           if (pX >= imageInfo.m_width) continue;
 
-          int off = (bY / 8 * (imageInfo.m_MCUWidth / 8) + bX / 8) * 64 + (bY % 8) * 8 + (bX % 8);
+          int off = pjpegMcuOffset(bX, bY);
           uint8_t g;
 
           if (imageInfo.m_comps == 1) {
@@ -1199,7 +1200,7 @@ bool JpegToBmpConverter::jpegFileToTopCropBmp(FsFile& jpegFile, Print& bmpOut, i
           for (int bX = 0; bX < mcuWidth; bX++) {
             int pX = mcuX * mcuWidth + bX;
             if (pX >= imgWidth) continue;
-            int off = (bY / 8 * (mcuWidth / 8) + bX / 8) * 64 + (bY % 8) * 8 + (bX % 8);
+            int off = pjpegMcuOffset(bX, bY);
             destRow[pX] = imageInfo.m_pMCUBufR[off];
           }
         }
@@ -1213,7 +1214,7 @@ bool JpegToBmpConverter::jpegFileToTopCropBmp(FsFile& jpegFile, Print& bmpOut, i
           for (int bX = 0; bX < mcuWidth; bX++) {
             int pX = mcuX * mcuWidth + bX;
             if (pX >= imgWidth) continue;
-            int off = (bY / 8 * (mcuWidth / 8) + bX / 8) * 64 + (bY % 8) * 8 + (bX % 8);
+            int off = pjpegMcuOffset(bX, bY);
 
             destRow[pX] = (rBuf[off] * 77 + gBuf[off] * 150 + bBuf[off] * 29) >> 8;
           }
@@ -1337,7 +1338,7 @@ bool JpegToBmpConverter::jpegFileToEpubWebStyle2BitBmpStream(FsFile& jpegFile, P
             int pX = mcuX * mcuWidth + bX;
             if (pX >= imgWidth) continue;
 
-            int off = (bY / 8 * (mcuWidth / 8) + bX / 8) * 64 + (bY % 8) * 8 + (bX % 8);
+            int off = pjpegMcuOffset(bX, bY);
             destRow[pX] = imageInfo.m_pMCUBufR[off];
           }
         }
@@ -1352,7 +1353,7 @@ bool JpegToBmpConverter::jpegFileToEpubWebStyle2BitBmpStream(FsFile& jpegFile, P
             int pX = mcuX * mcuWidth + bX;
             if (pX >= imgWidth) continue;
 
-            int off = (bY / 8 * (mcuWidth / 8) + bX / 8) * 64 + (bY % 8) * 8 + (bX % 8);
+            int off = pjpegMcuOffset(bX, bY);
             destRow[pX] = (rBuf[off] * 77 + gBuf[off] * 150 + bBuf[off] * 29) >> 8;
           }
         }

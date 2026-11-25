@@ -5,12 +5,13 @@
  * @brief Empty Home page shell for the inx-pro UI migration.
  */
 
+#include <string>
+#include <vector>
+
 #include "Page.h"
 #include "components/global/PopUp.h"
 #include "components/widget/Recent.h"
 #include "navigation/Sidebar.h"
-
-#include <string>
 
 /** Home page with inx-pro header, carousel content, and bottom navigation chrome. */
 class Home final : public Page {
@@ -33,6 +34,7 @@ class Home final : public Page {
   bool shortcutInput();
   bool handleShortcut(int index);
   void renderRecentPopup() const;
+  std::vector<std::string> recentPopupActions() const;
   void removeSelectedRecent();
   void deleteSelectedRecentCache();
   bool tryFastGridSelection(int nextIndex);

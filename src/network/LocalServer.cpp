@@ -52,6 +52,7 @@
 #include "html/SettingsPageHtml.generated.h"
 #include "html/TagsPageHtml.generated.h"
 #include "html/UpdatePageHtml.generated.h"
+#include "util/SdIoMutex.h"
 #ifndef INX_SIMULATOR_WEB_ONLY
 #include "activity/settings/LibraryIndexer.h"
 #include "state/BookState.h"
@@ -71,6 +72,13 @@
 #include "state/AgentIslandPairing.h"
 #include "state/OpdsServerStore.h"
 #endif
+
+// Every embedded page and script is stored gzipped (scripts/build_html.py). Browsers unpack it.
+template <typename Server>
+static void sendGzippedAsset(Server& server, PGM_P contentType, const uint8_t* data, const size_t size) {
+  server.sendHeader("Content-Encoding", "gzip");
+  server.send_P(200, contentType, reinterpret_cast<const char*>(data), size);
+}
 
 namespace {
 
@@ -251,6 +259,17 @@ void clearEpubCacheIfNeeded(const String& filePath) {
   }
 #else
   (void)filePath;
+#endif
+}
+
+// Book files changed: the device and web libraries rebuild their index the next time they open.
+void markLibraryStale(const String& changedPath = String()) {
+#ifndef INX_SIMULATOR_WEB_ONLY
+  if (changedPath.isEmpty() || LibraryIndexer::isBookName(changedPath.c_str())) {
+    LibraryIndexer::markStale();
+  }
+#else
+  (void)changedPath;
 #endif
 }
 
@@ -851,9 +870,14 @@ void webLibraryIndexTask(void*) {
   webLibraryIndexTotal = 0;
   webLibraryIndexPath[0] = '\0';
 
-  FsFile root = SdMan.open("/");
+  FsFile root;
+  {
+    SdIoMutex::Lock lock;
+    root = SdMan.open("/");
+  }
   if (root) {
     webLibraryIndexTotal = LibraryIndexer::countBooks(root);
+    SdIoMutex::Lock lock;
     root.close();
   }
 
@@ -874,6 +898,24 @@ void webLibraryIndexTask(void*) {
   SETTINGS.saveToFile();
   webLibraryIndexing = false;
   vTaskDelete(nullptr);
+}
+
+// Starts the background rebuild unless one is already running. False only when the task can't be created.
+bool startWebLibraryIndex() {
+  if (webLibraryIndexing) {
+    return true;
+  }
+  webLibraryIndexing = true;
+  webLibraryIndexCurrent = 0;
+  webLibraryIndexTotal = 0;
+  webLibraryIndexPath[0] = '\0';
+  if (xTaskCreate(webLibraryIndexTask, "WebLibIndex", LibraryIndexer::kTaskStackBytes, nullptr, 1, nullptr) != pdPASS) {
+    Serial.printf("[%lu] [WEB] Library refresh task not created (free heap %u, largest block %u)\n", millis(),
+                  static_cast<unsigned>(ESP.getFreeHeap()), static_cast<unsigned>(ESP.getMaxAllocHeap()));
+    webLibraryIndexing = false;
+    return false;
+  }
+  return true;
 }
 #endif
 }  // namespace
@@ -1000,11 +1042,12 @@ void LocalServer::begin() {
   server->on("/api/fonts/rescan", HTTP_POST, [this] { handleFontsRescan(); });
 
   server->onNotFound([this] { handleNotFound(); });
-  Serial.printf("✓ jszip.min.js from firmware flash (%u bytes)\n", static_cast<unsigned>(sizeof(JSZIP_MIN_JS) - 1));
-  Serial.printf("✓ epub_page.js from firmware flash (%u bytes)\n", static_cast<unsigned>(sizeof(EPUB_PAGE_JS) - 1));
-  Serial.printf("✓ files_page.js from firmware flash (%u bytes)\n", static_cast<unsigned>(sizeof(FILES_PAGE_JS) - 1));
-  Serial.printf("✓ inx_font_pack.js from firmware flash (%u bytes)\n",
-                static_cast<unsigned>(sizeof(INX_FONT_PACK_JS) - 1));
+  Serial.printf("✓ jszip.min.js from firmware flash (%u bytes gzipped)\n", static_cast<unsigned>(sizeof(JSZIP_MIN_JS)));
+  Serial.printf("✓ epub_page.js from firmware flash (%u bytes gzipped)\n", static_cast<unsigned>(sizeof(EPUB_PAGE_JS)));
+  Serial.printf("✓ files_page.js from firmware flash (%u bytes gzipped)\n",
+                static_cast<unsigned>(sizeof(FILES_PAGE_JS)));
+  Serial.printf("✓ inx_font_pack.js from firmware flash (%u bytes gzipped)\n",
+                static_cast<unsigned>(sizeof(INX_FONT_PACK_JS)));
 
   server->begin();
 
@@ -1097,7 +1140,13 @@ void LocalServer::handleClient() {
     lastDebugPrint = millis();
   }
 
-  server->handleClient();
+  {
+    // Request handlers read and write the SD card; the library refresh task does too. SdFat isn't safe for
+    // two tasks at once, so each request runs between the refresh's per-book steps.
+    SdIoMutex::Lock sdLock;
+    server->handleClient();
+  }
+  yield();  // hand the SD lock to the refresh task if it is waiting (same priority, so it wouldn't preempt)
 
   if (firmwareRestartAt != 0 && static_cast<long>(millis() - firmwareRestartAt) >= 0) {
     firmwareRestartAt = 0;
@@ -1157,12 +1206,12 @@ LocalServer::WsUploadStatus LocalServer::getWsUploadStatus() const {
 }
 
 void LocalServer::handleRoot() const {
-  server->send_P(200, PSTR("text/html; charset=utf-8"), HomePageHtml, sizeof(HomePageHtml) - 1);
+  sendGzippedAsset(*server, PSTR("text/html; charset=utf-8"), HomePageHtml, sizeof(HomePageHtml));
   Serial.printf("[%lu] [WEB] Served root page\n", millis());
 }
 
 void LocalServer::handleUpdatePage() const {
-  server->send_P(200, PSTR("text/html; charset=utf-8"), UpdatePageHtml, sizeof(UpdatePageHtml) - 1);
+  sendGzippedAsset(*server, PSTR("text/html; charset=utf-8"), UpdatePageHtml, sizeof(UpdatePageHtml));
   Serial.printf("[%lu] [WEB] Served firmware update page\n", millis());
 }
 
@@ -1797,51 +1846,51 @@ bool LocalServer::isEpubFile(const String& filename) const {
 }
 
 void LocalServer::handleFileList() const {
-  server->send_P(200, PSTR("text/html; charset=utf-8"), FilesPageHtml, sizeof(FilesPageHtml) - 1);
+  sendGzippedAsset(*server, PSTR("text/html; charset=utf-8"), FilesPageHtml, sizeof(FilesPageHtml));
 }
 
 void LocalServer::handleLibraryPage() const {
-  server->send_P(200, PSTR("text/html; charset=utf-8"), LibraryPageHtml, sizeof(LibraryPageHtml) - 1);
+  sendGzippedAsset(*server, PSTR("text/html; charset=utf-8"), LibraryPageHtml, sizeof(LibraryPageHtml));
 }
 
 void LocalServer::handleEpubPage() const {
-  server->send_P(200, PSTR("text/html; charset=utf-8"), EpubPageHtml, sizeof(EpubPageHtml) - 1);
+  sendGzippedAsset(*server, PSTR("text/html; charset=utf-8"), EpubPageHtml, sizeof(EpubPageHtml));
 }
 
 void LocalServer::handleExportPage() const {
-  server->send_P(200, PSTR("text/html; charset=utf-8"), ExportPageHtml, sizeof(ExportPageHtml) - 1);
+  sendGzippedAsset(*server, PSTR("text/html; charset=utf-8"), ExportPageHtml, sizeof(ExportPageHtml));
 }
 
 void LocalServer::handleFontManagerPage() const {
-  server->send_P(200, PSTR("text/html; charset=utf-8"), FontManagerPageHtml, sizeof(FontManagerPageHtml) - 1);
+  sendGzippedAsset(*server, PSTR("text/html; charset=utf-8"), FontManagerPageHtml, sizeof(FontManagerPageHtml));
 }
 
 void LocalServer::handleTagsPage() const {
-  server->send_P(200, PSTR("text/html; charset=utf-8"), TagsPageHtml, sizeof(TagsPageHtml) - 1);
+  sendGzippedAsset(*server, PSTR("text/html; charset=utf-8"), TagsPageHtml, sizeof(TagsPageHtml));
 }
 
 void LocalServer::handleInxFontPackJs() const {
-  server->send_P(200, PSTR("text/javascript; charset=utf-8"), INX_FONT_PACK_JS, sizeof(INX_FONT_PACK_JS) - 1);
+  sendGzippedAsset(*server, PSTR("text/javascript; charset=utf-8"), INX_FONT_PACK_JS, sizeof(INX_FONT_PACK_JS));
 }
 
 void LocalServer::handleJsZipMinJs() const {
-  server->send_P(200, PSTR("text/javascript; charset=utf-8"), JSZIP_MIN_JS, sizeof(JSZIP_MIN_JS) - 1);
+  sendGzippedAsset(*server, PSTR("text/javascript; charset=utf-8"), JSZIP_MIN_JS, sizeof(JSZIP_MIN_JS));
 }
 
 void LocalServer::handleQrCreatorLogoJs() const {
-  server->send_P(200, PSTR("text/javascript; charset=utf-8"), QR_CREATOR_LOGO_JS, sizeof(QR_CREATOR_LOGO_JS) - 1);
+  sendGzippedAsset(*server, PSTR("text/javascript; charset=utf-8"), QR_CREATOR_LOGO_JS, sizeof(QR_CREATOR_LOGO_JS));
 }
 
 void LocalServer::handleEpubPageJs() const {
-  server->send_P(200, PSTR("text/javascript; charset=utf-8"), EPUB_PAGE_JS, sizeof(EPUB_PAGE_JS) - 1);
+  sendGzippedAsset(*server, PSTR("text/javascript; charset=utf-8"), EPUB_PAGE_JS, sizeof(EPUB_PAGE_JS));
 }
 
 void LocalServer::handleFilesPageJs() const {
-  server->send_P(200, PSTR("text/javascript; charset=utf-8"), FILES_PAGE_JS, sizeof(FILES_PAGE_JS) - 1);
+  sendGzippedAsset(*server, PSTR("text/javascript; charset=utf-8"), FILES_PAGE_JS, sizeof(FILES_PAGE_JS));
 }
 
 void LocalServer::handleLibraryPageJs() const {
-  server->send_P(200, PSTR("text/javascript; charset=utf-8"), LIBRARY_PAGE_JS, sizeof(LIBRARY_PAGE_JS) - 1);
+  sendGzippedAsset(*server, PSTR("text/javascript; charset=utf-8"), LIBRARY_PAGE_JS, sizeof(LIBRARY_PAGE_JS));
 }
 
 void LocalServer::handleFileListData() const {
@@ -1903,6 +1952,12 @@ void LocalServer::handleLibraryData() const {
                "\"tag\":\"Manga\",\"type\":\"XTC\",\"size\":524288,\"coverUrl\":\"\",\"progress\":12,"
                "\"readingTimeMs\":900000,\"pagesRead\":18,\"sessions\":2}]}");
 #else
+  // Books changed since the last index (an upload from the Files page, a delete, a rename): rebuild in the
+  // background and list what the current index has meanwhile; the page polls until the rebuild finishes.
+  if (LibraryIndexer::hasIndex() && LibraryIndexer::isStale()) {
+    startWebLibraryIndex();
+  }
+
   std::vector<IndexedBookInfo> books;
   const bool hasIndex = loadIndexedBooksWithTags(books);
   std::sort(books.begin(), books.end(), [](const IndexedBookInfo& a, const IndexedBookInfo& b) {
@@ -2069,23 +2124,10 @@ void LocalServer::handleLibraryIndexRefresh() const {
 #ifdef INX_SIMULATOR_WEB_ONLY
   server->send(501, "application/json", "{\"ok\":false,\"error\":\"unavailable_in_simulator\"}");
 #else
-  if (webLibraryIndexing) {
-    server->send(200, "application/json", "{\"ok\":true,\"indexing\":true}");
+  if (!startWebLibraryIndex()) {
+    server->send(503, "text/plain", "Not enough free memory to refresh the library. Try again in a moment.");
     return;
   }
-
-  webLibraryIndexing = true;
-  webLibraryIndexCurrent = 0;
-  webLibraryIndexTotal = 0;
-  webLibraryIndexPath[0] = '\0';
-
-  BaseType_t created = xTaskCreate(webLibraryIndexTask, "WebLibIndex", 4096, nullptr, 1, nullptr);
-  if (created != pdPASS) {
-    webLibraryIndexing = false;
-    server->send(500, "application/json", "{\"ok\":false,\"error\":\"task\"}");
-    return;
-  }
-
   server->send(200, "application/json", "{\"ok\":true,\"indexing\":true}");
 #endif
 }
@@ -2411,6 +2453,7 @@ void LocalServer::handleUpload() const {
         if (!filePath.endsWith("/")) filePath += "/";
         filePath += uploadFileName;
         clearEpubCacheIfNeeded(filePath);
+        markLibraryStale(filePath);
       }
     }
   } else if (upload.status == UPLOAD_FILE_ABORTED) {
@@ -2474,6 +2517,7 @@ void LocalServer::handleCreateFolder() const {
 
   if (SdMan.mkdir(folderPath.c_str())) {
     Serial.printf("[%lu] [WEB] Folder created successfully: %s\n", millis(), folderPath.c_str());
+    markLibraryStale();
     server->send(200, "text/plain", "Folder created: " + folderName);
   } else {
     Serial.printf("[%lu] [WEB] Failed to create folder: %s\n", millis(), folderPath.c_str());
@@ -2545,6 +2589,7 @@ void LocalServer::handleDelete() const {
 
   if (success) {
     Serial.printf("[%lu] [WEB] Successfully deleted: %s\n", millis(), itemPath.c_str());
+    markLibraryStale();
     server->send(200, "text/plain", "Deleted successfully");
   } else {
     Serial.printf("[%lu] [WEB] Failed to delete: %s\n", millis(), itemPath.c_str());
@@ -2675,6 +2720,7 @@ void LocalServer::handleRename() const {
   }
 
   Serial.printf("[%lu] [WEB] Successfully renamed: %s -> %s\n", millis(), itemPath.c_str(), newPath.c_str());
+  markLibraryStale();
   server->send(200, "text/plain", "Renamed successfully");
 }
 
@@ -2820,7 +2866,7 @@ void LocalServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload,
  * explain it. send_P streams straight out of flash instead.
  */
 void LocalServer::handleSettingsPage() const {
-  server->send_P(200, PSTR("text/html; charset=utf-8"), SettingsPageHtml, sizeof(SettingsPageHtml) - 1);
+  sendGzippedAsset(*server, PSTR("text/html; charset=utf-8"), SettingsPageHtml, sizeof(SettingsPageHtml));
   Serial.printf("[%lu] [WEB] Served settings page\n", millis());
 }
 

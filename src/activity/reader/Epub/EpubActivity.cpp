@@ -24,18 +24,18 @@
 #include <functional>
 #include <iterator>
 #include <memory>
-#include <sstream>
 #include <string>
 #include <vector>
 
 #include "ChapterRestart.h"
 #include "EpubAnnotations.h"
-#include "EpubReadingStats.h"
 #include "EpubNavigation.h"
+#include "EpubReadingStats.h"
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
 #include "SettingsDrawer.h"
 #include "activity/reader/ReaderRefresh.h"
+#include "activity/system/SleepActivity.h"
 #include "state/BookProgress.h"
 #include "state/BookSetting.h"
 #include "state/BookState.h"
@@ -1648,6 +1648,15 @@ void EpubActivity::regenerateThumbnail() {
   SdMan.remove(thumbPath.c_str());
   SdMan.remove(thumbJpegPath.c_str());
   SdMan.remove(smallThumbPath.c_str());
+  // The cover page and sleep screen images are made again from the book the next time they are drawn. Their
+  // saved drawings go first: the re-extracted cover is the same file, so its cache key would still match.
+  for (const bool cropped : {false, true}) {
+    for (const std::string& cover : {epub->getCoverBmpPath(cropped), epub->getCoverJpegPath(cropped)}) {
+      if (!SdMan.exists(cover.c_str())) continue;
+      SleepActivity::purgeCoverDisplayCaches(renderer, cover);
+      SdMan.remove(cover.c_str());
+    }
+  }
 
   // Free the SD reader font around the heap-intensive JPEG resize so it can't OOM (then reload it).
   bool ok = false;
