@@ -10,6 +10,14 @@ E-inx is a community firmware for Xteink e-paper readers, forked from [Inx](http
 
 ![](./docs/images/cover.jpg)
 
+## What's New in E-inx 1.20.9-5
+
+- **Striped covers on the sleep screen and pictures inside books are redrawn.** The reader keeps finished
+  drawings of images to show them faster, and the drawings made before 1.20.9-2 kept their stripes even after
+  the cover was regenerated, because the image file itself never changed. Those old drawings are dropped once
+  after this update, so the first sleep screen and each picture take a moment longer the first time.
+- Regenerate Thumbnail also drops the saved full-screen drawings of the book's cover.
+
 ## What's New in E-inx 1.20.9-4
 
 - **Opening the Library no longer restarts the reader after books are added.** When the library was out of

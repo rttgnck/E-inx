@@ -579,7 +579,7 @@ bool Home::recentPopupInput() {
       deleteSelectedRecentCache();
     } else if (action == kRegenerateThumbnailAction) {
       ScreenComponents::drawPopup(renderer, "Updating thumbnail");
-      if (!BookCovers::regenerate(recentPopupPath_)) {
+      if (!BookCovers::regenerate(recentPopupPath_, renderer)) {
         ScreenComponents::drawPopup(renderer, "Could not make a thumbnail");
         vTaskDelay(pdMS_TO_TICKS(1500));
       }

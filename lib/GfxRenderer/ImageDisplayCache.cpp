@@ -17,7 +17,9 @@
 
 namespace {
 constexpr uint32_t kMagic = 0x43445249;  // IRDC, little-endian on disk
-constexpr uint16_t kVersion = 46;        // bump: PNG high-quality planes + dark-mode tone preservation
+// 47: drawings made before 1.20.9-2 decoded H1V2 (8x16 MCU) JPEGs with every other 8-row strip from stale
+// data. The source files are unchanged, so only a new version keeps those striped drawings from being replayed.
+constexpr uint16_t kVersion = 47;
 constexpr const char* kCacheDir = "/.system/cache";
 constexpr size_t kIoBufferSize = 2048;
 
@@ -176,11 +178,17 @@ const char* planeName(const ImageDisplayCacheOptions& options) {
 
 std::string ImageDisplayCache::pathFor(GfxRenderer& renderer, const std::string& sourcePath, const int x, const int y,
                                        const int width, const int height, const ImageDisplayCacheOptions& options) {
+  return pathFor(renderer, sourcePath, x, y, width, height, options, renderer.isDarkMode());
+}
+
+std::string ImageDisplayCache::pathFor(GfxRenderer& renderer, const std::string& sourcePath, const int x, const int y,
+                                       const int width, const int height, const ImageDisplayCacheOptions& options,
+                                       const bool darkMode) {
   VisibleRect visible;
   if (!visibleBounds(renderer, x, y, width, height, visible)) {
     return "";
   }
-  const uint32_t hash = cacheHash(sourcePath, width, height, visible, options, renderer.isDarkMode());
+  const uint32_t hash = cacheHash(sourcePath, width, height, visible, options, darkMode);
   char name[48];
   snprintf(name, sizeof(name), "/%02lx/%08lx.irdc", static_cast<unsigned long>((hash >> 24) & 0xFF),
            static_cast<unsigned long>(hash));
@@ -189,11 +197,16 @@ std::string ImageDisplayCache::pathFor(GfxRenderer& renderer, const std::string&
 
 bool ImageDisplayCache::remove(GfxRenderer& renderer, const std::string& sourcePath, const int x, const int y,
                                const int width, const int height, const ImageDisplayCacheOptions& options) {
-  const std::string cachePath = pathFor(renderer, sourcePath, x, y, width, height, options);
-  if (cachePath.empty() || !SdMan.exists(cachePath.c_str())) {
-    return false;
+  // The drawing may have been stored in either theme (the sleep screen and reader don't always match the UI), so
+  // drop both.
+  bool removed = false;
+  for (const bool darkMode : {false, true}) {
+    const std::string cachePath = pathFor(renderer, sourcePath, x, y, width, height, options, darkMode);
+    if (!cachePath.empty() && SdMan.exists(cachePath.c_str())) {
+      removed = SdMan.remove(cachePath.c_str()) || removed;
+    }
   }
-  return SdMan.remove(cachePath.c_str());
+  return removed;
 }
 
 bool ImageDisplayCache::renderIfAvailable(GfxRenderer& renderer, const std::string& sourcePath, const int x,

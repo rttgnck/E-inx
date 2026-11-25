@@ -60,6 +60,12 @@ class SleepActivity final : public Activity {
    */
   static bool regenerateLastReadCoverForSleep(GfxRenderer* renderer = nullptr);
 
+  /**
+   * @brief Drops the full-screen drawings of imagePath that the sleep screen and the reader's cover page keep in
+   * the display cache. Call it before replacing or deleting imagePath: the cache key includes the file's size.
+   */
+  static void purgeCoverDisplayCaches(GfxRenderer& renderer, const std::string& imagePath);
+
  private:
   bool sleptFromReader = false;
   bool forceSleepImageAdvance = false;

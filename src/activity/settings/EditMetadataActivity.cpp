@@ -148,7 +148,7 @@ void EditMetadataActivity::activateSelected() {
     case 5:
       statusMessage = "Updating thumbnail...";
       render();
-      statusMessage = BookCovers::regenerate(bookPath) ? "Thumbnail updated" : "Could not make a thumbnail";
+      statusMessage = BookCovers::regenerate(bookPath, renderer) ? "Thumbnail updated" : "Could not make a thumbnail";
       render();
       break;
     case 6:

@@ -1047,7 +1047,7 @@ class RecentActivity::HomeMenuDrawer {
         break;
       case RecentBookAction::RegenerateThumbnail:
         renderLoading("Book options", "Updating thumbnail");
-        if (!BookCovers::regenerate(selectedBookRow_.bookPath)) {
+        if (!BookCovers::regenerate(selectedBookRow_.bookPath, renderer_)) {
           renderLoading("Book options", "Could not make a thumbnail");
           vTaskDelay(pdMS_TO_TICKS(1500));
         }

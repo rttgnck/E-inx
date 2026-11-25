@@ -1469,7 +1469,7 @@ void Library::regenerateThumbnail(const LibraryIndex::Book& book) {
   popupItemIndex_ = -1;
   popupDeleteConfirm_ = false;
   ScreenComponents::drawPopup(renderer, "Updating thumbnail");
-  if (!BookCovers::regenerate(path)) {
+  if (!BookCovers::regenerate(path, renderer)) {
     ScreenComponents::drawPopup(renderer, "Could not make a thumbnail");
     vTaskDelay(pdMS_TO_TICKS(1500));
   }

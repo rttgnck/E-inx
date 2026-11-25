@@ -14,6 +14,7 @@
 #include <freertos/task.h>
 
 #include "activity/settings/LibraryIndexer.h"
+#include "activity/system/SleepActivity.h"
 #include "util/SdIoMutex.h"
 #include "util/StringUtils.h"
 
@@ -29,7 +30,15 @@ void removeIfPresent(const std::string& path) {
   if (SdMan.exists(path.c_str())) SdMan.remove(path.c_str());
 }
 
-bool regenerateNow(const std::string& path) {
+// Drops the cover's cached full-screen drawings (sleep screen, cover page) first: their key includes the file's
+// size, which can only be read while the file is still there.
+void removeCover(GfxRenderer& renderer, const std::string& path) {
+  if (!SdMan.exists(path.c_str())) return;
+  SleepActivity::purgeCoverDisplayCaches(renderer, path);
+  SdMan.remove(path.c_str());
+}
+
+bool regenerateNow(const std::string& path, GfxRenderer& renderer) {
   SdIoMutex::Lock lock;
   if (isEpub(path)) {
     Epub epub(path, "/.metadata/epub");
@@ -37,17 +46,17 @@ bool regenerateNow(const std::string& path) {
     removeIfPresent(epub.getThumbBmpPath());
     removeIfPresent(epub.getThumbJpegPath());
     removeIfPresent(epub.getSmallThumbBmpPath());
-    removeIfPresent(epub.getCoverBmpPath(false));
-    removeIfPresent(epub.getCoverBmpPath(true));
-    removeIfPresent(epub.getCoverJpegPath(false));
-    removeIfPresent(epub.getCoverJpegPath(true));
+    for (const bool cropped : {false, true}) {
+      removeCover(renderer, epub.getCoverBmpPath(cropped));
+      removeCover(renderer, epub.getCoverJpegPath(cropped));
+    }
     return epub.generateThumbBmp();
   }
   if (isXtc(path)) {
     Xtc xtc(path, "/.metadata/xtc");
     if (!xtc.load()) return false;
     removeIfPresent(xtc.getThumbBmpPath());
-    removeIfPresent(xtc.getCoverBmpPath());
+    removeCover(renderer, xtc.getCoverBmpPath());
     return xtc.generateThumbBmp();
   }
   return false;
@@ -55,6 +64,7 @@ bool regenerateNow(const std::string& path) {
 
 struct Job {
   std::string path;
+  GfxRenderer* renderer = nullptr;
   bool ok = false;
   volatile bool done = false;
 };
@@ -65,16 +75,17 @@ namespace BookCovers {
 
 bool supports(const std::string& bookPath) { return isEpub(bookPath) || isXtc(bookPath); }
 
-bool regenerate(const std::string& bookPath) {
+bool regenerate(const std::string& bookPath, GfxRenderer& renderer) {
   if (!supports(bookPath)) return false;
 
   Job job;
   job.path = bookPath;
+  job.renderer = &renderer;
 
   const BaseType_t created = xTaskCreate(
       [](void* parameter) {
         auto* job = static_cast<Job*>(parameter);
-        job->ok = regenerateNow(job->path);
+        job->ok = regenerateNow(job->path, *job->renderer);
         job->done = true;
         vTaskDelete(nullptr);
       },
